@@ -194,25 +194,21 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 Plugin.Logger?.LogWarning("[Maps] No vanilla airstrip to copy: " + manifest.displayName + " has no land bases, carriers still work.");
                 return identities;
             }
-            // The vanilla airfield's own pavement, by name from the donor's fields: runway1 for the runway (the
-            // shader the game's own runways use), asphalt for the taxiway and apron. The bake's runway_markings
-            // decals are vertex-colour shapes of the donor's own mesh, so our baked white bars keep their material.
-            // The bake's plain colours are the fallback when the game has nothing to lend.
+            // The game's own airfield surfaces, by name from every vanilla field (the materials are shared
+            // assets): runway1 for the runway, asphalt for the taxiway and apron, and the marking set — the
+            // painted lines, the skidmarks, the dirt edges — for the donor meshes the bake emits. A strip the
+            // game has no surface for keeps the bake's plain colours.
             var surfaces = new Dictionary<string, Material>();
-            foreach (MeshRenderer part in donor.GetComponentsInChildren<MeshRenderer>(true))
-                if (part != null && part.sharedMaterial != null && !surfaces.ContainsKey(part.sharedMaterial.name))
-                    surfaces[part.sharedMaterial.name] = part.sharedMaterial;
-            Material Paved()
-            {
-                if (surfaces.TryGetValue("asphalt", out Material plain)) return plain;
-                return donor.GetComponentsInChildren<MeshRenderer>(true)
-                    .Where(r => r != null && r.sharedMaterial != null && r.bounds.size.x * r.bounds.size.z > 0f)
-                    .OrderByDescending(r => r.bounds.size.x * r.bounds.size.z)
-                    .Select(r => r.sharedMaterial).FirstOrDefault();
-            }
-            Material pavedLook = Paved();
-            Material runwayLook = surfaces.Keys.FirstOrDefault(k => k.IndexOf("runway", StringComparison.OrdinalIgnoreCase) >= 0)
-                is string found && surfaces.TryGetValue(found, out Material marked) ? marked : pavedLook;
+            foreach (MapSettings map in manager.Maps.Where(m => m != null && m.Prefab != null && !MapGround.IsOurs(m.Prefab)).Select(m => m.Prefab))
+                foreach (MeshRenderer part in map.GetComponentsInChildren<MeshRenderer>(true))
+                    foreach (Material one in part.sharedMaterials)
+                        if (one != null && !surfaces.ContainsKey(one.name)) surfaces[one.name] = one;
+            surfaces.TryGetValue("asphalt", out Material pavedLook);
+            surfaces.TryGetValue("runway1", out Material runwayLook);
+            surfaces.TryGetValue("runway_markings", out Material markingsLook);
+            surfaces.TryGetValue("runway_skidmarks", out Material skidLook);
+            surfaces.TryGetValue("asphalt_dirtedge", out Material edgeLook);
+            if (runwayLook == null) runwayLook = pavedLook;
             for (int n = 0; n < manifest.strips.Length; n++)
             {
                 MapManifest.Strip strip = manifest.strips[n];
@@ -257,19 +253,22 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 Exits(airbase, runway, strip);
                 Service(airbase, strip);
                 Pads(airbase, strip);
-                // The baked pieces of this strip's paving, dressed with the game's own airfield surfaces: runway and
-                // taxiway with what the donor's fields are paved with (our baked white bars keep their own material:
-                // the game's markings are vertex-colour shapes of its own mesh). The bake's flat colours stay where
-                // the game has nothing.
+                // The strip's own paving, dressed with the game's own airfield surfaces: a donor strip is the
+                // game's own meshes (runway1, asphalt, the marking set), a baked strip keeps its named slabs.
                 int dressed = 0;
                 foreach (MeshRenderer baked in pad.GetComponentsInChildren<MeshRenderer>(true))
                 {
                     if (baked == null || baked.sharedMaterial == null) continue;
-                    if (baked.name.StartsWith("runway") && runwayLook != null) { baked.sharedMaterial = runwayLook; dressed++; }
-                    else if ((baked.name.StartsWith("taxi") || baked.name.StartsWith("apron")) && pavedLook != null) { baked.sharedMaterial = pavedLook; dressed++; }
+                    string kind = baked.name;
+                    if (kind == "runway_markings") { baked.sharedMaterial = markingsLook ?? baked.sharedMaterial; dressed++; }
+                    else if (kind == "runway_skidmarks") { baked.sharedMaterial = skidLook ?? baked.sharedMaterial; dressed++; }
+                    else if (kind == "asphalt_dirtedge") { baked.sharedMaterial = edgeLook ?? baked.sharedMaterial; dressed++; }
+                    else if (kind == "runway1" || kind.StartsWith("runway")) { baked.sharedMaterial = runwayLook ?? baked.sharedMaterial; dressed++; }
+                    else if (kind == "asphalt" || kind.StartsWith("taxi") || kind.StartsWith("apron")) { baked.sharedMaterial = pavedLook ?? baked.sharedMaterial; dressed++; }
                 }
                 Plugin.Logger?.LogInfo("[Maps] Strip " + (n + 1) + " of " + manifest.displayName + ": " + dressed + " paving pieces dressed with the game's own " +
-                    "surfaces (runway " + (runwayLook != null ? runwayLook.name : "none") + ", apron " + (pavedLook != null ? pavedLook.name : "none") + ").");
+                    "surfaces (runway " + (runwayLook != null ? runwayLook.name : "none") + ", apron " + (pavedLook != null ? pavedLook.name : "none") +
+                    ", markings " + (markingsLook != null ? markingsLook.name : "none") + ").");
                 foreach (Collider collider in pad.GetComponentsInChildren<Collider>(true)) collider.gameObject.layer = PhysicsLayers.Statics;
                 identities.Add(copy.GetComponent<NetworkIdentity>());
                 float room = Mathf.Max(strip.length + 300f, strip.padLength);

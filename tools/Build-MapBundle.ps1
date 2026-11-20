@@ -56,6 +56,8 @@ if (-not $Kit) {
     }
     # Every ground skin the generator wrote (skin_<name>_b/_n): the terrain shader's detail textures.
     foreach ($skin in (Get-ChildItem -LiteralPath $Source -Filter 'skin_*.png' -File)) { Copy-Input $skin.FullName (Join-Path $mapAssets $skin.Name) }
+    # The vanilla airfields the generator's strips are composed from (runways, markings, aprons).
+    if (Test-Path -LiteralPath (Join-Path $Source 'airfield-donors.json')) { Copy-Input (Join-Path $Source 'airfield-donors.json') (Join-Path $mapAssets 'airfield-donors.json') }
     foreach ($name in 'ocean_depth.png', 'ocean_color.png', 'colormap.png', "bs_${id}_map.png", 'macro.png', 'splat_grass.png', 'splat_rock.png', 'splat_lush.png', 'grass_mask.png') {
         Copy-Input (Join-Path $Source $name) (Join-Path $mapAssets $name)
     }

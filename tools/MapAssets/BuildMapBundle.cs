@@ -19,12 +19,29 @@ public static class BuildMapBundle
     [Serializable] private class StripInfo { public float x, y, z, length, width = 40f, padLength = 1500f, padWidth = 300f; public float heading; public string surface = "asphalt";
         public float[] taxi = new float[0];   // the AI's routes, flat x, y, z, x, y, z: each pair one straight road
         public float[] pad = new float[0];    // the vertical pad: x, y, z, heading
-        public float[] pave = new float[0]; } // the apron, strip-frame metres: half-length along, across from, across to
+        public float[] pave = new float[0];   // the apron, strip-frame metres: half-length along, across from, across to
+        public string donor = "";            // the vanilla airfield whose own paved meshes this strip becomes
+    }
     [Serializable] private class ForestInfo { public string name; }
     [Serializable] private class LotInfo { public string kind; public float x, z, yaw; }
     [Serializable] private class BridgeInfo { public float x, z, heading, length, width; }
     [Serializable] private class RoadInfo { public string kind; public float width; public float[] points, widths; }
     [Serializable] private class LakeInfo { public float level, cell; public float[] runs; }
+    [Serializable] private class DonorPart
+    {
+        public string[] submeshes;             // submesh index -> the material's name (runway1, asphalt, ...)
+        public float[] vertices;              // x, y, z per vertex, flat
+        public float[] uv;                     // u, v per vertex, flat
+        public float[] colours;               // r, g, b, a per vertex, flat (0..1)
+        public int[] triCounts;               // triangle indices per submesh
+        public int[] triangles;               // flat, sliced by triCounts
+    }
+    [Serializable] private class DonorAirfield
+    {
+        public float length, width, worldHeading; public float[] footprint;
+        public DonorPart ground, decals;
+    }
+    [Serializable] private class DonorKit { public DonorAirfield airbase_desert1; }
     [Serializable] private class MapInfo
     {
         public string id, displayName; public float heightFloor, heightSpan, cell; public int res, tile, vertexBudget; public StripInfo[] strips; public ForestInfo[] forests; public RoadInfo[] roads, rivers; public LakeInfo[] lakes; public BridgeInfo[] bridges; public LotInfo[] lots;
@@ -163,12 +180,12 @@ public static class BuildMapBundle
                     throw new Exception("Map bundle rebuild returned no manifest.");
                 bytes = new FileInfo("BundleOutput/" + info.id + ".bsmap").Length;
                 if (bytes > BundleLimit) throw new Exception("Map bundle exceeds 80 MiB even with a half-resolution macro: " + bytes + " bytes.");
-                File.WriteAllText("result.txt", $"PASS: {info.displayName}: {chunkCount} terrain tiles ({landTiles} with land, a vertex every {landStride * info.cell:0} m), " +
+                File.WriteAllText("result.txt", $"PASS: {info.displayName}: {chunkCount} terrain chunks ({landTiles} land tiles, a vertex every {landStride * info.cell:0} m), " +
                     $"{triangleCount} triangles, {info.strips.Length} strips; bundle {bytes} bytes (macro at 2048).");
             }
             else
             {
-                File.WriteAllText("result.txt", $"PASS: {info.displayName}: {chunkCount} terrain tiles ({landTiles} with land, a vertex every {landStride * info.cell:0} m), " +
+                File.WriteAllText("result.txt", $"PASS: {info.displayName}: {chunkCount} terrain chunks ({landTiles} land tiles, a vertex every {landStride * info.cell:0} m), " +
                     $"{triangleCount} triangles, {info.strips.Length} strips; bundle {bytes} bytes.");
             }
             EditorApplication.Exit(0);
@@ -533,6 +550,9 @@ public static class BuildMapBundle
         }
         // Deep water is drawn and collided in blocks of 8 x 8 tiles: thousands of separate deep tiles cost the game
         // frame time for ground nobody sees. Only blocks that hold shallows or land are cut into tiles.
+        // The cut tiles are drawn in CHUNKS too — one merged mesh per 8 x 8 block per stride class, like the game's
+        // own maps: it holds the same triangles in a seventh of the draw calls (measured: vanilla 256 terrain draws,
+        // our per-tile build 1,883), and an 8-tile chunk is the granularity the game itself culls at.
         for (int bz = 0; bz < res; bz += block)
             for (int bx = 0; bx < res; bx += block)
             {
@@ -541,13 +561,131 @@ public static class BuildMapBundle
                     Piece(parent, info, heights, colours, material, $"deep_{bx / block}_{bz / block}", bx, bz, block, 32);
                     continue;
                 }
+                var classes = new Dictionary<(int, bool, bool), List<TilePiece>>();
                 for (int z0 = bz; z0 < Mathf.Min(bz + block, res); z0 += tile)
                     for (int x0 = bx; x0 < Mathf.Min(bx + block, res); x0 += tile)
                     {
                         float top = Top(heights, res, x0, z0, Mathf.Min(x0 + tile, res - 1), Mathf.Min(z0 + tile, res - 1));
-                        Piece(parent, info, heights, colours, material, $"tile_{x0 / tile}_{z0 / tile}", x0, z0, tile, top > 0f ? 1 : top > -40f ? 2 : top > -150f ? 8 : 32);
+                        TilePiece piece = BuildPiece(info, heights, colours, x0, z0, tile, top > 0f ? 1 : top > -40f ? 2 : top > -150f ? 8 : 32);
+                        var key = (piece.Step, piece.Fine, piece.Coast);
+                        if (!classes.TryGetValue(key, out List<TilePiece> group)) classes[key] = group = new List<TilePiece>();
+                        group.Add(piece);
                     }
+                foreach (KeyValuePair<(int, bool, bool), List<TilePiece>> group in classes)
+                    EmitChunk(parent, info, material, $"chunk_{bx / tile}_{bz / tile}_{group.Key.Item1}{(group.Key.Item2 ? "f" : "")}{(group.Key.Item3 ? "c" : "")}", bx, bz, group.Value);
             }
+    }
+
+    /// <summary>One tile's meshes, built and kept waiting for its chunk: the near mesh the camera sees and
+    /// collides, the coarser lod1 it fades to at distance.</summary>
+    private struct TilePiece { public int X0, Z0, Step; public bool Fine, Coast, Ice; public Mesh Near, Lod; }
+
+    private static TilePiece BuildPiece(MapInfo info, float[] heights, Color32[] colours, int x0, int z0, int size, int step)
+    {
+        int res = info.res, x1 = Mathf.Min(x0 + size, res - 1), z1 = Mathf.Min(z0 + size, res - 1);
+        bool fine = step == 1 && size == groundTile && wetTiles.Contains((z0 / size) * 100000L + x0 / size);
+        bool coast = step == 1 && size == groundTile && coastTiles.Contains((z0 / size) * 100000L + x0 / size);
+        Mesh near = GridMesh($"tile_{x0}_{z0}", x0, z0, x1, z1,
+            coast ? coastStride : fine ? landStride * .5f : step == 1 ? landStride : step,   // the shoreline at a quarter of the land stride,
+            coast || fine ? landStride : 0f);   // welded to its coarser neighbours' straight edges
+        Mesh lod = step == 1 ? GridMesh($"tile_{x0}_{z0}_lod", x0, z0, x1, z1, fine ? landStride : Mathf.Max(4f, landStride * 4f)) : null;
+        triangleCount += near.triangles.Length / 3;
+        if (step == 1) landTiles++;
+        return new TilePiece { X0 = x0, Z0 = z0, Step = step, Fine = fine, Coast = coast,
+                                Ice = groundIce != null && groundIce.Length == groundRes * groundRes && HasIce(x0, z0, x1, z1), Near = near, Lod = lod };
+    }
+
+    /// <summary>Whether a region carries any ice at all: only those chunks need the ice skin's second pass.</summary>
+    private static bool HasIce(int x0, int z0, int x1, int z1)
+    {
+        for (int z = z0; z <= z1; z += 2)
+            for (int x = x0; x <= x1; x += 2)
+                if (groundIce[z * groundRes + x] > 100) return true;
+        return false;
+    }
+
+    /// <summary>One merged chunk: every tile of one stride class in an 8 x 8 block as one near mesh (drawn and
+    /// collided), one lod mesh, and the ice skin over the tiles that carry ice — the same triangles, a fraction
+    /// of the renderers. The chunk's origin is its south-west tile, in map coordinates: small numbers keep float
+    /// precision.</summary>
+    private static void EmitChunk(GameObject parent, MapInfo info, Material material, string name, int bx, int bz, List<TilePiece> pieces)
+    {
+        float half = info.res * info.cell * .5f;
+        int x0 = pieces[0].X0, z0 = pieces[0].Z0;
+        var go = Child(parent, name);
+        go.transform.localPosition = new Vector3(-half + (x0 + .5f) * info.cell, 0f, -half + (z0 + .5f) * info.cell);
+        int step = pieces[0].Step;
+
+        Mesh Combine(Func<TilePiece, Mesh> pick, IEnumerable<TilePiece> only)
+        {
+            var instances = new List<CombineInstance>();
+            foreach (TilePiece piece in only)
+            {
+                Mesh mesh = pick(piece);
+                if (mesh == null) continue;
+                instances.Add(new CombineInstance
+                {
+                    mesh = mesh,
+                    transform = Matrix4x4.TRS(new Vector3((piece.X0 - x0) * info.cell, 0f, (piece.Z0 - z0) * info.cell), Quaternion.identity, Vector3.one),
+                });
+            }
+            if (instances.Count == 0) return null;
+            var combined = new Mesh { name = name, indexFormat = IndexFormat.UInt32 };   // a dense 8x8 block passes 65k vertices
+            combined.CombineMeshes(instances.ToArray(), true, true);
+            combined.RecalculateBounds();
+            return combined;
+        }
+
+        Mesh near = Combine(p => p.Near, pieces);
+        go.AddComponent<MeshFilter>().sharedMesh = Keep(near);
+        var renderer = go.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = material;
+        go.AddComponent<MeshCollider>().sharedMesh = near;
+        List<Renderer> nearSet = new List<Renderer> { renderer };
+        List<Renderer> lodSet = new List<Renderer>();
+        var icy = new List<TilePiece>();
+        foreach (TilePiece piece in pieces) if (piece.Ice) icy.Add(piece);
+        if (icy.Count > 0)
+        {
+            // The ice skin is the SAME mesh drawn again: the ice shader holds its own mask, so nothing is
+            // duplicated — per-tile ice checks only saved this second pass where there is no ice at all.
+            var skin = Child(go, "ice");
+            skin.AddComponent<MeshFilter>().sharedMesh = near;
+            var iceRenderer = skin.AddComponent<MeshRenderer>();
+            iceRenderer.sharedMaterial = iceMaterial;
+            iceRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            nearSet.Add(iceRenderer);
+        }
+        chunkCount++;
+        if (step != 1)
+        {
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            return;
+        }
+        Mesh lod = Combine(p => p.Lod, pieces);
+        if (lod != null)
+        {
+            var low = Child(go, "lod1");
+            low.AddComponent<MeshFilter>().sharedMesh = Keep(lod);
+            var lowRenderer = low.AddComponent<MeshRenderer>();
+            lowRenderer.sharedMaterial = material;
+            lowRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            lodSet.Add(lowRenderer);
+            if (icy.Count > 0)
+            {
+                var skinLow = Child(go, "ice_lod");
+                skinLow.AddComponent<MeshFilter>().sharedMesh = lod;
+                var lowIceRenderer = skinLow.AddComponent<MeshRenderer>();
+                lowIceRenderer.sharedMaterial = iceMaterial;
+                lowIceRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                lodSet.Add(lowIceRenderer);
+            }
+        }
+        go.AddComponent<LODGroup>().SetLODs(new[]
+        {
+            new LOD(.1f, nearSet.ToArray()),
+            new LOD(.0005f, lodSet.Count > 0 ? lodSet.ToArray() : new Renderer[] { renderer }),
+        });
     }
 
     /// <summary>
@@ -651,7 +789,7 @@ public static class BuildMapBundle
         Mesh near = GridMesh(name, x0, z0, x1, z1,
             coast ? coastStride : fine ? landStride * .5f : step == 1 ? landStride : step,   // the shoreline at a quarter of the land stride,
             coast || fine ? landStride : 0f);   // welded to its coarser neighbours' straight edges
-        go.AddComponent<MeshFilter>().sharedMesh = near;
+        go.AddComponent<MeshFilter>().sharedMesh = Keep(near);
         var renderer = go.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = material;
         go.AddComponent<MeshCollider>().sharedMesh = near;
@@ -665,7 +803,7 @@ public static class BuildMapBundle
         }
         landTiles++;
         var low = Child(go, "lod1");
-        low.AddComponent<MeshFilter>().sharedMesh = GridMesh(name + "_lod1", x0, z0, x1, z1, fine ? landStride : Mathf.Max(4f, landStride * 4f));
+        low.AddComponent<MeshFilter>().sharedMesh = Keep(GridMesh(name + "_lod1", x0, z0, x1, z1, fine ? landStride : Mathf.Max(4f, landStride * 4f)));
         var lowRenderer = low.AddComponent<MeshRenderer>();
         lowRenderer.sharedMaterial = material;
         lowRenderer.shadowCastingMode = ShadowCastingMode.Off;
@@ -801,7 +939,7 @@ public static class BuildMapBundle
                 triangles[t++] = a; triangles[t++] = c; triangles[t++] = b;
                 triangles[t++] = b; triangles[t++] = c; triangles[t++] = d;
             }
-        return Keep(new Mesh { name = name, vertices = vertices, normals = normals, tangents = tangents, uv = uvs, colors32 = tint, triangles = triangles });
+        return new Mesh { name = name, vertices = vertices, normals = normals, tangents = tangents, uv = uvs, colors32 = tint, triangles = triangles };
     }
 
     /// <summary>Every `stride` from first to last, always ending on last so neighbouring pieces meet.</summary>
@@ -1104,12 +1242,31 @@ public static class BuildMapBundle
     /// <summary>A runway with centre-line and threshold marks, the apron, taxiway and hangar stubs of the airfield the
     /// generator planned beside it (map.json's taxi routes and apron), and the vertical pad — all lying just above the
     /// flattened pad. Each role is its own named child (runway, marks, taxi, apron) so the runtime can dress them with
-    /// the game's own airfield materials, as it does for roads and city blocks.</summary>
+    /// the game's own airfield materials, as it does for roads and city blocks.
+    /// A strip with a <c>donor</c> becomes the game's own airfield instead: the donor's ground and decals meshes —
+    /// its marked runway, its apron, its skidmarks and dirt edges, every paint stroke the artists shipped — emitted
+    /// as one named child per material, and no baked paving at all.</summary>
     private static void BuildStrip(GameObject parent, int n, StripInfo strip, Material material)
     {
         var go = Child(parent, "strip_" + n);
         go.transform.localPosition = new Vector3(strip.x, strip.y, strip.z);
         go.transform.localRotation = Quaternion.Euler(0f, strip.heading, 0f); // local +z runs along the runway, +x to its right
+        DonorAirfield donor = string.IsNullOrEmpty(strip.donor) ? null : DonorOf(strip.donor);
+        if (donor != null)
+        {
+            float rise = .12f - DonorRunwayTop(donor.ground);   // the runway's surface stands where the wheels roll
+            EmitDonor(go, donor.ground, material, strip.donor + "_ground", rise);
+            EmitDonor(go, donor.decals, material, strip.donor + "_decals", rise);
+            // Wheels roll on one flat slab, not on the donor's relief.
+            var runwayFloor = new Builder();
+            Slab(runwayFloor, new Vector3(0f, .12f, 0f), strip.width, strip.length * .5f, new Color(.13f, .13f, .14f));
+            var runwayFloorMesh = new Mesh { name = go.name + "_surface" };
+            runwayFloorMesh.SetVertices(runwayFloor.Vertices);
+            runwayFloorMesh.SetTriangles(runwayFloor.Triangles, 0);
+            var floorCollider = Child(go, "surface");
+            floorCollider.AddComponent<MeshCollider>().sharedMesh = Keep(runwayFloorMesh);
+            return;
+        }
         bool marked = strip.surface == "asphalt";
         var asphalt = marked ? new Color(.13f, .13f, .14f) : strip.surface == "ice" ? new Color(.62f, .74f, .82f) : new Color(.36f, .33f, .29f);
         var paint = new Color(.82f, .82f, .78f);
@@ -1163,6 +1320,75 @@ public static class BuildMapBundle
         collision.SetVertices(flat.Vertices);
         collision.SetTriangles(flat.Triangles, 0);
         surface.AddComponent<MeshCollider>().sharedMesh = Keep(collision);
+    }
+
+    // The vanilla airfields a map's strips are composed from, loaded once per bake; their meshes are built once
+    // and shared by every strip (the donor frame is the same for all of them — each strip's own transform places it).
+    private static DonorKit donorKit;
+    private static readonly Dictionary<string, Mesh> donorMeshes = new Dictionary<string, Mesh>();
+
+    private static DonorAirfield DonorOf(string name)
+    {
+        if (donorKit == null && File.Exists(Dir + "airfield-donors.json"))
+            donorKit = JsonUtility.FromJson<DonorKit>(File.ReadAllText(Dir + "airfield-donors.json"));
+        if (donorKit == null) return null;
+        if (name == "airbase_desert1") return donorKit.airbase_desert1;
+        return null;   // the kit carries the fields whose frames verify clean; more come with the glyph table
+    }
+
+    /// <summary>One donor mesh part, split per material into named children the runtime dresses: the game's own
+    /// runway, apron, markings, skidmarks and dirt edges — every paint stroke the artists shipped.</summary>
+    private static void EmitDonor(GameObject strip, DonorPart part, Material material, string group, float rise)
+    {
+        for (int s = 0; s < part.submeshes.Length; s++)
+        {
+            string key = group + "_" + part.submeshes[s];
+            if (!donorMeshes.TryGetValue(key, out Mesh mesh))
+            {
+                int count = part.vertices.Length / 3;
+                var positions = new Vector3[count];
+                var uvs = new Vector2[count];
+                var colours = new Color32[count];
+                for (int i = 0; i < count; i++)
+                {
+                    positions[i] = new Vector3(part.vertices[i * 3], part.vertices[i * 3 + 1], part.vertices[i * 3 + 2]);
+                    uvs[i] = part.uv.Length >= (i + 1) * 2 ? new Vector2(part.uv[i * 2], part.uv[i * 2 + 1]) : Vector2.zero;
+                    colours[i] = part.colours.Length >= (i + 1) * 4
+                        ? new Color(part.colours[i * 4], part.colours[i * 4 + 1], part.colours[i * 4 + 2], part.colours[i * 4 + 3])
+                        : new Color(1f, 1f, 1f, 1f);
+                }
+                int at = 0;
+                for (int t = 0; t < s; t++) at += part.triCounts[t];
+                var tris = new int[part.triCounts[s]];
+                for (int i = 0; i < tris.Length; i++) tris[i] = part.triangles[at + i];
+                mesh = new Mesh { name = "donor_" + key };
+                mesh.SetVertices(positions);
+                mesh.SetUVs(0, uvs);
+                mesh.SetColors(colours);
+                mesh.SetTriangles(tris, 0);
+                mesh.RecalculateNormals();
+                donorMeshes[key] = Keep(mesh);
+            }
+            var piece = Child(strip, part.submeshes[s]);
+            piece.transform.localPosition = new Vector3(0f, rise, 0f);
+            piece.AddComponent<MeshFilter>().sharedMesh = mesh;
+            piece.AddComponent<MeshRenderer>().sharedMaterial = material;   // dressed at load with the game's own
+        }
+    }
+
+    /// <summary>The donor's runway surface height in its own frame, so the meshes can stand exactly where the
+    /// wheels roll: the ground mesh has thickness, and a slab at a guessed height buries or floats the gear.</summary>
+    private static float DonorRunwayTop(DonorPart ground)
+    {
+        int s = Array.IndexOf(ground.submeshes, "runway1");
+        if (s < 0) return .5f;   // a guess when the field paves under another name
+        int at = 0;
+        for (int t = 0; t < s; t++) at += ground.triCounts[t];
+        var seen = new HashSet<int>();
+        for (int i = 0; i < ground.triCounts[s]; i++) seen.Add(ground.triangles[at + i]);
+        float top = float.MinValue;
+        foreach (int v in seen) top = Mathf.Max(top, ground.vertices[v * 3 + 1]);
+        return top > float.MinValue + 1f ? top : .5f;
     }
 
     /// <summary>A straight strip of pavement from one point to another, of the given half width, at the points'
