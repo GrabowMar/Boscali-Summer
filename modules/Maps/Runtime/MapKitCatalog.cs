@@ -63,6 +63,10 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             Open();
             Material material = root != null ? root.GetComponentsInChildren<MeshRenderer>(true).Select(r => r.sharedMaterial).FirstOrDefault(m => m != null && m.name == "KitModel") : null;
             if (material == null) return;
+            Plugin.Logger?.LogInfo("[Maps] Scenery kit surfaces: detail " +
+                (material.GetTexture("_DetailTex") != null ? "on" : "off") +
+                ", normal " + (material.GetTexture("_DetailNormal") != null ? "on" : "off") +
+                ", decals " + (material.GetTexture("_DecalTex") != null ? "on" : "off") + ".");
             string[] wanted = { "concrete_paving_b", "hangar_b", "gabion_b" }, slots = { "_TexA", "_TexB", "_TexC" };
             float[] gain = { 2.45f, 2.1f, 2.3f }; // one over each texture's mean, so the model keeps its colours
             var found = new Texture2D[3];
