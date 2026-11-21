@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.16 — Territorial Expansion 2/3
+## 0.2.15 — Territorial Expansion 2/3
 
 The second part of the Territorial Expansion update. Still an alpha: expect rough edges. Multiplayer remains
 experimental; all players should use the same mod version.
@@ -24,7 +24,7 @@ experimental; all players should use the same mod version.
   and a map-scale firestorm sends up dense smoke, a high soot deck and embers. The blast sound is remade.
 - **Boot-log noise, explained:** the README's troubleshooting section names the warnings a healthy install still shows.
 
-**Install:** extract `BoscaliSummer-0.2.16.zip` into the Nuclear Option game folder, or install `BoscaliSummer.dll`
+**Install:** extract `BoscaliSummer-0.2.15.zip` into the Nuclear Option game folder, or install `BoscaliSummer.dll`
 with your mod manager. Requires BepInEx 5.4.23+; Blueprinter enables the bundled custom content.
 Back up saves and configuration before updating.
 
