@@ -1,21 +1,32 @@
 # Changelog
 
-## Unreleased
+## 0.2.16 — Territorial Expansion 2/3
 
+The second part of the Territorial Expansion update. Still an alpha: expect rough edges. Multiplayer remains
+experimental; all players should use the same mod version.
+
+- **New campaign start, The Tassara Job:** flown for Meridian Freight & Aviation Services under the boss LEDGER,
+  with prerendered intro and outro films. Your radio replies are now yours to choose, Paragon or Renegade, and the
+  firm remembers. It has objectives, scripted ambushes and a prerendered helicopter cut-in.
+- **Removed:** chapter 1, Twelve Miles Out, with its recordings and films.
 - **Oil rigs and sea fortresses rebuilt for damage:** each platform is now dozens of independent hit points
-  (gun tubs, deck bays, legs, derrick sections, radar, pontoons) instead of sixteen large chunks. A hit tears up
-  only its own local structure, breaks propagate down the platform's real support chain, and the station explodes
-  only when every required point is gone. Sections shed real debris, darken and sag; the hulk lists, settles
-  and sinks over four minutes instead of vanishing. The Core multi-hitpoint model is reusable by future structures.
-- **Realistic platform explosions:** a breaking point now throws a fireball scaled to the section that actually
-  broke instead of a giant one, and a total kill ends in a short rolling series of blasts over the largest
-  sections rather than every damage point erupting at once. The fireball storm that blacked out the sky around a
-  dying platform is gone.
-- **Boot-log noise, explained:** the README's troubleshooting section now names the warnings a healthy install
-  still shows — four Blueprinter `Aryx_CargoPlane1 not found` lines when the optional third-party Aryx MC-260
-  Chimera pack isn't installed (the extra carrier just isn't added; the Tarantula keeps everything), one
-  `Game asset LOD ... 2 matches` line from the game's own duplicated `LOD` material, and what a
-  `[Skylark] gear ... broke` line means when you park on a carrier deck.
+  (gun tubs, deck bays, legs, derrick sections, radar, pontoons) instead of sixteen large chunks. Breaks propagate
+  down the platform's real support chain; sections shed debris, darken and sag, and the hulk lists and sinks over
+  four minutes instead of vanishing.
+- **Realistic platform explosions:** fireballs scale to the section that broke, and a total kill ends in a short
+  rolling series of blasts instead of one sky-blackening storm.
+- **Lived-in maps:** about eighty new scenery shapes (houses, shops, barns, warehouses, industry, stations,
+  checkpoints, camps, fuel points, markets, piers, fences, wrecks, billboards and clutter) with detail and decal
+  surfaces, plus rock outcrops, icebergs and ice floes. Airfields use the game's own assets, the ground takes truer,
+  vanilla-toned colours, and the terrain draws in a seventh of the draw calls. Tassara gains the Grand Erg and
+  airfields the AI can land on; the four maps are rebaked.
+- **SA-74N aftermath:** storm lightning goes silent once the bomb lands, the whole map is scorched within a minute,
+  and a map-scale firestorm sends up dense smoke, a high soot deck and embers. The blast sound is remade.
+- **Boot-log noise, explained:** the README's troubleshooting section names the warnings a healthy install still shows.
+
+**Install:** extract `BoscaliSummer-0.2.16.zip` into the Nuclear Option game folder, or install `BoscaliSummer.dll`
+with your mod manager. Requires BepInEx 5.4.23+; Blueprinter enables the bundled custom content.
+Back up saves and configuration before updating.
 
 ## 0.2.15 — Territorial Expansion 1/2
 
@@ -32,13 +43,11 @@ experimental; all players should use the same mod version.
   picker tab. Fuzzball and Heavyweight move to Tassara.
 - **Climate per map:** each map has its own temperature, haze and snow, and the weather leans toward it.
 - **SA-74N remade:** a 74-megaton burst with a double-pulse flash, a mushroom that stands for 25 minutes, fallout,
-  ash and a dark, contaminated map for the rest of the mission. Storm lightning goes silent once the bomb lands; the
-  whole map is scorched within a minute and a map-scale firestorm sends up dense smoke, a high soot deck and embers.
+  ash and a dark, contaminated map for the rest of the mission.
 - **Visor:** the TAC BOARD is now one bar (WPN, CM, SYS, INFO) with a refit HUD and a new colour scheme.
-- **World and fixes:** forest fires leave glowing embers and cost less, and a round of stability fixes.
+- **World and fixes:** forest fires leave glowing embers and cost less, Twelve Miles Out opens with a prerendered
+  intro film, and a round of stability fixes.
 - **Multiplayer:** a client whose build of the hosted map differs is turned away with a reason.
-- **New campaign start, The Tassara Job:** flown for Meridian Freight & Aviation Services under the boss LEDGER, with prerendered intro and outro films. Your radio replies are now yours to choose, Paragon or Renegade, and the firm remembers. It has objectives, scripted ambushes and a prerendered helicopter cut-in.
-- **Removed:** chapter 1, Twelve Miles Out, with its recordings and films.
 
 **Install:** extract `BoscaliSummer-0.2.15.zip` into the Nuclear Option game folder, or install `BoscaliSummer.dll`
 with your mod manager. Requires BepInEx 5.4.23+; Blueprinter enables the bundled custom content.
