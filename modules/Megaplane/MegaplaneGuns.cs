@@ -171,6 +171,9 @@ namespace BoscaliSummer.Modules.Megaplane
             foreach (Gun gun in clone.GetComponentsInChildren<Gun>(true))
             {
                 gun.info = Bastion;
+                // The Tarantula mount fires guided shells, which the game spawns as missiles (interceptable, own damage):
+                // the howitzer fires plain shells that carry the Bastion's pierce and blast.
+                Set(gun, "guidedProjectile", null);
                 Set(gun, "fireRate", 60f / BastionInterval);
                 Set(gun, "fireInterval", BastionInterval);
                 Set(gun, "magazineCapacity", BastionRounds);
@@ -254,24 +257,67 @@ namespace BoscaliSummer.Modules.Megaplane
             rail.Bind(nodes, turret, elevation);
         }
 
-        /// <summary>Weapon reloads clear every station; put one station per turret back before the manager numbers them
-        /// (same order on every peer: hierarchy order of the shared prefab).</summary>
+        /// <summary>Weapon reloads clear every station; put the guns back before the manager numbers them (same order on every
+        /// peer: hierarchy order of the shared prefab). One station per weapon type, as on a ship's battery: all four BASTIONs,
+        /// all seven CIWS, all four silos are one selection each (one station per turret was 15 rows and broke the weapon UI).
+        /// Each turret still picks its own target; selected, the station aims them all where the pilot looks.</summary>
         internal static void Register(Aircraft aircraft)
         {
+            var battery = new Dictionary<WeaponInfo, WeaponStation>();
             foreach (Turret turret in aircraft.GetComponentsInChildren<Turret>(true))
             {
-                if (!(Stations.GetValue(turret) is WeaponStation[] st)) continue;
-                foreach (WeaponStation station in st)
+                if (!(Stations.GetValue(turret) is WeaponStation[] st) || st.Length == 0) continue;
+                WeaponStation station = st[0];
+                // a station without weapons would throw out of this Harmony prefix and break the manager's pass
+                if (station.Weapons == null || station.Weapons.Count == 0 || station.Weapons[0] == null) continue;
+                WeaponInfo info = station.Weapons[0].info;
+                if (!battery.TryGetValue(info, out WeaponStation into))
                 {
-                    // a station without weapons would throw out of this Harmony prefix and break the manager's pass
-                    if (station.Weapons == null || station.Weapons.Count == 0 || station.Weapons[0] == null) continue;
-                    if (aircraft.weaponStations.Contains(station)) continue;
-                    station.WeaponInfo = station.Weapons[0].info;
-                    if (station.Turrets == null || !station.Turrets.Contains(turret)) station.AssignTurret(turret);
-                    if (station.FullAmmo == 0) station.Rearm(station.Weapons.Sum(w => w != null ? w.GetFullAmmo() : 0) - station.GetAmmoTotal());
-                    aircraft.RegisterWeaponStation(station);
+                    battery[info] = into = station;
+                    into.WeaponInfo = info;
+                    if (into.Turrets == null || !into.Turrets.Contains(turret)) Set(turret, "turretIndex", into.AssignTurret(turret));
+                }
+                else if (station != into)
+                {
+                    foreach (Weapon w in station.Weapons) if (w != null && !into.Weapons.Contains(w)) { into.Weapons.Add(w); w.SetWeaponStation(into); }
+                    Stations.SetValue(turret, new[] { into });
+                    Set(turret, "currentWeaponStation", into);
+                    Set(turret, "turretIndex", into.AssignTurret(turret));
+                    into.FullAmmo = 0;   // re-totalled below
                 }
             }
+            foreach (WeaponStation into in battery.Values)
+            {
+                if (aircraft.weaponStations.Contains(into)) continue;
+                if (into.FullAmmo == 0) into.Rearm(into.Weapons.Sum(w => w != null ? w.GetFullAmmo() : 0) - into.GetAmmoTotal());
+                aircraft.RegisterWeaponStation(into);
+            }
+        }
+    }
+
+    /// <summary>A battery station's Fire fires every gun in it. On a ship-style battery each turret picks its own target, so a
+    /// gun only fires with the turret that called: its own turret is on that target and aimed (or under pilot control).
+    /// Without this the seven CIWS would all fire whenever one had a target, the aft ones through the carrier's own tail.</summary>
+    [HarmonyPatch]
+    internal static class MegaplaneBatteryFirePatch
+    {
+        private static readonly AccessTools.FieldRef<Turret, Unit> Target = AccessTools.FieldRefAccess<Turret, Unit>("target");
+        private static readonly AccessTools.FieldRef<Turret, bool> Manual = AccessTools.FieldRefAccess<Turret, bool>("manual");
+        private static readonly AccessTools.FieldRef<Turret, bool> OnTarget = AccessTools.FieldRefAccess<Turret, bool>("onTarget");
+
+        private static IEnumerable<MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(Gun), nameof(Gun.Fire));
+            yield return AccessTools.Method(typeof(MissileLauncher), nameof(MissileLauncher.Fire));
+        }
+
+        private static bool Prefix(Weapon __instance, Unit target, WeaponStation weaponStation)
+        {
+            if (weaponStation == null || weaponStation.Turrets == null || weaponStation.Turrets.Count < 2) return true;
+            Turret own = __instance.GetComponentInParent<Turret>();
+            if (own == null || !own.transform.root.name.StartsWith(MegaplaneTemplate.Key)) return true;
+            if (Manual(own)) return true;
+            return target != null && Target(own) == target && (OnTarget(own) || __instance is MissileLauncher);
         }
     }
 

@@ -182,7 +182,7 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             ok = true, owners = a.GetComponentsInChildren<MegaplaneHitbox>(true).GroupBy(h => h.Owner != null ? h.Owner.name : "-").Select(g => g.Key + " " + g.Count()).ToArray(),
             wingPath = a.GetComponentsInChildren<Transform>(true).Where(t => t.name == "Wing_Outer_L").Select(t => { string s = t.name; for (Transform q = t.parent; q != null; q = q.parent) s = q.name + "/" + s; return s + " meshes " + t.GetComponentsInChildren<MeshFilter>(true).Length + " boxes " + t.GetComponentsInChildren<MegaplaneHitbox>(true).Length; }).ToArray(),
-            liftL = d.LiftL, liftR = d.LiftR, pitchAuth = d.PitchAuthority, yawAuth = d.YawAuthority, lost = d.Lost.ToArray(), lostCount = d.Lost.Count(),
+            liftL = d.LiftL, liftR = d.LiftR, pitchAuth = d.PitchAuthority, yawAuth = d.YawAuthority, lost = d.Lost.ToArray(), lostCount = d.Lost.Count(), burning = d.GetComponent<MegaplaneFx>()?.Burning ?? 0, fxCount = d.GetComponentsInChildren<Transform>(true).Count(t => t.name.StartsWith("BS_Fx")) + UnityEngine.Object.FindObjectsOfType<Transform>().Count(t => t.name.StartsWith("BS_Fx") && t.root != d.transform),
             hp = a.partLookup.OfType<AeroPart>().Where(p => !p.IsDetached()).Select(p => p.name + " " + Mathf.RoundToInt(p.hitPoints)).ToArray(),
             disabled = a.disabled, bodies = Object.FindObjectsOfType<Rigidbody>().Count(r => r.GetComponent<AeroPart>() is AeroPart ap && ap.parentUnit == a),
             turretsDisabled = a.GetComponentsInChildren<Turret>(true).Count(t => HarmonyLib.Traverse.Create(t).Field<bool>("disabled").Value),

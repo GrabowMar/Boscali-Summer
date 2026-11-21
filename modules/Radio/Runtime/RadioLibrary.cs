@@ -116,7 +116,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             var paths = new List<string>();
             bool builtIn = Array.Exists(BuiltInStationRules.ImportFolderNames,
                 folder => string.Equals(folder, name, StringComparison.OrdinalIgnoreCase));
-            foreach (string candidate in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+            foreach (string candidate in StationFiles(directory, directory != root))
             {
                 if (totalTracks + paths.Count >= MaximumTracks) break;
                 string fullPath;
@@ -156,6 +156,30 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             }
             channels.Add(new RadioChannel(name, tracks));
             totalTracks += tracks.Length;
+        }
+
+        // Station folders may hold album subfolders; walk them (no links, bounded depth).
+        // The root's own subfolders are stations, so the root is read flat.
+        private static IEnumerable<string> StationFiles(string directory, bool nested)
+        {
+            var pending = new Queue<KeyValuePair<string, int>>();
+            pending.Enqueue(new KeyValuePair<string, int>(directory, 0));
+            while (pending.Count > 0)
+            {
+                KeyValuePair<string, int> next = pending.Dequeue();
+                string[] files, dirs;
+                try
+                {
+                    files = Directory.GetFiles(next.Key);
+                    dirs = nested && next.Value < 4 ? Directory.GetDirectories(next.Key) : Array.Empty<string>();
+                }
+                catch (IOException) { continue; }
+                catch (UnauthorizedAccessException) { continue; }
+                foreach (string file in files) yield return file;
+                foreach (string sub in dirs)
+                    if ((new DirectoryInfo(sub).Attributes & FileAttributes.ReparsePoint) == 0)
+                        pending.Enqueue(new KeyValuePair<string, int>(sub, next.Value + 1));
+            }
         }
 
         private static bool IsContained(string root, string path)

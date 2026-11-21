@@ -260,10 +260,16 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 {
                     if (baked == null || baked.sharedMaterial == null) continue;
                     string kind = baked.name;
+                    // The bake's yellow taxi paint is vertex-coloured and must keep the bundle's MapPaved material:
+                    // dressing it in the game's asphalt would replace the colour with a grey road texture.
+                    if (kind == "taxi_marks") { dressed++; continue; }
                     if (kind == "runway_markings") { baked.sharedMaterial = markingsLook ?? baked.sharedMaterial; dressed++; }
                     else if (kind == "runway_skidmarks") { baked.sharedMaterial = skidLook ?? baked.sharedMaterial; dressed++; }
                     else if (kind == "asphalt_dirtedge") { baked.sharedMaterial = edgeLook ?? baked.sharedMaterial; dressed++; }
-                    else if (kind == "runway1" || kind.StartsWith("runway")) { baked.sharedMaterial = runwayLook ?? baked.sharedMaterial; dressed++; }
+                    else if (kind == "runway1") { baked.sharedMaterial = runwayLook ?? baked.sharedMaterial; dressed++; }
+                    // A gravel/ice strip's baked "runway" keeps its own vertex-colour surface: dressing it with the
+                    // game's concrete runway material turned every rough strip into a light paved one.
+                    else if (kind.StartsWith("runway")) { dressed++; }
                     else if (kind == "asphalt" || kind.StartsWith("taxi") || kind.StartsWith("apron")) { baked.sharedMaterial = pavedLook ?? baked.sharedMaterial; dressed++; }
                 }
                 Plugin.Logger?.LogInfo("[Maps] Strip " + (n + 1) + " of " + manifest.displayName + ": " + dressed + " paving pieces dressed with the game's own " +

@@ -905,6 +905,31 @@ Shader "Boscali/FlightCloud"
             float hard = (1.0 - 0.6 * sheetBlend) * (1.0 - smoothstep(0.5, 1.0, coarse));
             layerShape = lerp(layerShape, saturate((layerShape - 0.10) / 0.25), hard);
             towerShape = lerp(towerShape, saturate((towerShape - 0.10) / 0.25), hard);
+            // Pileus/velum and mammatus (2026-11-19; WMO supplementary features). Both are
+            // driven by the broad/noise values this sample already read: no extra texture
+            // tap, no new march step, and CloudBodies.DensityBody mirrors them.
+            // Pileus: a thin smooth cap riding above a growing tower, before the anvil owns it.
+            if (sheetBlend < 0.6 && localAnvil < 0.55 && coarse < 0.95)
+            {
+                float above = g.y - columnTop;
+                float capBand = smoothstep(70.0, 210.0, above) * (1.0 - smoothstep(320.0, 640.0, above));
+                float capWidth = smoothstep(0.34, 0.60, wide) * (1.0 - smoothstep(0.80, 0.97, wide));
+                float pileus = 0.18 * (1.0 - sheetBlend) * capBand * capWidth * smoothstep(0.20, 0.50, cell);
+                towerShape = max(towerShape, pileus * (1.0 - smoothstep(0.30, 0.70, localAnvil)));
+            }
+            // Mammatus: rounded pouches hanging under an anvil's outer underside, where the
+            // tower itself has already thinned. The pouch field is the sample's own erosion
+            // noise, so the shape survives the same LOD filtering as the cloud.
+            if (localAnvil > 0.35 && sheetBlend < 0.6 && coarse < 0.95)
+            {
+                float anvilBase = columnTop - lerp(500.0, 1600.0, localAnvil);
+                float below = anvilBase - g.y;
+                float band = smoothstep(-80.0, 160.0, below) * (1.0 - smoothstep(420.0, 900.0, below));
+                float pouch = smoothstep(0.42, 0.78, detail);
+                float spread = smoothstep(0.15, 0.40, wide) * (1.0 - smoothstep(0.78, 0.98, wide));
+                float mammatus = 0.26 * localAnvil * band * spread * pouch * smoothstep(0.30, 0.65, broad.r);
+                towerShape = max(towerShape, mammatus);
+            }
             float layerDensity = saturate((layerShape - 0.12) / 0.70) * smoothstep(0.02, 0.10, layer);
             float towerDensity = towerShape;
 

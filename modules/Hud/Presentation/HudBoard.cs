@@ -289,7 +289,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 WarnUp = alerts != null && alerts.WarningUp,
                 OnlineBeat = boot.TakeOnlineBeat(),
                 Degrade = VisorDamage.Level(frame.Damage),
-                Jam = aircraft != null && combat != null ? Mathf.Clamp01(NativeRefs.Get(JamRef, combat)) : 0f,      // the game's own "an enemy jammer is working on my jet" level (CombatHUD.jamAccumulation, 0..1)
+                Jam = aircraft != null && combat != null ? Mathf.Clamp01(NativeRefs.Get(JamRef, combat)) : 0f,
                 ShaderOn = VisorGlitch.Ready,
                 ReducedFlashes = ReducedFlashes != null && ReducedFlashes(),
             });
@@ -625,7 +625,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             string cameraCode = null;
             float range = float.NaN, closure = float.NaN, aspect = float.NaN;
             Aircraft camOwner = viewingOwnExternally ? ownAircraft : hudAircraft;
-            if (camOwner != null && camOwner.targetCam != null &&
+            if ((settings?.TargetCam.Value ?? true) && camOwner != null && camOwner.targetCam != null &&
                 BoscaliSummer.Core.Game.NativeCamera.ReadMode(camOwner.targetCam) != TargetCam.CamMode.landingMode &&
                 BoscaliSummer.Core.Game.NativeCamera.TryGet(camOwner, out Camera camera, out string mode) &&
                 camera.targetTexture != null && camera.targetTexture.IsCreated())

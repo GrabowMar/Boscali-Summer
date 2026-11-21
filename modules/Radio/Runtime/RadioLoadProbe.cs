@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                     if (Host != null) UnityEngine.Object.Destroy(Host);
                     if (Folder != null)
                     {
-                        File.Delete(Path.Combine(Folder, "tone.wav"));
+                        File.Delete(Path.Combine(Folder, "tone #1 50%.wav"));
                         File.Delete(Path.Combine(Folder, "invalid.wav"));
                         if (Directory.Exists(Folder)) Directory.Delete(Folder);
                     }
@@ -46,7 +46,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 {
                     fixture.Folder = Path.Combine(BepInEx.Paths.CachePath, "BoscaliSummer", "radio-probe-" + Guid.NewGuid().ToString("N"));
                     Directory.CreateDirectory(fixture.Folder);
-                    WriteTone(Path.Combine(fixture.Folder, "tone.wav"));
+                    WriteTone(Path.Combine(fixture.Folder, "tone #1 50%.wav"));
                     File.WriteAllBytes(Path.Combine(fixture.Folder, "invalid.wav"), new byte[] { 0, 1, 2, 3 });
                     fixture.Host = new GameObject("BoscaliRadioLoadProbe");
                     RadioLoadProbeRunner runner = fixture.Host.AddComponent<RadioLoadProbeRunner>();
@@ -66,9 +66,9 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             bool accepted = true;
             switch (action)
             {
-                case "play": accepted = Play("tone"); break;
-                case "supersede": accepted = Play("invalid") && Play("tone"); break;
-                case "stop": accepted = Play("tone"); program.Stop(); break;
+                case "play": accepted = Play("tone #1 50%"); break;
+                case "supersede": accepted = Play("invalid") && Play("tone #1 50%"); break;
+                case "stop": accepted = Play("tone #1 50%"); program.Stop(); break;
                 case "fail": program.Stop(); accepted = Play("invalid"); break;
                 case "missing": program.Stop(); accepted = Play("missing"); break;
                 case "dispose": program.Dispose(); break;

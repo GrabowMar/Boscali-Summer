@@ -233,6 +233,12 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             cachedSlot = -1;
             slotCellCount = 0;
         }
+        /// <summary>Stop active strikes and thunder without releasing the owned bolt resources.</summary>
+        internal void Suspend()
+        {
+            ClearEvents(); previousTime = -1f; key = null;
+        }
+
         internal void Reset()
         {
             ClearEvents(); previousTime = -1f; key = null; thunder.Dispose();

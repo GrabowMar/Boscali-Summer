@@ -177,6 +177,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 CloudShape.BaseGate(y, baseY, genus.BaseSharp) *
                 WeatherMath.Smoothstep(0.04f, 0.20f, wide);
 
+            float detail = 0.5f;
             if (nearDetail)
             {
                 float edge = Scalar.Clamp01(1f - Math.Abs(Math.Max(layerShape, tower) - 0.42f) * 2.4f);
@@ -184,7 +185,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 // blends the two rungs' textures by the same weight as their bodies.
                 Ladder.Split(genus.LobeRung, out float edgeRung, out float edgeW);
                 float sheet = genus.SheetBlend;
-                float detail = 0.5f;
                 float billow = Math.Max(genus.Billow, 0.45f); // the shader's billow floor (2026-10-26)
                 if (edge > 0.08f)
                 {
@@ -214,6 +214,26 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 float hard = 1f - 0.6f * sheet;
                 layerShape = Scalar.Lerp(layerShape, Scalar.Clamp01((layerShape - 0.10f) / 0.25f), hard);
                 tower = Scalar.Lerp(tower, Scalar.Clamp01((tower - 0.10f) / 0.25f), hard);
+            }
+            // Pileus/velum and mammatus, the shader's 2026-11-19 terms (WMO supplementary
+            // features). Pileus is smooth and lives above the tower; mammatus reuses the
+            // sample's own erosion detail and sits under an anvil's outer underside.
+            if (nearDetail && genus.SheetBlend < 0.6f && localAnvil < 0.55f)
+            {
+                float above = y - columnTop;
+                float capBand = WeatherMath.Smoothstep(70f, 210f, above) * (1f - WeatherMath.Smoothstep(320f, 640f, above));
+                float capWidth = WeatherMath.Smoothstep(0.34f, 0.60f, wide) * (1f - WeatherMath.Smoothstep(0.80f, 0.97f, wide));
+                float pileus = 0.18f * (1f - genus.SheetBlend) * capBand * capWidth * WeatherMath.Smoothstep(0.20f, 0.50f, cell);
+                tower = Math.Max(tower, pileus * (1f - WeatherMath.Smoothstep(0.30f, 0.70f, localAnvil)));
+            }
+            if (nearDetail && localAnvil > 0.35f && genus.SheetBlend < 0.6f)
+            {
+                float anvilBase = columnTop - Scalar.Lerp(500f, 1600f, localAnvil);
+                float below = anvilBase - y;
+                float band = WeatherMath.Smoothstep(-80f, 160f, below) * (1f - WeatherMath.Smoothstep(420f, 900f, below));
+                float pouch = WeatherMath.Smoothstep(0.42f, 0.78f, detail);
+                float spread = WeatherMath.Smoothstep(0.15f, 0.40f, wide) * (1f - WeatherMath.Smoothstep(0.78f, 0.98f, wide));
+                tower = Math.Max(tower, 0.26f * localAnvil * band * spread * pouch * WeatherMath.Smoothstep(0.30f, 0.65f, broadR));
             }
             float layerDensity = Scalar.Clamp01((layerShape - 0.12f) / 0.70f) * WeatherMath.Smoothstep(0.02f, 0.10f, layer);
             // The shader's scud drive (2026-11-06): a sheet deck frays as if it rained at half its cover.

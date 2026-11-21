@@ -34,7 +34,7 @@
 
 Nuclear Option hands you a jet and a war. **Boscali Summer builds everything around the canopy glass**: a wing that flies on your orders, a front line that grinds through towns and leaves them burning, satellites, hackers and special forces on call, storm fronts rolling in off the coast, and a radio full of people having a worse day than you.
 
-Start with **Twelve Miles Out** in the mission picker's **Boscali Summer** group: coup morning in the Ignus archipelago, and you fly for a private security firm keeping a freighter convoy afloat while the republic falls apart behind you. The **Boscali Summer Gamemodes** group adds three more ways to fight:
+Start with **The Tassara Job** in the mission picker's **Boscali Summer** group: a small freight-and-aviation firm that is really a mercenary outfit is hired to stop an unmarked cargo flight over the Tassara desert, and the cargo turns out to be guns for a coup. The **Boscali Summer Gamemodes** group adds three more ways to fight:
 
 - **WarBox** — a long combined-arms sandbox with bigger escalation thresholds, reserves and logistics, and a dynamic contract board. Victory is decided by the war's own strategic objectives, not a scoreboard.
 - **Fuzzball** — airborne team combat with equal plane access and no ground war. First to 75 kills, or the higher score at 20 minutes.
@@ -269,9 +269,18 @@ Start with `BepInEx/LogOutput.log` — copy it **before** you restart, because t
 <summary><b>The log is full of warnings</b></summary>
 <br>
 
-Most of them are not the mod's. Expected and harmless: Blueprinter `PatchRunner ... Could not set` lines for Boscali Summer materials; Discord `RPC` and Steam `SDR network config` retries; a Wing Command warning if the old stand-alone plugin is still installed (delete `WingCommand.dll` to clear it).
+Most of them are not the mod's. Expected and harmless: Blueprinter `PatchRunner ... Could not set` lines for Boscali Summer materials; four Blueprinter `[Ops] Aircraft Aryx_CargoPlane1 not found` lines at boot when the third-party Aryx MC-260 Chimera pack isn't installed — the optional second carrier for the paratroopers and the Skywell, Hamilcar and Kestrel pods simply isn't added, and everything still mounts on the Tarantula; Blueprinter `Game asset LOD ... has 2 matches` — the game itself ships two materials named `LOD`, and either renders the same; Discord `RPC` and Steam `SDR network config` retries; a Wing Command warning if the old stand-alone plugin is still installed (delete `WingCommand.dll` to clear it).
 
 Anything with `Boscali Summer` in it and the word `Error` or `Exception` is worth a [bug report](#reporting-a-bug).
+
+</details>
+
+<details>
+<summary><b>A Skylark lost its gear while parked on a ship</b></summary>
+<br>
+
+- `[Skylark] gear ... broke: contact ...` means the gear really did come off, and names the collider the game blamed. The line reads `fold 1,00`, `LockedRetracted` when the gear was stowed: the break follows the airframe part that was torn off, not the wheel's own contact.
+- A carrier deck is a moving surface — the ship rides the swell, and its elevator is machinery. Parked with the **gear up**, the airframe rests on it rigidly and a moving deck can shear parts off; park with the **gear down** (AUTO and DRONE modes do this themselves below 10 m) and the suspension rides the motion instead.
 
 </details>
 

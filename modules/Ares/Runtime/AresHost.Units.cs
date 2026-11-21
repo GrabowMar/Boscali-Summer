@@ -132,6 +132,28 @@ namespace BoscaliSummer.Modules.Ares.Runtime
             return Say("TAKING CONTROL of the " + (definition.unitName ?? "aircraft").ToUpperInvariant() + "...");
         }
 
+#if !PUBLIC_RELEASE
+        /// <summary>FLY BREAKWATER: your aircraft swaps for the G-240 megaplane (Megaplane module, found by its encyclopedia key so
+        /// there is no sibling import), level on your heading at least 1.5 km above the sea, seated through the TAKE CONTROL path.</summary>
+        public string FlyMegaplane()
+        {
+            if (!Host(out string refusal)) return Say(refusal);
+            if (Encyclopedia.Lookup == null || !Encyclopedia.Lookup.TryGetValue("BS_Megaplane", out var found) || !(found is AircraftDefinition definition))
+                return Say("The Megaplane module is off.");
+            if (!LocalAircraft(out Aircraft mine)) return Say("Fly an aircraft first: the G-240 takes its place.");
+            if (!GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player)) return Say("No local player.");
+            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
+            // ponytail: sea-referenced floor, no terrain probe; raise it if a spawn over high ground ever clips
+            Vector3 position = mine.transform.position;
+            position.y = Mathf.Max(position.y + 300f, Datum.LocalSeaY + 1500f);
+            Quaternion rotation = Quaternion.Euler(0f, mine.transform.eulerAngles.y, 0f);
+            FactionHQ hq = mine.NetworkHQ;
+            Remove(mine);
+            StartCoroutine(Seat(spawner, definition, position, rotation, rotation * Vector3.forward * CruiseSpeed(definition), hq, player, null, -1f));
+            return Say("BOARDING the G-240 BREAKWATER...");
+        }
+#endif
+
         /// <summary>The copy comes one physics step after the original went: spawned inside it (its destroy lands at the end of the
         /// frame), the copy's propellers struck the old airframe and both engines flamed out (seen live).</summary>
         private System.Collections.IEnumerator Seat(Spawner spawner, AircraftDefinition definition, Vector3 position, Quaternion rotation,

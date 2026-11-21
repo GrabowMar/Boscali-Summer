@@ -242,6 +242,10 @@ namespace BoscaliSummer.Modules.Ares.Presentation
                 Button("+1000 CREDIT", () => host.AddCredit(), AvIcon.Coins));
             PickButton(flow, page, quick.Controls[1], "TELEPORT ME");
             quick.Controls[0].Help = "Repairs, rearms and refuels your aircraft now.";
+#if !PUBLIC_RELEASE
+            AvButtons mega = flow.Buttons(Button("FLY BREAKWATER", () => host.FlyMegaplane(), AvIcon.Plane));
+            mega.Controls[0].Help = "Swaps your aircraft for the G-240 Breakwater megaplane, in the air where you are.";
+#endif
 
             BuildHuntingWing(page, flow);
 

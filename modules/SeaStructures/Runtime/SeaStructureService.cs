@@ -5,6 +5,7 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.SeaStructures.Configuration;
 using BoscaliSummer.Modules.SeaStructures.Domain;
 using Mirage;
+using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.SeaStructures.Runtime
@@ -16,12 +17,14 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
     internal sealed class SeaStructureService : MonoBehaviour, ISceneService
     {
         public const string NamePrefix = "SEA#";
-        private const float SeedDelay = 20f, Spacing = 3000f;
+        private const float SeedDelay = 30f, Spacing = 3000f, UnitClearance = 1500f;
 
         public static SeaStructureService Active { get; private set; }
+        public bool Seeded => seeded;
+        public bool WaitingForPlayer => waitingForPlayer;
 
         private SeaStructureSettings settings;
-        private bool seeded;
+        private bool seeded, waitingForPlayer;
         private float runningSince = -1f;
         private int serial;
 
@@ -46,9 +49,28 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             if (seeded || settings == null || !MissionManager.IsRunning || !GameAccess.IsServer()) { if (!MissionManager.IsRunning) runningSince = -1f; return; }
             if (runningSince < 0f) runningSince = Time.time;
             if (Time.time - runningSince < SeedDelay) return;
+            // A listen host sitting in the aircraft menu has not chosen a spawn point yet. Seeding then can put
+            // a platform exactly where they later appear; wait until their first unit exists.
+            if (!LocalPlayerReady())
+            {
+                if (!waitingForPlayer) Debug.Log("[SeaStructures] waiting for the local player to spawn before seeding");
+                waitingForPlayer = true;
+                return;
+            }
+            waitingForPlayer = false;
             seeded = true;
             try { Seed(); }
             catch (Exception error) { Debug.LogError("[SeaStructures] seeding failed: " + error); }
+        }
+
+        /// <summary>A local player who is still in the menu has no unit yet; a dedicated host has none at all.</summary>
+        private static bool LocalPlayerReady()
+        {
+            // nomodkit scenarios drive their own owner aircraft and are not attached to the menu player.
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO"))) return true;
+            if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return true;
+            if (player.AircraftSpawnPending) return false;
+            return player.Aircraft != null || player.UnitID.HasValue;
         }
 
         private void Seed()
@@ -88,7 +110,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
                 {
                     float a = (start + b * 30f) * Mathf.Deg2Rad;
                     var p = new Vector3(centre.x + Mathf.Sin(a) * r, Datum.LocalSeaY, centre.z + Mathf.Cos(a) * r);
-                    if (!Clear(p, taken) || !OpenWater(p, 12f)) continue;
+                    if (!Clear(p, taken) || !ClearOfUnits(p) || !OpenWater(p, 12f)) continue;
                     bool open = true;
                     for (int k = 0; k < 8 && open; k++)
                     {
@@ -108,6 +130,21 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             if (taken != null)
                 foreach (Vector3 t in taken)
                     if ((t - p).sqrMagnitude < Spacing * Spacing) return false;
+            return true;
+        }
+
+        /// <summary>Never put a platform on top of a ship, aircraft, vehicle or the local player.</summary>
+        private static bool ClearOfUnits(Vector3 p)
+        {
+            List<Unit> units = UnitRegistry.allUnits;
+            for (int i = 0; i < units.Count; i++)
+            {
+                Unit unit = units[i];
+                if (unit == null) continue;
+                Vector3 at = unit.transform.position;
+                float dx = at.x - p.x, dz = at.z - p.z;
+                if (dx * dx + dz * dz < UnitClearance * UnitClearance) return false;
+            }
             return true;
         }
 

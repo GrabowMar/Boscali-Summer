@@ -716,6 +716,28 @@
         "loop": false
       },
       "prompt": "A vast nuclear shock front arriving at an observer: immense immediate pressure arrival, immense rolling turbulent roar, deep long low thunder and sustained rough dust wind decaying naturally into a bleak tail. Grounded physical scale, no music, no synthetic bass drop or voices. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "sa74-blast-r2",
+      "category": "weapons",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 22,
+        "prompt_influence": 0.55,
+        "loop": false
+      },
+      "prompt": "2026-11-21 layered: takes 2 (crack, 0 ms), 1 (body, +250 ms, x0.8), 4 (roll, +600 ms, x0.6) of: Colossal thermonuclear explosion heard from far away: sudden deep sub-bass shockwave boom that slams like a giant door, air pressure thump, metal and glass rattling, then a long rolling thunder rumble echoing across valleys that slowly fades out, cinematic, enormous low end, no music"
+    },
+    {
+      "id": "sa74-aftermath",
+      "category": "weapons",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 22,
+        "prompt_influence": 0.5,
+        "loop": true
+      },
+      "prompt": "2026-11-21 take 3 of: Seamless loop, desolate post-nuclear wasteland ambience: low moaning wind over burned ruins, distant crackling fires, deep ominous low drone, faraway rumbling, ash blowing, eerie and empty, no music, no voices"
     }
   ],
   "files": [
@@ -2097,6 +2119,20 @@
       "generation_id": "0xm7RZfem6tcuJ4AeRKJ",
       "model_id": "eleven_text_to_sound_v2",
       "raw_sha256": "b1c6b79dc444149da00fe168db3776ee428919f834a983870eb23d37bb5120ac"
+    },
+    {
+      "source_id": "sa74-blast-r2",
+      "take": 1,
+      "generation_id": "rest-2026-11-21-sa74-blast-2+1+4",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "16fca380020531e41e10477dfaee7ed9092143005281af8c1f673520f7a57cb4"
+    },
+    {
+      "source_id": "sa74-aftermath",
+      "take": 1,
+      "generation_id": "rest-2026-11-21-sa74-aftermath-3",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "d408a52bcad2238098b983f97b6433574a1e6d900fe97956765d8054f1949c0e"
     }
   ],
   "rejected_generations": [

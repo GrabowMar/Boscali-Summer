@@ -39,6 +39,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         internal static int EjectaParticles { get; private set; }
         internal static int DustParticles { get; private set; }
         internal static int PressureParticles { get; private set; }
+        /// <summary>The pose rate the newest rig last used: 0 in the fast first 30 s, then Domain/Sa74MushroomShape's 20 Hz.</summary>
+        internal static float PoseInterval { get; private set; }
 
         private enum Kind { PressureMist, Condensation, GroundDust, Ejecta, StemDust, SettlingDust, PressureShell }
         private sealed class Layer
@@ -56,6 +58,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             internal GameObject Root;
             internal Layer[] Layers;
             internal bool Wet;
+            internal float NextPose;
         }
 
         public void ResetForScene() => Clear();
@@ -111,15 +114,20 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             foreach (Rig rig in rigs)
             {
                 float age = Mathf.Max(0f, Time.time - rig.Site.Started);
-                float growth = 1f - Mathf.Exp(-age / 72f);
+                // Paired with the shader's rise: the dust column climbs at the same majestic pace as the volumetric head.
+                float growth = Domain.Sa74MushroomShape.Growth(age);
                 float height = 7000f + 51000f * growth;
                 float radius = Sa74Fallout.FrontRadius(age);
                 OuterRadius = Mathf.Max(OuterRadius, radius);
                 Vector3 origin = Datum.origin.InverseTransformPoint(rig.Site.Position.ToLocalPosition());
                 rig.Root.transform.position = rig.Site.Position.ToLocalPosition();
+                // The settled cloud re-poses at Domain/Sa74MushroomShape's throttled rate; poses stay age-derived,
+                // so captures and aged snapshots show the same state instantly between re-poses.
+                bool pose = age < Domain.Sa74MushroomShape.FastPoseSeconds || Time.time >= rig.NextPose;
+                PoseInterval = Domain.Sa74MushroomShape.PoseInterval(age);
                 foreach (Layer layer in rig.Layers)
                 {
-                    Pose(layer, rig.Site.Id, origin, age, growth, height, radius, rig.Site.GroundClearance, rig.Wet);
+                    if (pose) Pose(layer, rig.Site.Id, origin, age, growth, height, radius, rig.Site.GroundClearance, rig.Wet);
                     Systems++;
                     Particles += layer.System.particleCount;
                     if (layer.Kind == Kind.PressureMist || layer.Kind == Kind.PressureShell) PressureParticles += layer.System.particleCount;
@@ -127,6 +135,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                     else if (layer.Kind == Kind.Ejecta) EjectaParticles += layer.System.particleCount;
                     else if (layer.Kind != Kind.PressureMist) DustParticles += layer.System.particleCount;
                 }
+                if (pose) rig.NextPose = Time.time + Domain.Sa74MushroomShape.PoseInterval(age);
                 ActiveSites++;
             }
         }
@@ -501,7 +510,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private void Clear()
         {
             foreach (Rig rig in rigs) if (rig.Root != null) Destroy(rig.Root);
-            rigs.Clear(); Systems = Particles = ActiveSites = CondensationParticles = EjectaParticles = DustParticles = PressureParticles = 0; OuterRadius = 0f;
+            rigs.Clear(); Systems = Particles = ActiveSites = CondensationParticles = EjectaParticles = DustParticles = PressureParticles = 0; OuterRadius = 0f; PoseInterval = 0f;
             groundHits = groundMisses = groundPending = 0; debugDust = null;
         }
         private void OnDestroy()

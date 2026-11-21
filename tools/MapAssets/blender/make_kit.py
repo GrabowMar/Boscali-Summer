@@ -9,6 +9,7 @@ The game's own surfaces go over the colours at run time: u v are metres across t
 says which surface a face takes - 255 concrete, 128 gabion, 0 sheet metal."""
 
 import math
+import random
 import struct
 import sys
 from pathlib import Path
@@ -1042,7 +1043,83 @@ def radar_dome(b, v):
         b.cyl((0, 0, 9.4), 7.64, 0.25, PANEL, 14, caps=False)              # the panel seam
 
 
-SHAPES = (("railgun", railgun, 3, 1, "l"), ("helios_core", helios_core, 1, 1, "l"), ("capacitor", capacitor, 2, 1, "l"),
+def outcrop(b, v):
+    """A broken rock pavement: a low talus base, tilted strata slabs, and a weathered spire. Four variants so a
+    steep face reads as geology rather than as the same boulder repeated. Built from angular boxes on purpose -
+    the procedural kit's outcrop is a noise-blob, and a crag needs facets and bedding planes."""
+    rng = random.Random(900 + v * 37)
+    stone, dark = (SANDSTONE, BASALT) if v % 2 else (BASALT, STONE)
+    b.rock((0, 0, 1.0), 4.4, stone, 21 + v, scale=(1.7, 1.15, .42), rough=.60)
+    if b.mid:
+        for k in range(2):
+            b.rock((rng.uniform(-3.4, 3.4), rng.uniform(-2.6, 2.6), .55), rng.uniform(1.5, 2.5),
+                   dark, 40 + v * 3 + k, scale=(1.3, 1.0, .55), rough=.62)
+    # bedding planes: each slab sits a little off the one below, tilted by its own amount
+    layers = 5 if b.fine else 3 if b.mid else 1
+    for i in range(layers):
+        x, y = rng.uniform(-2.6, 2.6), rng.uniform(-2.0, 2.0)
+        w, d = rng.uniform(2.4, 4.6) * (1 - i * .10), rng.uniform(1.5, 3.2)
+        h = rng.uniform(.35, .80)
+        z = 1.4 + i * 1.45
+        b.box((x, y, z), (w, h, d), stone if (i + v) % 2 else dark,
+              rot=(rng.uniform(-7, 7), rng.uniform(0, 55), rng.uniform(-7, 7)), taper=.86)
+    # the spire: a low-poly tapered column, deliberately not vertical
+    if b.mid:
+        b.cyl((rng.uniform(-2.8, 2.8), rng.uniform(-2.2, 2.2), .8), rng.uniform(1.0, 1.8),
+              rng.uniform(4.5, 7.0), dark, 5, r2=.22, rot=(rng.uniform(-10, 10), rng.uniform(0, 360), rng.uniform(-10, 10)))
+    if b.fine:
+        for k in range(4):
+            b.box((rng.uniform(-4.2, 4.2), rng.uniform(-3.2, 3.2), rng.uniform(.3, 2.4)),
+                  (rng.uniform(.25, .7), rng.uniform(.15, .35), rng.uniform(.25, .8)), dark,
+                  rot=(rng.uniform(-30, 30), rng.uniform(0, 360), rng.uniform(-30, 30)))
+
+
+def iceberg(b, v):
+    """A polar berg: a broad, slightly tilted tabular mass with a snow lid, or a weathered pinnacle. Five
+    variants match the scatter's variant count; the waterline is the origin so the map's y=-2 sits it in the sea."""
+    rng = random.Random(1300 + v * 17)
+    w, d, h = rng.uniform(28, 62), rng.uniform(22, 48), rng.uniform(14, 34)
+    if v % 3 == 0:   # a pinnacle: two stacked, tapered blocks
+        b.box((0, 0, h * .45), (w * .45, h * .55, d * .45), ICE, rot=(rng.uniform(-6, 6), rng.uniform(0, 360), rng.uniform(-6, 6)), taper=.72)
+        b.box((rng.uniform(-4, 4), rng.uniform(-4, 4), h * .92), (w * .20, h * .32, d * .18), SNOW,
+              rot=(rng.uniform(-10, 10), rng.uniform(0, 360), rng.uniform(-10, 10)), taper=.55)
+    else:            # a tabular berg: vertical faces, a flat snow lid
+        b.box((0, 0, h * .5), (w * .5, h * .5, d * .5), ICE, rot=(0, rng.uniform(0, 360), 0), taper=.90)
+        b.box((0, 0, h + .35), (w * .46, .7, d * .46), SNOW, rot=(0, rng.uniform(0, 360), 0), taper=.96)
+        if b.mid:
+            b.box((w * .36, d * .1, h * .35), (w * .18, h * .32, d * .24), ICE,
+                  rot=(0, rng.uniform(0, 360), rng.uniform(-8, 8)), taper=.75)
+    if b.fine:
+        for k in range(3):
+            b.box((rng.uniform(-w * .5, w * .5), rng.uniform(-d * .5, d * .5), rng.uniform(2, h * .9)),
+                  (rng.uniform(1.0, 4.0), rng.uniform(1.0, 3.5), rng.uniform(1.0, 4.0)), SNOW,
+                  rot=(rng.uniform(-20, 20), rng.uniform(0, 360), rng.uniform(-20, 20)), taper=.6)
+
+
+def iceberg_tabular(b, v):
+    """A calved shelf berg: a great flat slab, a vertical cliff edge and a snow lid. Three variants."""
+    rng = random.Random(1500 + v * 19)
+    w, d, h = rng.uniform(50, 104), rng.uniform(40, 86), rng.uniform(10, 22)
+    b.box((0, 0, h * .5), (w * .5, h * .5, d * .5), ICE, rot=(0, rng.uniform(0, 360), 0), taper=.97)
+    b.box((0, 0, h + .4), (w * .48, .8, d * .48), SNOW, rot=(0, rng.uniform(0, 360), 0), taper=.99)
+    if b.mid:
+        b.box((w * .42, 0, h * .4), (w * .10, h * .38, d * .30), ICE, rot=(0, 0, rng.uniform(-4, 4)), taper=.92)
+
+
+def ice_floe(b, v):
+    """A flat floe plate, chipped at the rim. Six variants; it is drawn at the waterline, not sunk."""
+    rng = random.Random(1700 + v * 23)
+    w, d = rng.uniform(14, 34), rng.uniform(10, 26)
+    b.box((0, 0, .45), (w * .5, .55, d * .5), ICE, rot=(0, rng.uniform(0, 360), 0), taper=.94)
+    if b.mid:
+        for k in range(2):
+            b.box((rng.uniform(-w * .5, w * .5), rng.uniform(-d * .5, d * .5), .55),
+                  (rng.uniform(1.5, 4.0), .45, rng.uniform(1.5, 3.5)), SNOW,
+                  rot=(0, rng.uniform(0, 360), 0), taper=.95)
+
+
+SHAPES = (("outcrop", outcrop, 4, 1, "m"), ("iceberg", iceberg, 5, 1, "l"), ("iceberg_tabular", iceberg_tabular, 3, 1, "l"),
+          ("ice_floe", ice_floe, 6, 0, "m"), ("railgun", railgun, 3, 1, "l"), ("helios_core", helios_core, 1, 1, "l"), ("capacitor", capacitor, 2, 1, "l"),
           ("castle", castle, 2, 1, "l"), ("ruins", ruins, 3, 1, "l"), ("oil_rig", oil_rig, 1, 1, "l"), ("debris", debris, 3, 0, "m"),
           ("station_hub", station_hub, 1, 1, "l"), ("station_module", station_module, 3, 1, "l"), ("dish", dish, 2, 1, "l"),
           ("tunnel_portal", tunnel_portal, 1, 1, "l"), ("radar_tower", radar_tower, 1, 1, "l"), ("bunker", bunker, 2, 1, "m"),

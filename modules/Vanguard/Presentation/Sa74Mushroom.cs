@@ -25,6 +25,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private static readonly uint[] renderedSiteIds = new uint[2];
         private static int renderedSiteCount;
         private readonly Vector4[] sites = new Vector4[2];
+        private readonly Vector4[] winds = new Vector4[2];
         private readonly uint[] siteIds = new uint[2];
         private readonly MushroomPass pass = new MushroomPass();
         private static readonly FieldInfo NativeCloud = typeof(MushroomCloud).GetField("cloud", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -50,6 +51,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         internal static int NativeSuppressedRenderers { get; private set; }
         internal static int DispersedSites { get; private set; }
         internal static float RemainingSeconds { get; private set; }
+        /// <summary>Live wind at the newest rendered site, and the cap drift it accumulates (Domain/Sa74MushroomShape.CapDrift).</summary>
+        internal static float WindMeters { get; private set; }
+        internal static float DriftMeters { get; private set; }
         internal static bool CompositedAfterWeather { get; private set; }
         internal static long TargetBytes => (long)TargetWidth * TargetHeight * 12L;
         internal static bool DrawsSite(uint siteId)
@@ -118,6 +122,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 NativeCloudFallback(false);
                 VisibleSites = NativeFallbackRenderers = NativeSuppressedRenderers = 0;
                 DispersedSites = 0; RemainingSeconds = 0f;
+                WindMeters = DriftMeters = 0f;
                 pass.ReleaseTargets(); pass.Bind(null, null);
                 RenderedFrame = -1;
                 return;
@@ -130,6 +135,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             int count = 0;
             Vector4 groundClearance = Vector4.zero, wet = Vector4.zero;
             DispersedSites = 0; RemainingSeconds = 0f;
+            // One wind sample per frame: LevelInfo's wind is global, and the shader shears it by height per site.
+            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            Vector3 wind = level != null ? level.GetWind() : Vector3.zero;
             // ponytail: two newest concurrent volumes bound fragment work; a third burst inside 40 minutes drops the oldest cloud
             // (its native fallback is long gone by then). Raise the shader's site arrays if that ever matters.
             for (int i = Sa74Fallout.Sites.Count - 1; i >= 0; i--)
@@ -144,6 +152,13 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 groundClearance[count] = site.GroundClearance;
                 // A burst whose surface is the sea lofts spray and mist, not dirt.
                 wet[count] = at.y - site.GroundClearance <= Datum.LocalSeaY + 1f ? 1f : 0f;
+                winds[count] = new Vector4(wind.x, 0f, wind.z, 0f);
+                if (count == 0)
+                {
+                    // The newest site's drift, for review metrics: constant-wind integration, paired with the shader.
+                    WindMeters = Mathf.Sqrt(wind.x * wind.x + wind.z * wind.z);
+                    DriftMeters = Sa74MushroomShape.CapDrift(age, WindMeters);
+                }
                 sites[count++] = new Vector4(at.x, Mathf.Max(at.y, Datum.LocalSeaY + 8f), at.z, age);
                 RemainingSeconds = Mathf.Max(RemainingSeconds, Sa74BlastShape.MaximumVisualAge - age);
             }
@@ -157,6 +172,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             NativeCloudFallback(RenderedFrame >= Time.frameCount - 1);
             material.SetInt("_Sa74Count", count);
             material.SetVectorArray("_Sa74Sites", sites);
+            material.SetVectorArray("_Sa74Winds", winds);
             material.SetVector("_Sa74Clearance", groundClearance);
             material.SetVector("_Sa74Wet", wet);
             material.SetFloat("_Sa74ShockRadius", Sa74Fallout.ShockRadius);
@@ -212,7 +228,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             NativeCloudFallback(false, false); nativeClouds.Clear(); observedEvents = -1;
             NativeFallbackRenderers = NativeSuppressedRenderers = 0;
-            DispersedSites = 0; RemainingSeconds = 0f;
+            DispersedSites = 0; RemainingSeconds = 0f; WindMeters = DriftMeters = 0f;
             pass.ReleaseTargets(); RenderedFrame = -1; VisibleSites = 0;
         }
         private void OnDestroy()
@@ -225,7 +241,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (material != null) Destroy(material);
             if (noise != null) Destroy(noise);
             Ready = false; RenderedFrame = -1; VisibleSites = 0;
-            DispersedSites = 0; RemainingSeconds = 0f;
+            DispersedSites = 0; RemainingSeconds = 0f; WindMeters = DriftMeters = 0f;
         }
 
         private sealed class MushroomPass : ScriptableRenderPass

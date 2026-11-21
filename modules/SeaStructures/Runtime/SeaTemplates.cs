@@ -164,6 +164,12 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             return mesh;
         }
 
+        /// <summary>The undamaged mesh of one damage point.</summary>
+        public static Mesh Point(SeaLayout layout, SeaSection section, SeaPointPlan point, int index)
+        {
+            return ToMesh(SeaMesh.Point(section, point.Pieces, 1f), layout.Key + ":p" + index);
+        }
+
         public static Mesh ToMesh(SeaMesh.Data data, string name)
         {
             var mesh = new Mesh { name = name, hideFlags = HideFlags.HideAndDontSave };
@@ -193,6 +199,8 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
         private static readonly FieldInfo Disintegrate = AccessTools.Field(typeof(UnitPart), "disintegrateObjects");
         private static readonly FieldInfo CriticalPart = AccessTools.Field(typeof(UnitPart), "criticalPart");
         private static readonly FieldInfo Structural = AccessTools.Field(typeof(UnitPart), "structuralThreshold");
+        private static readonly FieldInfo Armor = AccessTools.Field(typeof(UnitPart), "armorProperties");
+        private static readonly FieldInfo DamageMaterialField = AccessTools.Field(typeof(UnitPart), "damageMaterial");
         private static readonly FieldInfo TurretStations = AccessTools.Field(typeof(Turret), "weaponStations");
         private static readonly FieldInfo TurretParts = AccessTools.Field(typeof(Turret), "criticalParts");
         private static readonly FieldInfo LaunchPoints = AccessTools.Field(typeof(MissileLauncher), "launchTransforms");
@@ -237,6 +245,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
         {
             tried = true;
             SeaArt.Bind();
+            Debug.Log("[SeaStructures] building templates from " + encyclopedia.ships.Count + " ships");
             holder = new GameObject("SeaStructureTemplates");
             holder.SetActive(false); // children never wake: spawning instantiates live copies
             UnityEngine.Object.DontDestroyOnLoad(holder);
@@ -383,12 +392,20 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             Take(layout, assigned, hull, critical.Contains, s => true);
             Take(layout, assigned, hull, p => true, s => true);
 
-            // A section with no donor part left for it is built onto the nearest section below it that has one.
+            // Damage plan: one spine per section plus local detail points, identical on every peer.
+            var plan = SeaDamagePlans.Of(layout.Kind);
+            Debug.Log("[SeaStructures] " + layout.Key + " plan: " + plan.Count + " points");
+            var spinePlan = new SeaPointPlan[n];
+            var spineIndex = new int[n];
+            for (int i = 0; i < plan.Count; i++)
+                if (plan[i].Spine) { spinePlan[plan[i].Section] = plan[i]; spineIndex[plan[i].Section] = i; }
+
             var node = new Transform[n];
-            var offset = new Vector3[n];
             for (int i = 0; i < n; i++)
             {
                 SeaSection section = layout.Sections[i];
+                SeaPointPlan spine = spinePlan[i];
+                UnitPart spinePart;
                 if (assigned[i] != null)
                 {
                     Transform t = assigned[i].transform;
@@ -397,20 +414,44 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
                     t.rotation = Quaternion.identity;
                     t.localScale = Vector3.one;
                     node[i] = t;
+                    spinePart = assigned[i];
                     Disintegrate?.SetValue(assigned[i], new GameObject[0]);
                 }
                 else
                 {
-                    node[i] = node[section.Parent];
-                    offset[i] = section.At - node[i].position;
+                    // A section with no donor hull part of its own gets a plain spine part under the section
+                    // below it. parentUnit is set explicitly so the game never has to infer it from the tree.
+                    var holder = new GameObject("BSPINE" + i);
+                    holder.transform.SetParent(node[section.Parent], false);
+                    holder.transform.position = section.At;
+                    holder.transform.rotation = Quaternion.identity;
+                    node[i] = holder.transform;
+                    spinePart = holder.AddComponent<UnitPart>();
+                    ConfigurePoint(spinePart, node[section.Parent].GetComponent<UnitPart>(), spine, ship);
                 }
-                foreach (SeaBox box in section.Boxes) Box(node[i].gameObject, offset[i] + box.Centre, box.Size, surface);
-                var look = new GameObject(MeshPrefix + i);
-                look.layer = node[i].gameObject.layer;
-                look.transform.SetParent(node[i], false);
-                look.transform.localPosition = offset[i];
-                look.AddComponent<MeshFilter>().sharedMesh = SeaArt.Whole(layout, i);
-                look.AddComponent<MeshRenderer>().sharedMaterial = SeaArt.Material(layout);
+                if (section.Pad)
+                    foreach (SeaBox box in section.Boxes) PointVolume(node[i].gameObject, box.Centre, box.Size, surface);
+                else
+                    PointVolume(node[i].gameObject, spine.Centre, PointSize(spine), surface);
+                PointMesh(node[i], spineIndex[i], "BSS", spine, section, layout, Vector3.zero);
+                node[i].gameObject.AddComponent<SeaPointTag>().Index = spineIndex[i];
+
+                for (int p = 0; p < plan.Count; p++)
+                {
+                    SeaPointPlan detail = plan[p];
+                    if (detail.Spine || detail.Section != i) continue;
+                    var part = new GameObject("BSP" + p);
+                    part.layer = node[i].gameObject.layer;
+                    part.transform.SetParent(node[i], false);
+                    part.transform.localPosition = detail.Centre;
+                    part.transform.localRotation = Quaternion.identity;
+                    part.transform.localScale = Vector3.one;
+                    PointVolume(part, Vector3.zero, PointSize(detail), surface);
+                    var unit = part.AddComponent<UnitPart>();
+                    ConfigurePoint(unit, spinePart, detail, ship);
+                    part.AddComponent<SeaPointTag>().Index = p;
+                    PointMesh(part.transform, p, "BSD", detail, section, layout, -detail.Centre);
+                }
             }
             // Hull parts beyond the layout's sections sit inside the root's core, out of reach but still registered.
             for (int i = 0; i < hull.Count; i++)
@@ -501,9 +542,54 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
 
             int placed = 0;
             for (int i = 1; i < n; i++) if (assigned[i] != null) placed++;
+            int units = go.GetComponentsInChildren<UnitPart>(true).Length;
+            if (units > 200) Debug.LogWarning("[SeaStructures] " + layout.Key + " has " + units + " native parts; UnitPart ids are bytes");
             Debug.Log("[SeaStructures] " + layout.Key + " refitted from " + donor.jsonKey + ": " + placed + "/" + (n - 1) + " sections, " +
-                      mounts.Count + " turrets, " + stores.Count + " stores, " + hull.Count + " hull parts stowed");
+                      plan.Count + " damage points, " + mounts.Count + " turrets, " + stores.Count + " stores, " + hull.Count + " hull parts stowed");
             return go;
+        }
+
+        /// <summary>A new damage part: owner, armor and the game's damage material plumbing.</summary>
+        private static void ConfigurePoint(UnitPart part, UnitPart template, SeaPointPlan point, Ship ship)
+        {
+            part.parentUnit = ship;
+            part.mass = 5f;
+            CriticalPart?.SetValue(part, false);
+            Structural?.SetValue(part, -1e9f);
+            Disintegrate?.SetValue(part, new GameObject[0]);
+            DamageMaterialField?.SetValue(part, new DamageMaterial { renderers = new List<Renderer>(), indices = Array.Empty<byte>() });
+            if (template == null) return;
+            ArmorProperties armor = template.GetArmorProperties();
+            float k = Mathf.Max(0.2f, point.Toughness);
+            armor.pierceTolerance = Mathf.Max(0.01f, armor.pierceTolerance * k);
+            armor.blastTolerance = Mathf.Max(0.01f, armor.blastTolerance * k);
+            armor.fireTolerance = Mathf.Max(0.01f, armor.fireTolerance * k);
+            Armor?.SetValue(part, armor);
+        }
+
+        private static void PointVolume(GameObject go, Vector3 centre, Vector3 size, PhysicMaterial surface)
+        {
+            BoxCollider box = go.AddComponent<BoxCollider>();
+            box.center = centre;
+            box.size = size;
+            box.sharedMaterial = surface;
+        }
+
+        private static Vector3 PointSize(SeaPointPlan point)
+        {
+            Vector3 size = point.Size;
+            return new Vector3(Mathf.Max(size.x, 0.6f), Mathf.Max(size.y, 0.6f), Mathf.Max(size.z, 0.6f));
+        }
+
+        private static void PointMesh(Transform parent, int index, string prefix, SeaPointPlan point, SeaSection section,
+            SeaLayout layout, Vector3 local)
+        {
+            var mesh = new GameObject(prefix + index);
+            mesh.layer = parent.gameObject.layer;
+            mesh.transform.SetParent(parent, false);
+            mesh.transform.localPosition = local;
+            mesh.AddComponent<MeshFilter>().sharedMesh = SeaArt.Point(layout, section, point, index);
+            mesh.AddComponent<MeshRenderer>().sharedMaterial = SeaArt.Material(layout);
         }
 
         private static void Take(SeaLayout layout, ShipPart[] assigned, List<ShipPart> pool, Predicate<ShipPart> part, Predicate<SeaSection> section)

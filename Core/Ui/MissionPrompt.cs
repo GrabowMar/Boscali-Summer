@@ -42,7 +42,7 @@ namespace BoscaliSummer.Core.Ui
             ("trenches", "TRENCHES", "Front-line trench lines", "Trench lines dug along the front for ground forces to fight from.", AvIcon.Shield),
             ("fire-and-destruction", "FIRE + DESTRUCTION", "Fire spread, lasting wrecks", "Fires spread through forests and towns, and wrecks stay where they fall.", AvIcon.Flame),
             ("combat", "COMBAT", "Fog, missile failures, smoke", "Less arcade, same rules for both sides: fewer contacts on the shared picture, old contacts drift and fade, some missiles fail, armour pops smoke, ships fire decoys, SAM radars go dark.", AvIcon.Crosshair),
-            ("sea", "SEA STRUCTURES", "Oil platforms, sea forts", "Armed oil platforms and sea fortresses stand off the coast and break apart section by section under fire.", AvIcon.Anchor),
+            ("sea", "SEA STRUCTURES", "Oil platforms, sea forts", "Armed oil platforms and sea fortresses stand off the coast; their decks, guns and legs tear apart point by point under fire and leave burning wrecks.", AvIcon.Anchor),
             ("air-survival", "AIR STATIONS", "AI air survival, stations", "AI aircraft survive smarter and hold combat air stations over the front.", AvIcon.Runway),
             ("player-spawn-priority", "SPAWN PRIORITY", "Players get hangars first", "Human players get hangar slots ahead of the AI.", AvIcon.Plane),
             ("vanguard", "VANGUARD", "Extra weapons and gliders", "Extra weapons, drones and gliders: decoys, lasers, recon pods and drone wingmen.", AvIcon.Rocket),

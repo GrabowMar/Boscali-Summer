@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
@@ -46,7 +47,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private WhiteBalance balance;
         private Bloom bloom;
         private FilmGrain radiationGrain;
-        private ChromaticAberration radiationFringe;
         private Vignette radiationVignette;
         private float radiationGrainBase;
         private Light flashLight;
@@ -64,6 +64,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private Texture2D ashTexture;
         private AudioSource geiger;
         private AudioClip crackle;
+        // Wasteland bed: wind, far fires and a low drone once the blast tail has passed; it never stops while the sites last.
+        private AudioSource wasteland;
+        private float wastelandLevel;
         private LevelInfo winterLevel;
         private float beforeConditions, beforeCloudHeight;
         private bool winterCaptured;
@@ -121,7 +124,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void ApplySite(Site site, bool explosion)
         {
             Sa74Destruction.Observe(site);
-            BoscaliSummer.Core.Contracts.RadioAftermath.Observe(Epoch, site.Id, Time.time, Mathf.Max(0f, Time.time - site.Started));
+            float age = Mathf.Max(0f, Time.time - site.Started);
+            BoscaliSummer.Core.Contracts.RadioAftermath.Observe(Epoch, site.Id, Time.time, age);
+            NuclearAftermath.Observe(Epoch, site.Id, site.Position.x, site.Position.y, site.Position.z, Time.time, age);
             Vector3 at = site.Position.ToLocalPosition();
             site.GroundClearance = Sa74FalloutTerrain.GroundClearance(at);
             if (explosion) NativeBlast(at, site.Owner, site.Id, site.GroundClearance);
@@ -335,8 +340,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             radiationGrain.texture.Override(FeedCamera.Noise());
             radiationGrain.response.Override(.65f);
             radiationGrain.intensity.Override(0f);
-            radiationFringe = profile.Add<ChromaticAberration>();
-            radiationFringe.intensity.Override(0f);
             radiationVignette = profile.Add<Vignette>();
             radiationVignette.color.Override(Color.black); radiationVignette.smoothness.Override(.55f);
             radiationVignette.intensity.Override(0f);
@@ -459,18 +462,25 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return (value & 0x00ffffffu) / 16777215f;
         }
 
+        // Restore the underlying fog before Weather samples it in LateUpdate. Otherwise Weather feeds
+        // the fallout tint back into itself each frame until LevelInfo refreshes the native fog.
+        private void Update() => RestoreHaze();
+
+        private void RestoreHaze()
+        {
+            if (!hazeApplied) return;
+            if (Mathf.Approximately(RenderSettings.fogDensity, writtenFog)) RenderSettings.fogDensity = beforeFog;
+            if (RenderSettings.fogColor.Equals(writtenFogColor)) RenderSettings.fogColor = beforeFogColor;
+            hazeApplied = false;
+        }
+
         private void AftermathHaze()
         {
-            float current = RenderSettings.fogDensity;
-            if (current > .02f) { hazeApplied = false; return; } // Preserve the native underwater preset.
-            if (!hazeApplied || !Mathf.Approximately(current, writtenFog)) beforeFog = current;
-            // Weather's own late haze can still obscure the horizon. Bound extinction without modifying its wind or cloud simulation.
+            beforeFog = RenderSettings.fogDensity;
+            if (beforeFog > .02f) return; // Preserve the native underwater preset.
+            beforeFogColor = RenderSettings.fogColor;
             writtenFog = Mathf.Lerp(beforeFog, Mathf.Min(beforeFog, .00007f), winterBlend);
             RenderSettings.fogDensity = writtenFog;
-            // Distance fades into dark smoke instead of bright haze. Follow whatever colour the weather writes underneath.
-            Color fogNow = RenderSettings.fogColor;
-            if (!hazeApplied || Mathf.Abs(fogNow.r - writtenFogColor.r) + Mathf.Abs(fogNow.g - writtenFogColor.g) + Mathf.Abs(fogNow.b - writtenFogColor.b) > .004f)
-                beforeFogColor = fogNow;
             float fogLuminance = beforeFogColor.r * .2126f + beforeFogColor.g * .7152f + beforeFogColor.b * .0722f;
             writtenFogColor = Color.Lerp(beforeFogColor, new Color(fogLuminance * .10f, fogLuminance * .14f, fogLuminance * .16f, beforeFogColor.a), darkBlend * .92f);
             RenderSettings.fogColor = writtenFogColor;
@@ -493,6 +503,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             geiger = dressing.AddComponent<AudioSource>();
             geiger.clip = crackle; geiger.loop = true; geiger.playOnAwake = false; geiger.spatialBlend = 0f;
             geiger.volume = .12f; geiger.priority = 150;
+            AudioClip bed = SfxClips.Get("sa74-aftermath");
+            if (bed == null) return;
+            wasteland = dressing.AddComponent<AudioSource>();
+            wasteland.clip = bed; wasteland.loop = true; wasteland.playOnAwake = false; wasteland.spatialBlend = 0f;
+            wasteland.volume = 0f; wasteland.priority = 140;
         }
 
         private void LateUpdate()
@@ -532,8 +547,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             foreach (Site site in Sites) oldest = Mathf.Max(oldest, Time.time - site.Started);
             falloutBlend = Sa74Flash.Fallout(oldest);
             darkBlend = Mathf.Max(.45f * falloutBlend, winterBlend);
-            // The whole map is contaminated for good; it only gets worse toward the crater.
-            radiationStrength = falloutBlend * Mathf.Max(.22f, Mathf.Pow(Mathf.Clamp01(1f - nearest / ShockRadius), 2f));
+            wastelandLevel = Mathf.Max(Mathf.SmoothStep(0f, 1f, (oldest - 12f) / 40f), darkBlend);
+            // Radiation near ground zero drives Geiger clicks, faint grain and the vignette.
+            radiationStrength = Mathf.Pow(Mathf.Clamp01(1f - nearest / ShockRadius), 2f);
             AftermathHaze();
             Snowfall(camera, NetworkSceneSingleton<LevelInfo>.i);
             if (grade != null)
@@ -544,11 +560,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 grade.contrast.Override(14f * darkBlend);
                 grade.saturation.Override(-35f * darkBlend);
                 balance.temperature.Override(-18f * darkBlend); balance.tint.Override(-4f * darkBlend);
-                // Radiation on the sensor: steady grain, with random frames where a burst of hits tears the picture.
+                // Radiation on the sensor: a steady faint grain only.
                 radiationGrainBase = .05f * radiationStrength;
-                float hit = SnowHash((uint)(Time.unscaledTime * 14f)) > 1f - .07f * radiationStrength ? 1f : 0f;
-                radiationGrain.intensity.Override(radiationGrainBase + .40f * radiationStrength * hit);
-                radiationFringe.intensity.Override(.10f * radiationStrength + .55f * radiationStrength * hit);
+                radiationGrain.intensity.Override(radiationGrainBase);
                 radiationVignette.intensity.Override(.20f * darkBlend + .10f * radiationStrength);
                 bloom.active = illumination > .008f;
                 bloom.intensity.Override(illumination * (thermalPulse > .5f ? 4f : 1.5f));
@@ -572,18 +586,34 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 }
                 else if (geiger.isPlaying) { geiger.Stop(); FxVoiceBus.EndLoop("sa74-geiger"); }
             }
+            if (wasteland != null)
+            {
+                if (SoundManager.i != null) wasteland.outputAudioMixerGroup = SoundManager.i.EffectsMixer;
+                wasteland.volume = .34f * wastelandLevel;
+                if (wastelandLevel > .01f)
+                {
+                    if (!wasteland.isPlaying && wasteland.outputAudioMixerGroup != null && FxVoiceBus.TryStartLoop("sa74-aftermath")) wasteland.Play();
+                }
+                else if (wasteland.isPlaying) { wasteland.Stop(); FxVoiceBus.EndLoop("sa74-aftermath"); }
+            }
         }
 
         internal Dictionary<string, object> Snapshot() => new Dictionary<string, object>
         {
             { "ok", true }, { "active", Active }, { "events", Events }, { "sites", Sites.Count },
+            { "nuclearAftermath", NuclearAftermath.Active },
             { "nativeBlasts", NativeBlasts }, { "blastColliders", BlastColliders }, { "exposedParts", ExposedParts },
             { "craters", terrain.Scars }, { "terrainChanged", terrain.ChangedCells }, { "terrainRestored", terrain.RestoredCells },
-            { "audio", geiger != null && geiger.isPlaying }, { "ash", ash != null && ash.isPlaying },
+            { "audio", geiger != null && geiger.isPlaying }, { "wasteland", wasteland != null && wasteland.isPlaying ? wasteland.volume : 0f }, { "ash", ash != null && ash.isPlaying },
             { "tint", profile != null }, { "yieldKt", YieldKilotons }, { "epoch", Epoch },
             { "blastRadiusKm", ShockRadius / 1000f }, { "mapWidth", TheaterFrame.Resolve().x }, { "mapHeight", TheaterFrame.Resolve().y },
             { "conditions", LevelInfo.i != null ? LevelInfo.i.conditions : 0f },
             { "thermalPulse", thermalPulse }, { "flashExposure", flashExposure }, { "winterBlend", winterBlend }, { "falloutBlend", falloutBlend }, { "darkBlend", darkBlend }, { "smolderPlumes", Presentation.Sa74Smolder.ActivePlumes },
+            { "smolderFires", Presentation.Sa74Smolder.ActiveFires }, { "smolderEmbers", Presentation.Sa74Smolder.ActiveEmbers },
+            { "smolderDeck", Presentation.Sa74Smolder.ActiveDeck },
+            { "charMaterials", Presentation.Sa74Smolder.CharMaterials }, { "charDetails", Presentation.Sa74Smolder.CharDetails },
+            { "charStep", Presentation.Sa74Smolder.CharStep },
+            { "charReach", Presentation.Sa74Smolder.CharReach }, { "charWrites", Presentation.Sa74Smolder.CharWrites },
             { "flashLight", flashLight != null && flashLight.enabled ? flashLight.intensity : 0f },
             { "snowParticles", SnowParticles }, { "snowBudget", SnowBudget }, { "snowEmitting", SnowEmitting },
             { "radiationStrength", RadiationStrength }, { "radiationGrain", RadiationGrain }, { "atmosphereExposure", AtmosphereExposure },
@@ -596,6 +626,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             { "mushroomHeight", Presentation.Sa74Mushroom.TargetHeight },
             { "mushroomDispersed", Presentation.Sa74Mushroom.DispersedSites },
             { "mushroomRemaining", Presentation.Sa74Mushroom.RemainingSeconds }, { "mushroomBytes", Presentation.Sa74Mushroom.TargetBytes },
+            { "mushroomWind", Presentation.Sa74Mushroom.WindMeters }, { "mushroomDrift", Presentation.Sa74Mushroom.DriftMeters },
+            { "particlePoseInterval", Presentation.Sa74Particles.PoseInterval },
             { "nativeFallbackRenderers", Presentation.Sa74Mushroom.NativeFallbackRenderers },
             { "nativeSuppressedRenderers", Presentation.Sa74Mushroom.NativeSuppressedRenderers },
             { "particlesReady", Presentation.Sa74Particles.Ready }, { "particleSystems", Presentation.Sa74Particles.Systems },
@@ -624,12 +656,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Sa74Destruction.Reset();
             Sa74PowerCut.Reset();
             BoscaliSummer.Core.Contracts.RadioAftermath.Reset();
+            NuclearAftermath.Reset();
             Sa74NativeGround.Reset();
             terrain.Clear();
             if (winterCaptured && winterLevel != null) { winterLevel.conditions = beforeConditions; winterLevel.cloudHeight = beforeCloudHeight; }
-            if (hazeApplied && Mathf.Approximately(RenderSettings.fogDensity, writtenFog)) RenderSettings.fogDensity = beforeFog;
-            if (hazeApplied) RenderSettings.fogColor = beforeFogColor;
-            hazeApplied = false;
+            RestoreHaze();
             if (falloutSkybox != null)
             {
                 if (RenderSettings.skybox == falloutSkybox) RenderSettings.skybox = beforeSkybox;
@@ -644,9 +675,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (profile != null) { foreach (VolumeComponent component in profile.components) UnityEngine.Object.Destroy(component); UnityEngine.Object.Destroy(profile); }
             if (ashMaterial != null) UnityEngine.Object.Destroy(ashMaterial);
             if (ashTexture != null) UnityEngine.Object.Destroy(ashTexture);
-            FxVoiceBus.EndLoop("sa74-geiger");
-            dressing = ashRoot = null; profile = null; volume = null; grade = null; balance = null; bloom = null; radiationGrain = null; radiationFringe = null; radiationVignette = null; radiationGrainBase = 0f; flashLight = null;
-            ash = null; ashRenderer = null; ashMaterial = null; ashTexture = null; geiger = null; crackle = null;
+            FxVoiceBus.EndLoop("sa74-geiger"); FxVoiceBus.EndLoop("sa74-aftermath");
+            dressing = ashRoot = null; profile = null; volume = null; grade = null; balance = null; bloom = null; radiationGrain = null; radiationVignette = null; radiationGrainBase = 0f; flashLight = null;
+            ash = null; ashRenderer = null; ashMaterial = null; ashTexture = null; geiger = null; crackle = null; wasteland = null; wastelandLevel = 0f;
             flashExposure = thermalPulse = winterBlend = falloutBlend = darkBlend = radiationStrength = 0f;
             Sites.Clear(); Events = NativeBlasts = BlastColliders = ExposedParts = 0;
             lastReceivedId = 0;

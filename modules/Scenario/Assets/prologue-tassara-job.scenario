@@ -1,7 +1,7 @@
 # Boscali Summer, prologue: The Tassara Job.
 # Meridian Freight & Aviation Services, a half-legal contractor, is hired by the Tassara Ministry to stop an unmarked cargo flight leaving Camp Tifa. The escorts
 # fire first, the cargo plane is forced down near the border range, and two hours later the player flies a helicopter with the ground team to the wreck.
-# The crew's cargo is PALA weapons for the coup in the Boscali Republic: the hook into chapter 1, Twelve Miles Out.
+# The crew's cargo is PALA weapons for the coup in the Boscali Republic: the hook north into Ignus.
 # Design: docs/superpowers/specs/2026-11-19-prologue-tassara-job-design.md. Voice lines: docs/superpowers/specs/2026-11-19-prologue-voice-manifest.tsv.
 # Generated from a template (voice file ids numbered per cast, vehicle heights read from the map); edit this file directly from now on.
 # The company name is only written in the cast roles and the briefing: search for Meridian to rename it.
@@ -35,7 +35,7 @@ lock pala
 peace pmc bdf pala
 peace pirates bdf pala
 
-# Meridian's flight, in the air south of Fort Tassara with the player. Pickle is young and gets in the way of things.
+# Meridian's flight, in the air south of Fort Tassara with the player. Pickle is young, good, and knows it.
 unit deacon       new aircraft CAS1 side=pmc at -1800 2300 8300 heading=215 speed=200 skill=0.9 loadout=gun_ammo_35mm_720+gun_30mm_rotary_pod++gunpod_20mm+Rocket2_4Podx3++AAM3_double+AGM1_double
 unit pickle       new aircraft CAS1 side=pmc at -2250 2330 8200 heading=215 speed=200 skill=0.35 loadout=gun_ammo_35mm_720+gun_30mm_rotary_pod++gunpod_20mm+Rocket2_4Podx3++AAM3_double+AGM1_double
 unit widow        new aircraft CAS1 side=pmc at -1600 2300 8700 heading=215 speed=200 skill=0.8 loadout=gun_ammo_35mm_720+gun_30mm_rotary_pod++gunpod_20mm+Rocket2_4Podx3++AAM3_double+AGM1_double
@@ -118,8 +118,9 @@ cast ledger    command "LEDGER"       "Managing director, Meridian"
 cast kestrel   enemy   "KESTREL"      "Escort lead"
 cast hauler    enemy   "HAULER"       "Cargo pilot"
 
+# The opening video (nomodkit mods/boscalisummer/cutscenes/prologue-intro) ends on the title card, so no card here.
 beat intro when start
-  card "PROLOGUE" "The Tassara Job" seconds=5
+  video "pro-intro.mp4"
   dip
   enlist pmc
   seat "A-19 Brawler" at -2000 2300 8500 heading=215 speed=200
@@ -134,7 +135,7 @@ beat brief when join
   say ops "Meridian flight, Ops. Channel's recorded. Check in, in order." voice=pro-ops-01.mp3
   say deacon "Deacon, up." voice=pro-deacon-01.mp3
   say widow "Widow, up." voice=pro-widow-01.mp3
-  say pickle "Pickle, up! Uh, three. Pickle three, up. Sorry." voice=pro-pickle-01.mp3
+  say pickle "Pickle, up. Three. Coffee's cold, guns are warm." voice=pro-pickle-01.mp3
   say deacon "Pickle. Just up." voice=pro-deacon-02.mp3
   say ops "Ronin, you're on the board. Camp Tifa departure, oh six forty. One heavy, four escorts. Eastbound." voice=pro-ops-02.mp3
   hint "Find the cargo flight, south-west of you"
@@ -142,7 +143,7 @@ beat brief when join
   say ops "Assume so." voice=pro-ops-03.mp3
   say ledger "Morning. The army can't be seen stopping that flight. We can." voice=pro-ledger-01.mp3
   say ledger "Flat fee. Bonus if the cargo comes back intact. Airframes we lose come off the top." voice=pro-ledger-02.mp3
-  say pickle "Intact like whole, or intact like landed? Because those are two, those are--" voice=pro-pickle-02.mp3
+  say pickle "Define intact. Asking for the bonus." voice=pro-pickle-02.mp3
   say deacon "Pickle." voice=pro-deacon-03.mp3
   say ledger "Rules. Identify. Shadow. Turn them--" voice=pro-ledger-03.mp3
   say sentry "Meridian flight, Sentry. One heavy, four fast, no squawk. Two one zero, fourteen kilometres." voice=pro-sentry-01.mp3
@@ -170,7 +171,7 @@ beat approach when flag roe-done
 
 beat found when done find_cargo
   music "synthetic-warfront.mp3" volume=0.3 loop
-  say pickle "Tally! Tally five, they're just, they're flying. Straight and level. Is that normal?" voice=pro-pickle-03.mp3
+  say pickle "Tally five. One fat transport, four little friends. Flying it like they own the sky." voice=pro-pickle-03.mp3
   say deacon "They're not hiding. They're not worried." voice=pro-deacon-05.mp3
   say widow "Widow. Four escorts, two missiles each. Transport's unarmed. Probably." voice=pro-widow-03.mp3
   say kestrel "Unidentified flight, escort lead. Restricted airspace. Turn away. I ask once." voice=pro-kestrel-01.mp3
@@ -185,7 +186,7 @@ beat src-clock when done shots_clock
 
 beat shots when flag fire-open
   say kestrel "Escorts. Weapons free." voice=pro-kestrel-02.mp3
-  say pickle "Tone! Ronin, I've got tone, I've got a--" voice=pro-pickle-04.mp3
+  say pickle "Spiked! Pickle's spiked, missile in the air, my six--" voice=pro-pickle-04.mp3
   say widow "Missile launch. Theirs. Ronin." voice=pro-widow-04.mp3
   complete roe
   hint "Destroy the escorts" seconds=15
@@ -193,24 +194,24 @@ beat shots when flag fire-open
 
 beat fire-p when flag fire-paragon
   say deacon "Covering. Pickle, flares. Now." voice=pro-deacon-06.mp3
-  say pickle "Flares! Flares going. Oh God. Okay, okay, okay--" voice=pro-pickle-05.mp3
+  say pickle "Flares away, breaking right. Missile's chasing chaff. Thanks, Deacon." voice=pro-pickle-05.mp3
 
 beat fire-r when flag fire-renegade
   say deacon "Copy. Pickle. You heard him." voice=pro-deacon-07.mp3
-  say pickle "Staying! I'm staying, he's still on me, Ronin, he's, I can't--" voice=pro-pickle-06.mp3
+  say pickle "Holding! He's on me. Ronin, kill him fast. Kill him fast--" voice=pro-pickle-06.mp3
 
-# The big one: fear first, then the shaky part. Nobody jokes here.
+# The big one: Pickle fights for the jet until Deacon makes him let go; he jokes once he is down.
 beat pickle-down when destroyed pickle
   flag pickle-down
-  say pickle "I'm hit! Ronin, I'm hit, it's on fire, the stick's, the stick's--" voice=pro-pickle-07.mp3
+  say pickle "I'm hit! Right engine's gone, fire light, she's rolling on me--" voice=pro-pickle-07.mp3
   say deacon "Pickle. Eject." voice=pro-deacon-08.mp3
-  say pickle "I can't, Deacon, I can't, my hands--" voice=pro-pickle-08.mp3
+  say pickle "Not yet, I can hold her, give me two seconds--" voice=pro-pickle-08.mp3
   say deacon "Eject. Now." voice=pro-deacon-09.mp3
-  say pickle "Ejecting, ejecting, eje--" voice=pro-pickle-09.mp3
+  say pickle "Damn it. Ejecting." voice=pro-pickle-09.mp3
   say widow "Chute. I have one chute." voice=pro-widow-05.mp3
   say deacon "Copy that. God." voice=pro-deacon-10.mp3
-  say pickle "Ronin? I'm alive. I'm okay. Am I okay? I think I'm okay." voice=pro-pickle-10.mp3
-  say pickle "My legs work. They work. Okay. Okay." voice=pro-pickle-11.mp3
+  say pickle "Ronin, Pickle. Chute's good. I'm down. Everything's attached." voice=pro-pickle-10.mp3
+  say pickle "Tell Ledger the jet was already like that." voice=pro-pickle-11.mp3
   say ledger "Ops, put the ground team on that pilot. Replacement is fourteen months." voice=pro-ledger-08.mp3
   say ops "Ground team tasked." voice=pro-ops-05.mp3
   hint "Pickle ejected: the ground team will pick him up" seconds=10
@@ -301,7 +302,7 @@ beat lz-late when flag lz-timeout unless=team-dropped
 
 beat pickle-found when flag team-dropped if=pickle-down
   say gravel "Got your wingman. Truck two. Sunburn, nothing else." voice=pro-gravel-06.mp3
-  say pickle "Ronin? It's Pickle. I'm okay. They gave me water. I lost a boot. Sorry about the airplane." voice=pro-pickle-12.mp3
+  say pickle "Ronin, Pickle. They gave me water and a hat. Lost a boot. Next round's on the smugglers." voice=pro-pickle-12.mp3
   say ledger "Stay with the medic, Pickle." voice=pro-ledger-13.mp3
 
 beat wave1 when done wave_1
@@ -389,6 +390,7 @@ beat finale when flag north-done
   say sentry "Meridian, Sentry. Scope's clear. This conversation didn't happen." voice=pro-sentry-09.mp3
   remember tassara-job
   finish
+  video "pro-outro.mp4"
   card "Prologue complete" "Meridian Freight & Aviation Services bills the Ministry by the hour. Losses will be itemised." seconds=8
   complete north
 

@@ -22,12 +22,15 @@ namespace BoscaliSummer.Modules.Megaplane
         internal static string Summary { get; private set; } = "not built";
         private const float DoorSeconds = 8f, DoorHold = 25f;
 
-        private struct SetSpec { public string Name; public string Prefix; public bool Hold; }
+        // Suffix = which of the art's empties become hardpoints. The art has four racks per wing beam and three slots per hold
+        // lane (26 in all, too many to manage); the carrier uses the middle two racks of each beam and one slot per lane.
+        private struct SetSpec { public string Name; public string Prefix; public string[] Suffix; public bool Hold; }
         private static readonly SetSpec[] Sets =
         {
-            new SetSpec { Name = "WING INBOARD", Prefix = "Hardpoint_I_" }, new SetSpec { Name = "WING OUTBOARD", Prefix = "Hardpoint_O_" },
-            new SetSpec { Name = "HOLD PORT", Prefix = "Hardpoint_Hold_L_", Hold = true }, new SetSpec { Name = "HOLD CENTRE", Prefix = "Hardpoint_Hold_C_", Hold = true },
-            new SetSpec { Name = "HOLD STARBOARD", Prefix = "Hardpoint_Hold_R_", Hold = true }, new SetSpec { Name = "SKYWELL TENDER", Prefix = "Hardpoint_Tender", Hold = true },
+            new SetSpec { Name = "WING INBOARD", Prefix = "Hardpoint_I_", Suffix = new[] { "_1", "_2" } },
+            new SetSpec { Name = "WING OUTBOARD", Prefix = "Hardpoint_O_", Suffix = new[] { "_1", "_2" } },
+            new SetSpec { Name = "CARGO HOLD", Prefix = "Hardpoint_Hold_", Suffix = new[] { "_0" }, Hold = true },
+            new SetSpec { Name = "SKYWELL TENDER", Prefix = "Hardpoint_Tender", Hold = true },
         };
 
         private static WeaponMount Mount(Encyclopedia e, string key) => e.weaponMounts.FirstOrDefault(m => m != null && (m.jsonKey == key || m.name == key));
@@ -59,7 +62,7 @@ namespace BoscaliSummer.Modules.Megaplane
             var counts = new List<string>();
             foreach (SetSpec spec in Sets)
             {
-                List<Transform> points = nodes.Where(n => n.Key.StartsWith(spec.Prefix)).OrderBy(n => n.Key).Select(n => n.Value).ToList();
+                List<Transform> points = nodes.Where(n => n.Key.StartsWith(spec.Prefix) && (spec.Suffix == null || spec.Suffix.Any(s => n.Key.EndsWith(s)))).OrderBy(n => n.Key).Select(n => n.Value).ToList();
                 if (points.Count == 0) continue;
                 var set = new HardpointSet
                 {
@@ -89,9 +92,7 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 "WING INBOARD" => First(s.weaponOptions, "VG_Remora_ARM1_single"),
                 "WING OUTBOARD" => First(s.weaponOptions, "VG_Manta_Wing", "VG_Remora_ARM1_single"),
-                "HOLD PORT" => halo ?? vehicles.FirstOrDefault(),
-                "HOLD CENTRE" => vehicles.FirstOrDefault(),
-                "HOLD STARBOARD" => vehicles.Skip(1).FirstOrDefault() ?? vehicles.FirstOrDefault(),
+                "CARGO HOLD" => vehicles.FirstOrDefault() ?? halo,
                 _ => s.weaponOptions.FirstOrDefault(),
             }).ToList() };
             // two separate instances: one aliased object let the hangar and air-start loadouts rewrite each other

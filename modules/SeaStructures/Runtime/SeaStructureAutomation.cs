@@ -51,13 +51,36 @@ namespace BoscaliSummer.SeaStructures
                 }
                 case "hit":
                 {
-                    // The game's own TakeDamage on one section ("section": name) or on all of them, "impact" hit points each.
+                    // The game's own TakeDamage on one point ("point"), all points of a section ("section"),
+                    // or every point ("impact" only). "section" also accepts an exact point name.
                     if (target == null) return Failure(Source, action, "no structure at that index");
-                    string name = Text(args, "section");
+                    string pointName = Text(args, "point");
+                    string section = Text(args, "section");
                     float impact = Number(args, "impact", 30f);
+                    var hits = new List<KeyValuePair<string, UnitPart>>();
                     foreach (KeyValuePair<string, UnitPart> part in target.Parts())
-                        if (name == null || string.Equals(part.Key, name, StringComparison.OrdinalIgnoreCase))
-                            part.Value.TakeDamage(0f, 0f, 1f, 0f, impact, default);
+                    {
+                        if (pointName != null)
+                        {
+                            if (string.Equals(part.Key, pointName, StringComparison.OrdinalIgnoreCase)) hits.Add(part);
+                        }
+                        else if (section != null)
+                        {
+                            if (string.Equals(part.Key, section, StringComparison.OrdinalIgnoreCase) ||
+                                part.Key.StartsWith(section + " ", StringComparison.OrdinalIgnoreCase))
+                                hits.Add(part);
+                        }
+                        else hits.Add(part);
+                    }
+                    foreach (KeyValuePair<string, UnitPart> part in hits) part.Value.TakeDamage(0f, 0f, 1f, 0f, impact, default);
+                    break;
+                }
+                case "wreck-age":
+                {
+                    if (target == null || target.Wreck == null) return Failure(Source, action, "no wreck at that index");
+                    SeaWreck wreck = target.Wreck.GetComponent<SeaWreck>();
+                    if (wreck == null) return Failure(Source, action, "the wreck has no sink timer");
+                    wreck.Skip(Number(args, "seconds", 60f));
                     break;
                 }
                 case "look":
@@ -98,11 +121,13 @@ namespace BoscaliSummer.SeaStructures
                 ["rigDonor"] = SeaTemplates.Donor(SeaKind.OilRig), ["fortDonor"] = SeaTemplates.Donor(SeaKind.SeaFort)
             };
             if (target == null || target.Ship == null) return result;
-            int parts = 0, detached = 0, turrets = 0, stations = target.Ship.weaponStations.Count;
+            SeaStructureService service = SeaStructureService.Active;
+            result["seeded"] = service != null && service.Seeded;
+            result["waitingForPlayer"] = service != null && service.WaitingForPlayer;
+            int detached = 0, turrets = 0, stations = target.Ship.weaponStations.Count;
             float worst = 100f;
             foreach (KeyValuePair<string, UnitPart> part in target.Parts())
             {
-                parts++;
                 if (part.Value.IsDetached()) detached++;
                 worst = Mathf.Min(worst, part.Value.hitPoints);
             }
@@ -137,11 +162,11 @@ namespace BoscaliSummer.SeaStructures
                     if (weapon.GetComponentInParent<Turret>() == null)
                     {
                         fixedLaunchers++;
-                        if (!disabledWeapons.Contains(weapon) && weapon.GetAmmoTotal() > 0) fixedReady++;
+                        if (!disabledWeapons.Contains(weapon) && !weapon.Safety && weapon.GetAmmoTotal() > 0) fixedReady++;
                         if (supportLinked.Contains(weapon)) fixedSupportLinks++;
                     }
                 }
-                if (weapon.attachedUnit == target.Ship && weapon.GetAmmoTotal() > 0 && !disabledWeapons.Contains(weapon)) readyWeapons++;
+                if (weapon.attachedUnit == target.Ship && weapon.GetAmmoTotal() > 0 && !weapon.Safety && !disabledWeapons.Contains(weapon)) readyWeapons++;
                 if (target.Layout.Kind == SeaKind.SeaFort && at.x > -93f && at.x < -47f && at.z > -11f && at.z < 11f) flightDeckWeapons++;
                 roster.Add((weapon.info != null ? weapon.info.weaponName : weapon.name) + " [" + weapon.GetType().Name + "] @" +
                            at.x.ToString("0.0", CultureInfo.InvariantCulture) + ", " + at.y.ToString("0.0", CultureInfo.InvariantCulture) + ", " +
@@ -184,14 +209,35 @@ namespace BoscaliSummer.SeaStructures
             result["disabled"] = target.Ship.disabled;
             result["exploded"] = target.Exploded ? 1 : 0;
             result["gone"] = gone;
-            result["sections"] = parts;
+            result["sections"] = target.Layout.Sections.Length;
+            result["points"] = target.PointCount;
+            result["brokenPoints"] = target.BrokenPoints;
+            var names = new List<string>();
+            int damaged = 0;
+            for (int i = 0; i < target.PointCount; i++)
+            {
+                SeaPointPlan point = target.PointAt(i);
+                if (point == null) continue;
+                if (!target.PointGone(i) && target.PointFraction(i) < 0.999f) damaged++;
+                names.Add(point.Name + (target.PointGone(i) ? "*" : ""));
+            }
+            result["damagedPoints"] = damaged;
+            result["pointNames"] = string.Join(" | ", names);
+            result["allPointsBroken"] = target.AllPointsBroken ? 1 : 0;
+            result["wreck"] = target.WreckAlive ? 1 : 0;
+            result["wreckAge"] = target.WreckAge;
+            result["wreckSink"] = target.WreckSink;
+            result["wreckY"] = target.Wreck != null ? target.transform.position.y - target.Wreck.transform.position.y : 0f;
+            int wrecks = 0;
+            foreach (SeaStructure structure in SeaStructure.All) if (structure != null && structure.WreckAlive) wrecks++;
+            result["wrecks"] = wrecks;
             result["detached"] = detached;
             result["worstHp"] = worst;
             result["turrets"] = turrets;
             result["stations"] = stations;
             result["wornSections"] = worn;
             result["fallenPieces"] = pieces;
-            result["height"] = target.transform.position.y - Datum.LocalSeaY;
+            result["height"] = target.transform.position.y - Datum.SeaLevel.y;
             result["tilt"] = Vector3.Angle(target.transform.up, Vector3.up);
             return result;
         }
@@ -288,7 +334,8 @@ namespace BoscaliSummer.SeaStructures
         private static void CheckFlightDeck(SeaStructure target, Dictionary<string, object> result)
         {
             UnitPart deck = null;
-            foreach (KeyValuePair<string, UnitPart> part in target.Parts()) if (part.Key == "FLIGHT DECK") deck = part.Value;
+            foreach (KeyValuePair<string, UnitPart> part in target.Parts())
+                if (string.Equals(part.Key, "FLIGHT DECK HULL", StringComparison.OrdinalIgnoreCase)) deck = part.Value;
             Physics.SyncTransforms();
             int supported = 0, obstacles = 0;
             // The same layer exclusion as native LandingGear.FixedUpdate: this proves real colliders, not render bounds.

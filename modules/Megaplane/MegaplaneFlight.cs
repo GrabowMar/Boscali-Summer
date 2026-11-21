@@ -4,22 +4,24 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Megaplane
 {
     /// <summary>Game-logic flight in the BOTE manner (its PlayerShipPropulsion turns inputs into forces on the native Aircraft
-    /// rigidbody where LocalSim is true). Flown like the 6,500 t it is: the stick sets a bank that the carrier rolls into at a
-    /// few degrees a second and turns from, pitch sets a climb rate it reaches over seconds, throttle a speed it takes over a
+    /// rigidbody where LocalSim is true). Flown like a big transport: the stick sets a bank (to 40 deg) that it rolls into at
+    /// about 12 deg/s and turns from, pitch sets a climb rate reached in a few seconds, throttle a speed it takes under a
     /// minute to reach; it flies nose high when slow and sways a little in the air. Neutral stick levels the wings and holds
-    /// altitude. Damage (<see cref="MegaplaneDamage"/>) shows: a weak wing drops it into a turn and sinks it, lost pods on one
-    /// side yaw it, a lost tailplane porpoises, a lost fin wallows. A disabled carrier glides down in a long burning dive.
+    /// altitude. Damage (<see cref="MegaplaneDamage"/>) shows: a weak wing rolls it toward that side and sinks it, lost pods
+    /// cost speed and yaw it, a lost tailplane porpoises, lost fins fishtail and wander. A disabled carrier glides down in a long burning dive.
     /// Lift jets (CL-1201 style, details/detail_lift.py) run while the gear is down: they carry about 55% of the weight, so
     /// the wing needs a third less speed (minimum 70 -> 45 m/s) and the carrier can climb and sink faster near the ground.
     /// Their intake doors and exhaust vanes open and the nozzles glow on every peer.</summary>
     internal sealed class MegaplaneFlight : MonoBehaviour
     {
         internal const float MinSpeed = 70f, MaxSpeed = 170f;          // m/s
-        private const float MaxBank = 25f, MaxClimb = 12f;                // deg, m/s
-        private const float RollRate = 3.5f, RollAccel = 2f, ClimbRamp = .8f;   // deg/s, deg/s^2, m/s^2: it leans in, it does not snap
-        private const float SpeedGain = .25f, Accel = 1.2f, Decel = .8f;  // 1/s, m/s^2 along the path (about 80 s from slow to full)
-        private const float VertGain = .4f, VertAccel = 1.5f, SideGain = .5f, LateralAccel = 4.2f;   // 1/s, m/s^2
-        private const float AttitudeKp = .35f, AttitudeKd = 1.2f;         // rad/s^2 per rad, per rad/s (critically damped, slow)
+        // Big-transport numbers (C-5 / An-225 class): 40 deg bank, ~12 deg/s roll, 1.3 g turns, 20 m/s climb. Heavy, not sluggish.
+        private const float MaxBank = 40f, MaxClimb = 20f;                // deg, m/s
+        private const float RollRate = 12f, RollAccel = 14f, ClimbRamp = 4f;    // deg/s, deg/s^2, m/s^2
+        private const float SpeedGain = .35f, Accel = 2.2f, Decel = 1.6f; // 1/s, m/s^2 along the path (about 45 s from slow to full)
+        private const float VertGain = .9f, VertAccel = 4f, SideGain = 1f, LateralAccel = 8.5f;   // 1/s, m/s^2 (8.5 = 40 deg bank)
+        private const float AttitudeKp = 1.6f, AttitudeKd = 2.5f;         // rad/s^2 per rad, per rad/s (about critically damped)
+        private const float RudderRate = 2.5f;                            // deg/s of flat turn from full rudder
         private const float CrashFade = 30f, SinkDrag = 9.81f / 3600f;   // s, lift gone; sink settles near 60 m/s
         internal const float LiftMinSpeed = 45f, LiftClimb = 20f;         // 70 m/s * sqrt(1 - 0.55)
         private const float LiftSpool = 1f / 4f, DoorOpen = -70f, VaneOpen = 60f;   // art angles: Blender +70 / -60 about X
@@ -104,30 +106,34 @@ namespace BoscaliSummer.Modules.Megaplane
             float lift = Lift * Thrust;   // the jets share the pods' bleed: lost pods, weaker lift
             float maxClimb = Mathf.Lerp(MaxClimb, LiftClimb, lift);
             float minSpeed = Mathf.Lerp(MinSpeed, LiftMinSpeed, lift) / Mathf.Sqrt(Mathf.Max(wing, .3f));
-            if (Thrust < .25f) altitude -= 6f * dt;
-            if (wing < .85f) altitude -= (.85f - wing) * 25f * dt;   // a shot-up wing cannot hold the weight
+            if (Thrust < .5f) altitude -= (.5f - Thrust) * 24f * dt;   // under half the pods it cannot hold height
+            if (wing < .98f) altitude -= (.98f - wing) * 45f * dt;     // every lost panel costs lift: it sinks until the pilot trades speed
 
-            // Pitch: the stick sets a climb rate, which a 6,500 t airframe reaches over seconds, not at once.
+            // Pitch: the stick sets a climb rate, reached in a few seconds. A lost tailplane makes the stick vague.
             float climbTarget = Mathf.Abs(input.pitch) > .05f ? -input.pitch * maxClimb * climbAuthority : 0f;
             climbCmd = Mathf.MoveTowards(climbCmd, climbTarget, ClimbRamp * dt);
             altitude += climbCmd * dt;
 
             // Roll: the stick sets a bank angle; the carrier rolls into it at a few degrees a second and turns from the bank.
             // A weak wing drops (list) and drags it into a turn the pilot has to hold off; a lost fin lets it wallow.
-            float list = Mathf.Clamp((wingL - wingR) * 50f, -20f, 20f);
-            float wallow = (1f - yawAuth) * 4f * Mathf.Sin(Time.time * 2f * Mathf.PI * .12f);
-            float rollAuth = .5f + .5f * Mathf.Min(wingL, wingR);
+            // Lift lost on one side rolls it hard toward that side (an outer panel ~10 deg, an inner wing far more).
+            float list = Mathf.Clamp((wingL - wingR) * 140f, -60f, 60f);
+            // No fins: directionally unstable, the tail wanders and drags the heading with it (Dutch roll, growing fishtail).
+            float wallow = (1f - yawAuth) * 10f * Sway(31f) + (1f - yawAuth) * 3f * Mathf.Sin(Time.time * 2f * Mathf.PI * .15f);
+            float rollAuth = .4f + .6f * Mathf.Min(wingL, wingR);
             float targetBank = Mathf.Clamp(input.roll, -1f, 1f) * MaxBank * rollAuth + list + wallow;
-            rollRate = Mathf.MoveTowards(rollRate, Mathf.Clamp((targetBank - bank) * .6f, -RollRate, RollRate), RollAccel * dt);
+            float rate = RollRate * rollAuth;
+            rollRate = Mathf.MoveTowards(rollRate, Mathf.Clamp((targetBank - bank) * 1.2f, -rate, rate), RollAccel * dt);
             bank += rollRate * dt;
             float turn = 9.81f * Mathf.Tan(bank * Mathf.Deg2Rad) / flatSpeed * Mathf.Rad2Deg;
-            turn += (input.yaw * .4f * yawAuth + asymThrust * .5f) * Mathf.Clamp01(flatSpeed / 60f);
+            turn += (input.yaw * RudderRate * yawAuth + asymThrust * 2.5f + (1f - yawAuth) * 2f * Sway(53f)) * Mathf.Clamp01(flatSpeed / 60f);
             // The heading may only run as fast as the flight path can follow (v * omega within the lateral limit), or it crabs.
             float maxTurn = LateralAccel / flatSpeed * Mathf.Rad2Deg;
             turn = Mathf.Clamp(turn, -maxTurn, maxTurn);
             heading = Mathf.Repeat(heading + turn * dt, 360f);
 
-            float speed = Mathf.Lerp(minSpeed, MaxSpeed * (.5f + .5f * Thrust), Mathf.Clamp01(input.throttle));
+            float topSpeed = MaxSpeed * (.3f + .7f * Thrust) * (.88f + .12f * yawAuth);   // fewer pods, less speed; a sideslipping hull drags
+            float speed = Mathf.Lerp(minSpeed, Mathf.Max(topSpeed, minSpeed), Mathf.Clamp01(input.throttle));
             float climb = Mathf.Clamp(climbCmd + (altitude - aircraft.GlobalPosition().y) * .1f, -maxClimb, maxClimb * Mathf.Max(climbAuthority, .05f));
             Vector3 flat = Quaternion.Euler(0, heading, 0) * Vector3.forward;
             Vector3 error = flat * speed + Vector3.up * climb - v;
@@ -140,9 +146,10 @@ namespace BoscaliSummer.Modules.Megaplane
 
             // Attitude follows the motion: nose along the path (nose high when slow), banked as flown, a slow sway in the air.
             float slow = Mathf.InverseLerp(MaxSpeed, minSpeed, flatSpeed);
-            float porpoise = (1f - pitchAuth) * 2.5f * Mathf.Sin(Time.time * 2f * Mathf.PI * .05f);
+            float porpoise = (1f - pitchAuth) * 7f * Mathf.Sin(Time.time * 2f * Mathf.PI * .07f);
+            float slip = (1f - yawAuth) * 9f * Sway(71f) + asymThrust * 4f;   // nose off the path: fishtail without fins, crab on asymmetric thrust
             float pitch = -Mathf.Asin(Mathf.Clamp(v.y / Mathf.Max(v.magnitude, 1f), -1f, 1f)) * Mathf.Rad2Deg - Mathf.Lerp(1f, 5f, slow) + porpoise;
-            Steer(pitch + Sway(0f) * .3f, heading, bank + Sway(7f) * .6f, AttitudeKp, AttitudeKd);
+            Steer(pitch + Sway(0f) * .3f, heading + slip, bank + Sway(7f) * .6f, AttitudeKp, AttitudeKd);
         }
 
         /// <summary>Disabled: lift fades over half a minute, the nose drops and the weak wing goes down; pieces come off

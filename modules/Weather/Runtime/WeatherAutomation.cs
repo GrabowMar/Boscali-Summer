@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Weather.Domain;
 using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
@@ -204,6 +205,28 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 throw new InvalidOperationException("Weather capture requested before cloud renderer/native takeover was ready.");
             manager.LogAutomation("Readout: " + Describe(state));
             return state;
+        }
+
+        /// <summary>Lightning policy probe: strikes, flashes and whether native storm lightning is still enabled.</summary>
+        public static Dictionary<string, object> NuclearLightning(Dictionary<string, object> args)
+        {
+            WeatherManager manager = Find();
+            if (manager == null) return Fail("NuclearLightning", "no weather manager in this scene");
+            Dictionary<string, object> state = manager.DebugReadout();
+            int native = 0;
+            foreach (Lightning lightning in UnityEngine.Object.FindObjectsOfType<Lightning>())
+                if (lightning != null && lightning.enabled) native++;
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "nuclearAftermath", NuclearAftermath.Active ? 1 : 0 },
+                { "suppressed", manager.LightningSuppressed ? 1 : 0 },
+                { "strikes", state["lightningStrikes"] }, { "flash", state["lightningFlash"] },
+                { "strikesSince", state["lightningStrikesSinceSuspension"] },
+                { "nativeLightningEnabled", native }, { "nativeConditions", state["nativeConditions"] },
+                { "flightClouds", state["flightClouds"] }, { "nativeCloudsHidden", state["nativeCloudsHidden"] }
+            };
+            manager.LogAutomation("NuclearLightning: " + Describe(result));
+            return result;
         }
 
         /// <summary>Read-only bounded search for an interior in the currently displayed cloud maps.</summary>

@@ -47,6 +47,7 @@
   </ItemGroup>
   <!-- The shot camera is a production tool driven by nomodkit; players do not get it. -->
   <ItemGroup Condition="'$(PublicRelease)' == 'true'">
+    <Compile Remove="modules\Megaplane\**\*.cs" />
     <Compile Remove="modules\Cinematography\**\*.cs" />
   </ItemGroup>
 
@@ -161,7 +162,7 @@
       <LogicalName>BoscaliSummer.Vanguard.Textures.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
-  <ItemGroup Label="G-240 Breakwater artwork">
+  <ItemGroup Label="G-240 Breakwater artwork" Condition="'$(PublicRelease)' != 'true'">
     <EmbeddedResource Include="modules\Megaplane\Assets\megaplane.mesh.gz" Condition="Exists('modules\Megaplane\Assets\megaplane.mesh.gz')">
       <LogicalName>BoscaliSummer.Megaplane.megaplane.mesh.gz</LogicalName>
     </EmbeddedResource>

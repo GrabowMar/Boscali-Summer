@@ -346,6 +346,23 @@ namespace BoscaliSummer.Core.Game
 
         public static GameAssets GameAssetsOrNull => assetsLoader != null && assetsLoader.IsLoaded ? GameAssets.i : null;
 
+        private static VLSBooster vlsBooster;
+
+        /// <summary>The first vanilla VLS booster on a mount's missile prefab (the anti-ship missiles carry one): its plume, smoke trail, lights and roar.</summary>
+        public static VLSBooster VlsBoosterOrNull()
+        {
+            if (vlsBooster != null) return vlsBooster;
+            Encyclopedia e = EncyclopediaOrNull;
+            if (e == null) return null;
+            foreach (WeaponMount mount in e.weaponMounts)
+            {
+                GameObject prefab = mount != null && mount.info != null ? mount.info.weaponPrefab : null;
+                VLSBooster found = prefab != null ? prefab.GetComponentInChildren<VLSBooster>(true) : null;
+                if (found != null) return vlsBooster = found;
+            }
+            return null;
+        }
+
         /// <summary>The local player's faction HQ, only once it has a faction assigned.</summary>
         public static bool TryGetLocalFaction(out FactionHQ hq)
         {

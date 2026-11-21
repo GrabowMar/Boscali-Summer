@@ -375,7 +375,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         /// <summary>
         /// Every shader term of this frame from the real states, strongest source wins per term: the hit's tear + split, a damage burst (light: a tear and a flicker; heavy: up to three bands, split, dropout blocks, corrupted captions),
-        /// the EMP's tear storm and hard dropouts, the jam's rolling bars, shimmer and split, and the re-sync flicker when a jam ends. Under reduced flashes the brightness holds for a third of a second and no block goes fully dark.
+        /// the EMP's tear storm and hard dropouts, the jam's rolling bars and shimmer (no split), and the re-sync flicker when a jam ends. Under reduced flashes the brightness holds for a third of a second and no block goes fully dark.
         /// </summary>
         private void ComposeGlitch(in VisorFxInput i, bool hitOn, float hitU, bool emp, float empSince)
         {
@@ -440,7 +440,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 BarPos = Clock * 0.17f - (float)Math.Floor(Clock * 0.17f);
                 BarJitter = 3f + 9f * j;
                 fine = Math.Max(fine, 0.35f + 0.65f * j);
-                split = Math.Max(split, (1f + 1.5f * Hash(slot / 2 + 3)) * Clamp01(j * 2f));
+                // No ghost split under a jam: the ghost passes recolour every pixel by its alpha alone (Blend One/SrcAlpha One), so each stroke's soft HudGlow halo and every faint plate
+                // came back as overlapping red + cyan light, a steady white haze over the reticle and the board's scopes for as long as the jammer held on. Hits and bursts keep their brief split.
                 if (Hash(slot * 3 + 1) < 0.35f) roll = Sign(Hash(slot + 9)) * (j > 0.5f ? 2f : 1f);
                 float cycle = Clock / 3.1f - (float)Math.Floor(Clock / 3.1f);
                 if (cycle < 0.04f) AddBand(ref nb, 0.15f + 0.7f * Hash((int)(Clock / 3.1f) * 7 + 1), 0.05f, Sign(Hash((int)(Clock / 3.1f))) * 7f * j, 1f);

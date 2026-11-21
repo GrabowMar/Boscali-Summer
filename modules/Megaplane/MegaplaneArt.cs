@@ -88,6 +88,12 @@ namespace BoscaliSummer.Modules.Megaplane
                     material.SetTexture("_OcclusionMap", mask); material.EnableKeyword("_OCCLUSIONMAP");
                 }
             }
+            else if (Texture(name + "_Tex", false, true) is Texture2D own)
+            {   // a material with its own painted map (break faces: assets/.../damage_textures.py, 4 m UVs from breaks.py)
+                if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", own);
+                if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", own);
+                color = new Color(1f, 1f, 1f, color.a);   // the map carries the colour
+            }
             else if (material.HasProperty("_Cull")) material.SetFloat("_Cull", 0f);   // fans, bores, glass: seen from both sides
             if (alpha < 1f && material.HasProperty("_Surface"))
             {   // flight-deck glass: URP transparent, alpha blended, the instrument panel shows through

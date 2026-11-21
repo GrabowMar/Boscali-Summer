@@ -169,7 +169,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
 
             try
             {
-                pendingRequest = UnityWebRequestMultimedia.GetAudioClip(new Uri(path), audioType);
+                pendingRequest = UnityWebRequestMultimedia.GetAudioClip(FileUrl(path), audioType);
                 var handler = pendingRequest.downloadHandler as DownloadHandlerAudioClip;
                 if (handler != null) handler.streamAudio = false;
                 int generation = loadGeneration;
@@ -190,6 +190,15 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 logger?.LogWarning(name + " track open failed: " + e.Message);
                 return false;
             }
+        }
+
+        // new Uri(path) leaves '#', '%' and '?' in file names unescaped, so Unity reads
+        // "Track #1.wav" as "Track " and the load fails. Escape each segment ourselves.
+        internal static string FileUrl(string path)
+        {
+            string[] parts = System.IO.Path.GetFullPath(path).Replace('\\', '/').Split('/');
+            for (int i = 1; i < parts.Length; i++) parts[i] = Uri.EscapeDataString(parts[i]);
+            return "file:///" + string.Join("/", parts);
         }
 
         public void Pause()

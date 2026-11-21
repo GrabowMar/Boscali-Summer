@@ -1,130 +1,103 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Game;
+using HarmonyLib;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
-    /// A purely cosmetic launch streak shared by satellite completion cues and ASAT flights.
+    /// A purely cosmetic launch shared by satellite completion cues and ASAT flights: the vanilla VLS booster's plume, smoke
+    /// trail, lights and roar (the same clone the TORCH bottles use) flown up a gravity-turn arc.
     /// It owns no weapon, collision, satellite availability or network authority.
     /// </summary>
     internal static class SatelliteLaunchVisuals
     {
-        private static Material trailMaterial;
         private static readonly List<GameObject> active = new List<GameObject>();
 
         public static void Reset()
         {
             foreach (GameObject effect in active) if (effect != null) Object.Destroy(effect);
             active.Clear();
-            Object.Destroy(trailMaterial);
-            trailMaterial = null;
         }
 
         public static void Play(Vector3 launchPoint, float duration)
         {
             if (GameManager.IsHeadless || Datum.origin == null || !float.IsFinite(duration)) return;
+            VLSBooster source = GameAccess.VlsBoosterOrNull();
+            if (source == null) return;
             active.RemoveAll(effect => effect == null);
+
+            // A scene root: the floating origin moves every root and syncs physics, so the body rides the shifts.
             var go = new GameObject("BoscaliSatelliteLaunch");
             active.Add(go);
-            // Under the datum: a floating-origin shift carries the rocket, its light and its trail together.
-            go.transform.SetParent(Datum.origin, false);
+            go.SetActive(false);
             go.transform.position = launchPoint;
 
-            if (trailMaterial == null)
-                trailMaterial = new Material(Shader.Find("Sprites/Default")) { name = "BoscaliLaunchTrail" };
+            // The booster cloned whole while the root is inactive so its brain never wakes; only the trail emitters stay.
+            GameObject plume = Object.Instantiate(source.gameObject, go.transform);
+            foreach (MonoBehaviour part in plume.GetComponentsInChildren<MonoBehaviour>(true))
+                if (part != null && !(part is TrailEmitter)) Object.DestroyImmediate(part);
+            foreach (Collider collider in plume.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(collider);
+            if (plume.TryGetComponent(out MeshRenderer casing)) Object.DestroyImmediate(casing);
+            plume.transform.localPosition = Vector3.zero;
+            plume.transform.localRotation = Quaternion.Inverse(source.transform.root.rotation) * source.transform.rotation;
 
-            // The trail is redrawn from the flight path every frame (a TrailRenderer kept world points that kinked on every origin shift).
-            var trailGo = new GameObject("Trail");
-            trailGo.transform.SetParent(Datum.origin, false);
-            var trail = trailGo.AddComponent<LineRenderer>();
-            trail.useWorldSpace = false;
-            trail.positionCount = 0;
-            trail.widthCurve = AnimationCurve.Linear(0f, 8f / 60f, 1f, 1f);
-            trail.sharedMaterial = trailMaterial;
-            trail.startColor = new Color(0.85f, 0.87f, 0.92f, 0f); // the contrail: pale vapour behind, hot white at the nozzle
-            trail.endColor = new Color(1f, 0.92f, 0.7f, 0.95f);
-            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            trail.receiveShadows = false;
-
-            Light glow = go.AddComponent<Light>();
-            glow.type = LightType.Point;
-            glow.color = new Color(1f, 0.85f, 0.6f);
-            glow.range = 1500f;
-            glow.intensity = 8f;
+            Rigidbody body = go.AddComponent<Rigidbody>(); // TrailEmitter lays smoke by the body's speed
+            body.useGravity = false;
+            body.detectCollisions = false;
+            body.interpolation = RigidbodyInterpolation.Interpolate;
 
             SatelliteLaunchEffect effect = go.AddComponent<SatelliteLaunchEffect>();
-            effect.Trail = trail;
-            effect.Begin(Mathf.Clamp(duration, 3f, 90f));
-            if (!GameManager.IsHeadless)
-            {
-                // World-space exhaust plume: a hot flame core and a smoke wake that hangs in the sky as the rocket pulls away.
-                effect.Flame = SupportParticles.Layer(go.transform, "Exhaust flame", true, 120, 0.7f, 90f, new Color(2.2f, 1.2f, 0.45f));
-                effect.Smoke = SupportParticles.Layer(go.transform, "Exhaust smoke", false, 220, 14f, 70f, new Color(0.88f, 0.88f, 0.9f, 0.5f));
-                foreach (ParticleSystem ps in new[] { effect.Flame, effect.Smoke })
-                {
-                    var main = ps.main;
-                    main.simulationSpace = ParticleSystemSimulationSpace.Custom;
-                    main.customSimulationSpace = Datum.origin;
-                    main.startSpeed = new ParticleSystem.MinMaxCurve(0f, 3f);
-                }
-            }
-            Ignition(launchPoint);
-        }
-
-        /// <summary>The pad: a white-hot flash, an expanding dust ring and a column of smoke that outlives the launch marker. Self-removing.</summary>
-        private static void Ignition(Vector3 point)
-        {
-            if (GameManager.IsHeadless) return;
-            var pad = new GameObject("BoscaliSatelliteLaunchPad");
-            active.Add(pad);
-            pad.transform.SetParent(Datum.origin, false);
-            pad.transform.position = point;
-            var flash = SupportParticles.Layer(pad.transform, "Ignition flash", true, 8, 1.2f, 160f, new Color(4f, 2.6f, 1.2f));
-            flash.Emit(4);
-            var dust = SupportParticles.Layer(pad.transform, "Pad dust", false, 96, 7f, 60f, new Color(0.55f, 0.48f, 0.4f, 0.55f));
-            SupportParticles.Ring(dust, 96, 20f, 55f, 3f);
-            var column = SupportParticles.Layer(pad.transform, "Exhaust column", false, 80, 12f, 45f, new Color(0.8f, 0.78f, 0.75f, 0.5f));
-            for (int i = 0; i < 80; i++)
-                column.Emit(new ParticleSystem.EmitParams
-                {
-                    position = Random.insideUnitSphere * 8f,
-                    velocity = new Vector3(Random.Range(-6f, 6f), Random.Range(25f, 90f), Random.Range(-6f, 6f)),
-                    rotation = Random.Range(0f, 360f)
-                }, 1);
-            Object.Destroy(pad, 14f);
+            go.SetActive(true);
+            effect.Begin(body, Mathf.Clamp(duration, 3f, 90f));
         }
     }
 
-    /// <summary>Climbs a launch marker on a gravity-turn arc over its lifetime, then removes itself.</summary>
+    /// <summary>Flies the booster plume up a gravity-turn arc over its lifetime, burns out, lets the smoke hang, then removes itself.</summary>
     internal sealed class SatelliteLaunchEffect : MonoBehaviour
     {
         private const float ClimbHeight = 45000f;
         private const float Downrange = 30000f;
-        private const float TrailSeconds = 14f;
-        private const int TrailPoints = 48;
-        private const float NozzleWidth = 60f;
+        private const float SmokeLinger = 30f;
+        private static readonly System.Reflection.FieldInfo TrailLife = AccessTools.Field(typeof(TrailEmitter), "emitLifetime");
 
-        /// <summary>Set by <see cref="SatelliteLaunchVisuals.Play"/>; drawn in datum space from <see cref="At"/>, its width follows the camera range so the streak reads at distance.</summary>
-        public LineRenderer Trail;
-        public ParticleSystem Flame, Smoke;
-        private readonly Vector3[] points = new Vector3[TrailPoints];
-        private float nextSmoke;
+        private Rigidbody body;
+        private ParticleSystem[] smoke;
+        private TrailEmitter[] trails;
+        private Light[] lamps;
+        private AudioSource[] sound;
         private float elapsed;
         private float duration;
         private bool burnedOut;
-        private Vector3 origin; // datum-space (global) launch point
+        private Vector3 origin; // global (datum-space) launch point
         private Vector3 heading;
 
-        public void Begin(float durationSeconds)
+        public void Begin(Rigidbody rb, float durationSeconds)
         {
+            body = rb;
             duration = durationSeconds;
-            origin = transform.localPosition;
+            origin = transform.position - Datum.origin.position;
             // Launches head away from the theatre centre, which sits at the global origin.
             var outward = new Vector3(origin.x, 0f, origin.z);
             heading = outward.sqrMagnitude > 1f ? outward.normalized : Vector3.forward;
+            transform.rotation = Quaternion.LookRotation(Vector3.up, heading);
+
+            smoke = GetComponentsInChildren<ParticleSystem>(true);
+            trails = GetComponentsInChildren<TrailEmitter>(true);
+            lamps = GetComponentsInChildren<Light>(true);
+            sound = GetComponentsInChildren<AudioSource>(true);
+            foreach (ParticleSystem system in smoke) system.Play();
+            foreach (Light lamp in lamps) lamp.enabled = true;
+            foreach (AudioSource source in sound) source.Play();
+            foreach (TrailEmitter trail in trails)
+            {
+                TrailLife?.SetValue(trail, duration + 1f); // the trail switches itself off after a fixed emit time
+                trail.rb = body;
+                trail.StartTrail();
+            }
         }
 
-        /// <summary>The rocket's datum-space position <paramref name="seconds"/> after lift-off.</summary>
+        /// <summary>The rocket's global position <paramref name="seconds"/> after lift-off.</summary>
         private Vector3 At(float seconds)
         {
             float t = Mathf.Clamp01(seconds / duration);
@@ -132,41 +105,24 @@ namespace BoscaliSummer.Modules.Support.Visuals
             return origin + Vector3.up * (ClimbHeight * climb) + heading * (Downrange * t * t * t);
         }
 
-        private void Update()
+        private void FixedUpdate()
         {
-            if (burnedOut || Time.deltaTime <= 0f) return;
-            elapsed = Mathf.Min(duration, elapsed + Time.deltaTime);
-            transform.localPosition = At(elapsed);
-            if (Flame != null)
-            {
-                Flame.Emit(2);
-                if (elapsed >= nextSmoke) { nextSmoke = elapsed + 0.1f; Smoke.Emit(1); }
-            }
-            if (Trail != null)
-            {
-                float from = Mathf.Max(0f, elapsed - TrailSeconds);
-                for (int i = 0; i < TrailPoints; i++) points[i] = At(Mathf.Lerp(from, elapsed, i / (TrailPoints - 1f)));
-                Trail.positionCount = TrailPoints;
-                Trail.SetPositions(points);
-                var csm = SceneSingleton<CameraStateManager>.i;
-                Camera cam = csm != null ? csm.mainCamera : Camera.main;
-                float scale = cam != null ? Mathf.Clamp(Vector3.Distance(cam.transform.position, transform.position) * 0.0035f / NozzleWidth, 1f, 10f) : 1f;
-                Trail.widthMultiplier = NozzleWidth * scale;
-            }
-            if (elapsed >= duration)
-            {
-                burnedOut = true;
-                Light glow = GetComponent<Light>();
-                if (glow != null) glow.enabled = false;
-                if (Trail != null) Destroy(Trail.gameObject);
-                // Let the existing exhaust wake expire in datum space instead of deleting it at cutoff.
-                Destroy(gameObject, TrailSeconds);
-            }
-        }
+            if (burnedOut || body == null) return;
+            float dt = Time.fixedDeltaTime;
+            elapsed = Mathf.Min(duration, elapsed + dt);
+            Vector3 target = Datum.origin.position + At(elapsed);
+            Vector3 velocity = (target - body.position) / dt;
+            body.velocity = velocity;
+            if (velocity.sqrMagnitude > 1f) body.MoveRotation(Quaternion.LookRotation(velocity));
+            if (elapsed < duration) return;
 
-        private void OnDestroy()
-        {
-            if (Trail != null) Destroy(Trail.gameObject);
+            burnedOut = true;
+            body.velocity = Vector3.zero;
+            foreach (ParticleSystem system in smoke) system.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            foreach (TrailEmitter trail in trails) trail.StopTrail();
+            foreach (Light lamp in lamps) lamp.enabled = false;
+            foreach (AudioSource source in sound) source.Stop();
+            Destroy(gameObject, SmokeLinger); // the trail smoke lives in datum space and hangs until then
         }
     }
 }

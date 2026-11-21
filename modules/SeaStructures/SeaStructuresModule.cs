@@ -7,7 +7,7 @@ using NuclearOption.Networking;
 
 namespace BoscaliSummer.Modules.SeaStructures
 {
-    /// <summary>Sea structures: armed oil platforms and sea fortresses that break apart section by section.</summary>
+    /// <summary>Sea structures: armed oil platforms and sea fortresses with localized multi-point damage and lasting wrecks.</summary>
     internal sealed class SeaStructuresModule : IModule
     {
         private static readonly ModuleMetadata Module = new ModuleMetadata("sea", "Sea structures");

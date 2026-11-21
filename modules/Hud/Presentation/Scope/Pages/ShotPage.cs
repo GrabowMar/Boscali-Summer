@@ -189,7 +189,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (lead >= 0) Shot(g, lead, k);
             g.Jet(OX, OY, 0f, 9f, Ink, true);
             for (int i = 0; i < d.MissileCount; i++) if (!d.Missiles[i].Ghost) TtiRing(g, i, k);
-            for (int i = 0; i < d.MissileCount; i++) Tags(g, i, k, p.H - 4f);
+            if (lead >= 0) Tags(g, lead, k, p.H - 4f);      // the lead's tags first: it always gets a free spot, the rest drop out when none is left
+            for (int i = 0; i < d.MissileCount; i++) if (i != lead) Tags(g, i, k, p.H - 4f);
             for (int i = 0; i < d.ResultCount; i++) Result(g, d.Results[i], k, p.H);
         }
 
@@ -246,8 +247,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!t.Hot)
             {
                 float w = Mathf.Round(ScopeCanvas.TextW(t.Name, 12f)) + 4f;
+                int at = keep.Count;
                 keep.Place(LabelSpots.Shot, x, y, w, 17f, default, 2f, xMax, 32f, OY + 12f, out float lx, out float ly);
-                g.Text(t.Name, lx + 2f, ly + 9f, Dim, 12f);
+                if (Free(at)) g.Text(t.Name, lx + 2f, ly + 9f, Dim, 12f);
             }
         }
 
@@ -354,21 +356,33 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 string label = PhaseLabel(m);
                 float lw = Mathf.Round(ScopeCanvas.TextW(label, 12f)), nw = Mathf.Round(ScopeCanvas.TextW(name, 12f));
                 float w = Math.Max(lw, nw) + 6f, h = 30f;
+                int at = keep.Count;
                 keep.Place(LabelSpots.Shot, tx, ty, w, h, new ReadOnlySpan<float>(segs, 0, 4), 2f, xMax, 32f, yMax, out float x, out float y);
-                bool seeker = m.Phase == ShotPhase.Active || m.Phase == ShotPhase.Term;
-                g.Text(label, x + 3f, y + 8f, seeker ? Hi : Dim, 12f, ScopeAlign.Left, seeker);
-                g.Text(name, x + 3f, y + 22f, isLead ? Ink : Dim);
+                if (isLead || Free(at))
+                {
+                    bool seeker = m.Phase == ShotPhase.Active || m.Phase == ShotPhase.Term;
+                    g.Text(label, x + 3f, y + 8f, seeker ? Hi : Dim, 12f, ScopeAlign.Left, seeker);
+                    g.Text(name, x + 3f, y + 22f, isLead ? Ink : Dim);
+                }
             }
             float dx = mx - OX, dy = my - OY;
             if (Mathf.Sqrt(dx * dx + dy * dy) > 46f)
             {
                 bool a = m.Arh && m.Pitbull;
                 float w = Mathf.Round(ScopeCanvas.TextW(m.Short, 12f)) + 4f + (a ? 18f : 0f), h = 17f;
+                int at = keep.Count;
                 keep.Place(LabelSpots.Shot, mx, my, w, h, default, 2f, xMax, 32f, yMax, out float x, out float y);
+                if (!isLead && !Free(at)) return;
                 g.Text(m.Short, x + 2f, y + h / 2f + 1f, Ink, 12f, ScopeAlign.Left, false, 0.9f);
                 if (a) g.PlateTag("A", x + w - 15f, y + h / 2f, Hi, 12f, ScopeAlign.Left, 3f);
             }
         }
+
+        /// <summary>
+        /// The label just placed at <paramref name="at"/> found a spot of its own. Seven shots on one corvette group put seven "ACTIVE / SHARD CLASS CORVETTE" tags into the same few spots in game:
+        /// a tag that could only sit on another is left out (THREAT's rule), the lead's never.
+        /// </summary>
+        private bool Free(int at) => keep.Count > at && !keep.Overprints(at);
 
         /// <summary>
         /// One tag per target: of the missiles aimed at the same target, the lead owns it (else the first). Two missiles on one target stacked two "BOOST FS-20 VORTEX" tags on top of each other in game.

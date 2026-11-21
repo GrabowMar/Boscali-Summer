@@ -1,9 +1,9 @@
 {
-  "version": "sa74-emergency-2026-11-18",
+  "version": "sa74-emergency-2026-11-21",
   "model": "eleven_v4",
   "cast": {
     "sa74-emergency": {
-      "name": "Rob / Brody",
+      "name": "Salvador / Kirk / Shallon / Ian / Rob",
       "net": "command",
       "character": "sa74-emergency"
     }
@@ -14,52 +14,52 @@
       "event": "command.sa74.release",
       "role": "sa74-emergency",
       "text": "All stations, break, break! Strategic weapon away! Flashback is in the air. Turn away from the target. Get below cover. Do not look at the flash!",
-      "voice_id": "hWhGhek2FTOGZaByvSGa",
+      "voice_id": "kqrMyzYLI974EBxdxIUs",
       "priority": "emergency",
-      "flow_id": "7UgF8ef4L6vvCzlbqqlh",
       "generation_ids": [
-        "UvPjmidco98HyHctF6vc",
-        "bZgWbf0Cf7vQRHZI5nq4"
-      ]
+        "7LWGzRHwb1xbGCwne4Wa",
+        "b7p9JAe7al9O63Ji6StZ"
+      ],
+      "direction": "eleven_v4 with heavy emotion tags via REST 2026-11-21 (take 1 stability 0, take 2 stability 0.3)"
     },
     {
       "id": "472ed450",
       "event": "command.sa74.flash",
       "role": "sa74-emergency",
       "text": "Flash! Flash! Nuclear detonation! All aircraft, turn away! The shock front is coming. Get down, get down!",
-      "voice_id": "TbEd6wZh117FdOyTGS3q",
+      "voice_id": "9qnp8OblNJwOWL0wEG96",
       "priority": "emergency",
-      "flow_id": "k3y6LmLcDpM4G0RQXTdp",
       "generation_ids": [
-        "Ax3GwOJGJL71Hqg9IdUI",
-        "MjhUBWkRosz3dLqdqCPE"
-      ]
+        "MeXlFEf0lRzIHgPUbpuA",
+        "sTJteYKbs7sYnPli4uoe"
+      ],
+      "direction": "eleven_v4 with heavy emotion tags via REST 2026-11-21 (take 1 stability 0, take 2 stability 0.3)"
     },
     {
       "id": "bcfc53b4",
       "event": "command.sa74.ground",
       "role": "sa74-emergency",
       "text": "Everything is on fire! Get those people inside! Away from the windows! Oh God, the trees are gone! Command, do you read?",
-      "voice_id": "hWhGhek2FTOGZaByvSGa",
+      "voice_id": "eqTJwmPoRkTnoeoLAKog",
       "priority": "emergency",
-      "flow_id": "zbamIBHGhiQE5DUdGiCH",
       "generation_ids": [
-        "foVvt4DkYys3PgeSX2WW",
-        "sC3hdkL8hn3ZbrYsyMHd"
-      ]
+        "RjBwtjByBr45CPiNASEJ",
+        "P9X5gi4Fq4QtbQuUOn3d"
+      ],
+      "direction": "eleven_v4 with heavy emotion tags via REST 2026-11-21 (take 1 stability 0, take 2 stability 0.3)"
     },
     {
       "id": "0e16dcac",
       "event": "command.sa74.wing",
       "role": "sa74-emergency",
       "text": "Skywatch, this is Dagger! I've lost the whole flight! There's nothing on the scope! Somebody answer me!",
-      "voice_id": "TbEd6wZh117FdOyTGS3q",
+      "voice_id": "uC1r2TVqMMkHyjSAteKk",
       "priority": "emergency",
-      "flow_id": "JheBE9u3Umgq5uMvNFP6",
       "generation_ids": [
-        "AuvTtwiMKAK5gZJPM62l",
-        "V4JjaUxkPh5TTrIHNL93"
-      ]
+        "bzuX800tquYyR51RehXs",
+        "FsjABy0REtMcDs7xHvvj"
+      ],
+      "direction": "eleven_v4 with heavy emotion tags via REST 2026-11-21 (take 1 stability 0, take 2 stability 0.3)"
     },
     {
       "id": "0b35373d",
@@ -68,11 +68,11 @@
       "text": "We can't see the sun. The roof is coming down! Get back! Command, please, we're still here! We are still...",
       "voice_id": "hWhGhek2FTOGZaByvSGa",
       "priority": "emergency",
-      "flow_id": "UV50dEmERyBX7QbrkhGF",
       "generation_ids": [
-        "ifljX56LtpOWGo5EUNA5",
-        "5x5PS4U3w10yzPTwwyqi"
-      ]
+        "T9OyQe7vWAqT27XTu4ef",
+        "kQhQH8r0cEXTo0cOQW0K"
+      ],
+      "direction": "eleven_v4 with heavy emotion tags via REST 2026-11-21 (take 1 stability 0, take 2 stability 0.3)"
     }
   ],
   "backgrounds": [
@@ -81,7 +81,7 @@
       "events": [
         "command.sa74.release"
       ],
-      "prompt": "Command post under alert: master caution tone, warning whoop and radio static. Mixed from the mod's own sound library by sa74_beds (no generation).",
+      "prompt": "ElevenLabs eleven_text_to_sound_v2 12 s loop, 2026-11-21 (see .nomodkit/sa74-radio gen_beds prompts): bed-sa74-release",
       "takes": 2,
       "relative_rms_db": -12,
       "lowpass_hz": 3600,
@@ -93,7 +93,7 @@
       "events": [
         "command.sa74.flash"
       ],
-      "prompt": "Electromagnetic pulse on an airborne radar station: bursts of static, cracks, a missile alarm. Mixed from the mod's own sound library by sa74_beds (no generation).",
+      "prompt": "ElevenLabs eleven_text_to_sound_v2 12 s loop, 2026-11-21 (see .nomodkit/sa74-radio gen_beds prompts): bed-sa74-flash",
       "takes": 2,
       "relative_rms_db": -12,
       "lowpass_hz": 3600,
@@ -105,7 +105,7 @@
       "events": [
         "command.sa74.ground"
       ],
-      "prompt": "The blast arriving on the ground: roar and wind, a building coming down, Geiger crackle. Mixed from the mod's own sound library by sa74_beds (no generation).",
+      "prompt": "ElevenLabs eleven_text_to_sound_v2 12 s loop, 2026-11-21 (see .nomodkit/sa74-radio gen_beds prompts): bed-sa74-ground",
       "takes": 2,
       "relative_rms_db": -12,
       "lowpass_hz": 3600,
@@ -117,7 +117,7 @@
       "events": [
         "command.sa74.wing"
       ],
-      "prompt": "A damaged cockpit: wind, warning horn, airframe creak, a hull thud, thin static. Mixed from the mod's own sound library by sa74_beds (no generation).",
+      "prompt": "ElevenLabs eleven_text_to_sound_v2 12 s loop, 2026-11-21 (see .nomodkit/sa74-radio gen_beds prompts): bed-sa74-wing",
       "takes": 2,
       "relative_rms_db": -12,
       "lowpass_hz": 3600,
@@ -129,7 +129,7 @@
       "events": [
         "command.sa74.last"
       ],
-      "prompt": "A collapsing shelter: roar, two collapses, thunder, rising static and Geiger crackle. Mixed from the mod's own sound library by sa74_beds (no generation).",
+      "prompt": "ElevenLabs eleven_text_to_sound_v2 12 s loop, 2026-11-21 (see .nomodkit/sa74-radio gen_beds prompts): bed-sa74-last",
       "takes": 2,
       "relative_rms_db": -12,
       "lowpass_hz": 3600,

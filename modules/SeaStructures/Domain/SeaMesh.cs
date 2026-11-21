@@ -39,11 +39,82 @@ namespace BoscaliSummer.Modules.SeaStructures.Domain
             return data;
         }
 
+        /// <summary>Fraction of a point's pool below which one of its loose pieces falls (equal bands).</summary>
+        public static float PointBreakFraction(int index, int count) =>
+            count <= 0 ? float.PositiveInfinity : (index + 1f) / (count + 1f);
+
+        /// <summary>A point's core (hull) piece stands until the point itself goes; loose pieces fall in bands.</summary>
+        public static bool PointStands(SeaPiece piece, int index, int count, float fraction) =>
+            fraction > 0f && (piece.Core || fraction >= PointBreakFraction(index, count));
+
+        /// <summary>How many of a point's pieces have fallen at this fraction of its pool.</summary>
+        public static int PointFallen(SeaSection section, int[] pieces, float fraction)
+        {
+            int count = 0, seen = 0, fallen = 0;
+            foreach (int p in pieces) if (!section.Pieces[p].Core) count++;
+            foreach (int p in Sorted(pieces))
+            {
+                SeaPiece piece = section.Pieces[p];
+                if (piece.Core) continue;
+                if (!PointStands(piece, seen++, count, fraction)) fallen++;
+            }
+            return fallen;
+        }
+
+        /// <summary>The pieces that stood at one fraction and are gone at another (the chunks to throw now).</summary>
+        public static void Falls(SeaSection section, int[] pieces, float from, float to, List<int> fallen)
+        {
+            int count = 0, seen = 0;
+            foreach (int p in pieces) if (!section.Pieces[p].Core) count++;
+            foreach (int p in Sorted(pieces))
+            {
+                SeaPiece piece = section.Pieces[p];
+                if (piece.Core) continue;
+                int index = seen++;
+                if (PointStands(piece, index, count, from) && !PointStands(piece, index, count, to)) fallen.Add(p);
+            }
+        }
+
+        /// <summary>The mesh of one damage point: only the pieces still standing at this fraction of its pool.</summary>
+        public static Data Point(SeaSection section, int[] pieces, float fraction)
+        {
+            var data = new Data();
+            int count = 0, seen = 0;
+            foreach (int p in pieces) if (!section.Pieces[p].Core) count++;
+            foreach (int p in Sorted(pieces))
+            {
+                SeaPiece piece = section.Pieces[p];
+                if (!PointStands(piece, piece.Core ? 0 : seen++, count, fraction)) continue;
+                Add(data, piece, Vector3.zero);
+            }
+            return data;
+        }
+
+        private static int[] Sorted(int[] pieces)
+        {
+            var copy = (int[])pieces.Clone();
+            System.Array.Sort(copy);
+            return copy;
+        }
+
         /// <summary>One piece on its own, about its centre: the chunk that falls.</summary>
         public static Data Chunk(SeaPiece piece)
         {
             var data = new Data();
             Add(data, piece, -piece.Centre);
+            return data;
+        }
+
+        /// <summary>The burned skeleton left after the final explosion: every section's core at its place.</summary>
+        public static Data Wreck(SeaLayout layout)
+        {
+            var data = new Data();
+            for (int s = 0; s < layout.Sections.Length; s++)
+            {
+                SeaSection section = layout.Sections[s];
+                for (int p = 0; p < section.Pieces.Length; p++)
+                    if (section.Pieces[p].Core) Add(data, section.Pieces[p], section.At);
+            }
             return data;
         }
 

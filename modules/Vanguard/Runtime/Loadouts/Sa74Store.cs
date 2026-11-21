@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             typeof(Sa74BlockedPatch), typeof(Sa74PrefabsPatch), typeof(Sa74DetonatePatch), typeof(Sa74ReleasedPatch),
             typeof(Sa74DetonationReplayPatch), typeof(Sa74SavedLoadoutPatch), typeof(Sa74BlastTargetsPatch), typeof(Sa74WinterPatch),
-            typeof(Sa74PressureTimingPatch), typeof(Presentation.Sa74NativeBlastAudioPatch),
+            typeof(Sa74PressureTimingPatch), typeof(Sa74LightningPatch), typeof(Presentation.Sa74NativeBlastAudioPatch),
             typeof(Sa74BuildingRegistrationPatch), typeof(Sa74MapBuildingRegistrationPatch)
         };
 

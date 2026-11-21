@@ -98,10 +98,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 for (int i = 0; i < spans.Count; i++)
                 {
                     EventSpan s = spans[i];
-                    s.Role = s.Rgb >= 0 ? EventRole.Name : named ? EventRole.Verb : EventRole.Text;
+                    s.Role = s.Rgb >= 0 && !IsVerb(s.Text) ? EventRole.Name : named ? EventRole.Verb : EventRole.Text;      // a coloured JOINED is still the verb
                     spans[i] = s;
                 }
             }
+            OneSwatchPerName(spans);
             string a = Name(ownPlayer), b = Name(ownAircraft);
             for (int i = 0; i < spans.Count; i++)
             {
@@ -330,6 +331,43 @@ namespace BoscaliSummer.Modules.Hud.Domain
             string n = s.Trim().ToUpperInvariant();
             if (n.StartsWith("(ALLY)", StringComparison.Ordinal)) n = n.Substring(6);
             return n.TrimEnd(':', ' ');
+        }
+
+        /// <summary>A span that is only a verb ("JOINED", "SHOT DOWN"): the join message colours it like the names round it.</summary>
+        private static bool IsVerb(string s)
+        {
+            string t = s.Trim();
+            return t.Length > 0 && t.Length <= 12 && Verb(t) != EventClass.Info;
+        }
+
+        /// <summary>
+        /// One square per name: pieces glued together with no space between ("[", "WGCDR", "]" in different colours: a rank tag) are one name, its square in front of the first piece in the colour of the first
+        /// piece with a letter or digit in it (a bracket alone is no name: in game "[■ WGCDR■ ]" wore three squares).
+        /// </summary>
+        private static void OneSwatchPerName(List<EventSpan> spans)
+        {
+            for (int i = 0; i < spans.Count;)
+            {
+                int j = i + 1;
+                while (j < spans.Count && !spans[j - 1].Text.EndsWith(" ", StringComparison.Ordinal) && !spans[j].Text.StartsWith(" ", StringComparison.Ordinal)) j++;
+                int rgb = -1;
+                for (int k = i; k < j && rgb < 0; k++)
+                    if (spans[k].Role == EventRole.Name && spans[k].Rgb >= 0 && HasAlnum(spans[k].Text)) rgb = spans[k].Rgb;
+                for (int k = i; k < j; k++)
+                {
+                    EventSpan s = spans[k];
+                    if (k == i && rgb >= 0) { s.Role = EventRole.Name; s.Rgb = rgb; }
+                    else if (s.Role == EventRole.Name) s.Rgb = -1;
+                    spans[k] = s;
+                }
+                i = j;
+            }
+        }
+
+        private static bool HasAlnum(string s)
+        {
+            foreach (char c in s) if (char.IsLetterOrDigit(c)) return true;
+            return false;
         }
 
         // ---------------------------------------------------------------------------------------------------- the fit

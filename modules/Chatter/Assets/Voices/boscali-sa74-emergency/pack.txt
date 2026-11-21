@@ -1,3 +1,3 @@
-# sa74-emergency-2026-11-18 | Rob / Brody
+# sa74-emergency-2026-11-21 | Salvador / Kirk / Shallon / Ian / Rob
 net: command
 character: sa74-emergency

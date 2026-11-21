@@ -20,6 +20,7 @@ Shader "Boscali/SA74Mushroom"
         float4x4 _Sa74Frustum;
         float3 _Sa74Camera, _Sa74Sun, _Sa74SunColor, _Sa74Fog;
         float4 _Sa74Sites[2], _Sa74Size, _Sa74Clearance, _Sa74Wet;
+        float4 _Sa74Winds[2];
         float _Sa74ShockRadius, _BoscaliCloudCoverFrame;
         int _Sa74Count;
         struct Varyings { float4 pos:SV_POSITION; float2 uv:TEXCOORD0; };
@@ -33,11 +34,12 @@ Shader "Boscali/SA74Mushroom"
         // The cap holds for 25 minutes, then sinks and spreads into fallout until it is gone at 40 minutes.
         #define SA74_HOLD 1500.0
         #define SA74_GONE 2400.0
-        float Growth(float age) { return saturate(1.0-exp(-max(age,0.0)/72.0)); }
+        // Paired with Domain/Sa74MushroomShape.Growth: the majestic rise takes minutes, not the old 72 s sprint.
+        float Growth(float age) { return saturate(1.0-exp(-max(age,0.0)/110.0)); }
         float CloudHeight(float age, float grow)
         {
-            // The young head is entrained through the fireball, then develops its full towering stem.
-            return lerp(8000.0,58000.0,grow)*lerp(.50,1.0,smoothstep(12.0,65.0,age));
+            // The young head is entrained through the fireball, then develops its full towering stem by 95 s.
+            return lerp(8000.0,58000.0,grow)*lerp(.50,1.0,smoothstep(18.0,95.0,age));
         }
         float Dispersion(float age) { return smoothstep(SA74_HOLD,SA74_GONE,age); }
         // Glasstone & Dolan thermal pulse scaling for 74 Mt: minimum near 0.0025*sqrt(kt) = 0.7 s,
@@ -53,7 +55,7 @@ Shader "Boscali/SA74Mushroom"
         float CapRadius(float age, float grow)
         {
             // Rise precedes lateral spreading: the young head stays round before the mature anvil develops.
-            float spread=lerp(.42,1.0,smoothstep(18.0,170.0,age));
+            float spread=lerp(.42,1.0,smoothstep(25.0,240.0,age));
             return lerp(6000.0,48000.0,grow*spread)*lerp(.66,1.0,smoothstep(12.0,65.0,age));
         }
         static float gBroadLod=0.0;
@@ -62,6 +64,9 @@ Shader "Boscali/SA74Mushroom"
         static float gGroundClearance=0.0;
         static float gWet=0.0;
         static float gFireLift=0.0;
+        // Live wind of the site being marched, and whether this view is too distant to resolve shadows.
+        static float2 gWind=float2(0.0,0.0);
+        static bool gFarView=false;
         // Written by the last Density call: share of ice veil and fallout ash at the point, and the crack noise.
         static float gIce=0.0;
         static float gAsh=0.0;
@@ -83,19 +88,25 @@ Shader "Boscali/SA74Mushroom"
             if(age<=2.5 || age>=SA74_GONE) return 0.0;
             float worldY=p.y;
             float disperse=Dispersion(age);
-            // Fallout stage: the stabilized head sinks toward the weather deck and smears downwind as it breaks apart.
-            p.xz-=float2(14000.0,5000.0)*disperse;
-            p.xz/=float2(1.0+disperse*1.6,1.0+disperse*.9);
-            p.y+=16000.0*disperse;
             float grow = Growth(age);
             float height = CloudHeight(age,grow);
+            // Paired with Domain/Sa74MushroomShape: the standing cloud rides the live wind, sheared by height,
+            // and the fallout stage smears downwind along the same heading; a dead calm keeps the historical one.
+            float shear=.30+.70*saturate((p.y+gGroundClearance)/max(height,1.0));
+            p.xz-=gWind*age*shear;
+            float windRun=length(gWind);
+            float2 heading=windRun<.001?float2(.94209,.33633):gWind/windRun;
+            // Fallout stage: the stabilized head sinks toward the weather deck and smears downwind as it breaks apart.
+            p.xz-=heading*26000.0*disperse;
+            p.xz/=float2(1.0+disperse*1.6,1.0+disperse*.9);
+            p.y+=16000.0*disperse;
             float radius = CapRadius(age,grow);
-            float mature=smoothstep(20.0,180.0,age);
+            float mature=smoothstep(28.0,240.0,age);
             float capY = height * .755, capDepth = height * lerp(.265,.24,mature);
             float radial = length(p.xz);
             float3 flow = p;
             // Roll the noise through the head's cross-section; entrained material rises centrally and curls around the rim.
-            float rollAngle=age*.011;
+            float rollAngle=age*.007;
             float rc=cos(rollAngle), rs=sin(rollAngle);
             float2 crossSection=float2(radial-radius*.60,(p.y-capY)*1.45);
             float rolledRadius=crossSection.x*rc-crossSection.y*rs+radius*.60;
@@ -120,7 +131,7 @@ Shader "Boscali/SA74Mushroom"
             float y = saturate((p.y+gGroundClearance) / max(capY+gGroundClearance, 1.0));
             // A multi-megaton stem is a broad column, about a quarter of the cap's width, flaring into the cap and the base.
             float stemRadius = lerp(1800.0, 11500.0, grow) * (.93 + pow(abs(2.0*y-1.0),1.5)*.28 + pow(y,4.0)*.90);
-            float detached=smoothstep(90.0,180.0,age);
+            float detached=smoothstep(110.0,240.0,age);
             float entrainedHeight=p.y+gGroundClearance+(billow-.5)*13000.0;
             stemRadius*=lerp(1.0,.55+.45*smoothstep(4500.0,18000.0,entrainedHeight),detached);
             float2 sway = float2(sin(p.y/6500.0+age*.006), cos(p.y/9500.0-age*.004)) * grow * 1100.0;
@@ -186,7 +197,8 @@ Shader "Boscali/SA74Mushroom"
         float FireLift(float age)
         {
             float lift=FireRadius(age)*.35*(1.0-smoothstep(500.0,4000.0,gGroundClearance))+max(age-1.0,0.0)*140.0;
-            return lerp(lift,CloudHeight(age,Growth(age))*.63,smoothstep(8.0,34.0,age));
+            // The globe rises at the cloud's slower pace, hand in hand with Domain/Sa74MushroomShape.StemFactor.
+            return lerp(lift,CloudHeight(age,Growth(age))*.63,smoothstep(12.0,60.0,age));
         }
         float3 Blackbody(float t)
         {
@@ -199,6 +211,9 @@ Shader "Boscali/SA74Mushroom"
             float cooling=1.0-smoothstep(45.0,95.0,age);
             float radius=FireRadius(age);
             float3 relative=p-float3(0.0,gFireLift,0.0);
+            // Paired with Domain/Sa74MushroomShape.TorusMorph: the globe stretches, hollows and rolls into the rising head.
+            float morph=smoothstep(18.0,60.0,age);
+            relative.y/=1.0+.85*morph;
             float q=length(relative)/max(radius,1.0);
             if(q>3.0 || p.y+gGroundClearance< -150.0) return 0.0;
             float ground=smoothstep(-150.0,80.0,p.y+gGroundClearance);
@@ -212,6 +227,8 @@ Shader "Boscali/SA74Mushroom"
             if(q>1.3) return float4(glowColor*brilliance,glow*cooling*ground);
             float4 noise=tex3Dlod(_Sa74Noise,float4((relative+float3(age*32.0,-age*44.0,0.0))/7200.0,max(0.0,gSmallLod-1.0)));
             float core=saturate((1.0-q+(noise.r-.5)*.075)*12.0);
+            // The middle-aged fireball is a rising roll, not a shrinking ball: its axis cools while the rim keeps glowing.
+            core*=1.0-.62*morph*exp(-(relative.x*relative.x+relative.z*relative.z)/(radius*radius*.20));
             // The surface cools from the limb inward and breaks into convective cells: dark crust over bright cracks.
             float crust=smoothstep(8.0,40.0,age);
             float cells=smoothstep(.25,.70,noise.b*.6+noise.a*.4);
@@ -313,6 +330,7 @@ Shader "Boscali/SA74Mushroom"
                 if(age>=SA74_GONE) continue;
                 gGroundClearance=max(0.0,_Sa74Clearance[site]);
                 gWet=saturate(_Sa74Wet[site]);
+                gWind=_Sa74Winds[site].xz;
                 gFireLift=FireLift(age);
                 float disperse=Dispersion(age);
                 float grow=Growth(age);
@@ -323,7 +341,13 @@ Shader "Boscali/SA74Mushroom"
                 float radius=capRadius*(1.0+disperse*1.6)+disperse*14000.0;
                 float top=height*1.12;
                 if(age<95.0) { radius=max(radius,15000.0); top=max(top,gFireLift+15000.0); }
+                // The standing cloud drifts downwind as it ages; the march box must travel with it.
+                radius+=length(gWind)*age;
                 float3 origin=_Sa74Camera-_Sa74Sites[site].xyz;
+                float siteDistance=length(origin);
+                // Distant spectators keep the march cheap: fewer, longer steps and no unresolvable shadow taps.
+                bool farSite=siteDistance>80000.0;
+                gFarView=siteDistance>60000.0;
                 float2 column=BoxHit(origin,direction,float3(-radius,-gGroundClearance-1500.0,-radius),float3(radius,top,radius));
                 float columnBegin=max(column.x,0.0), columnEnd=min(column.y,sceneDistance);
                 bool hasColumn=columnEnd>columnBegin;
@@ -348,7 +372,8 @@ Shader "Boscali/SA74Mushroom"
                     else { begin=max(lowBegin,columnEnd); end=hasColumn?lowEnd:-1.0; }
                     if(end<=begin || transmittance<.012) continue;
                     // The moving dust wall is about 3 km thick: long grazing rays need a finer stride while it exists.
-                    float steps=fine?clamp(ceil((end-begin)/200.0),24.0,64.0):clamp(ceil((end-begin)/1000.0),8.0,age<120.0?48.0:20.0);
+                    float steps=fine?clamp(ceil((end-begin)/(farSite?450.0:200.0)),farSite?16.0:24.0,64.0)
+                        :clamp(ceil((end-begin)/1000.0),8.0,age<120.0?48.0:20.0);
                     float stepLength=(end-begin)/steps;
                     float detail=fine?stepLength*.5:min(stepLength,1500.0);
                     gBroadLod=max(0.0,log2(max(1.0,detail*64.0/44000.0)));
@@ -398,8 +423,9 @@ Shader "Boscali/SA74Mushroom"
                                 radiance+=float3(.95,.97,1.0)*(float3(.26,.29,.34)+_Sa74SunColor*.46+fireLit*.22)*mist;
                             if(cloudDensity>.002)
                             {
-                                float shadow=Density(p+_Sa74Sun*2400.0,age)*1.7+Density(p+_Sa74Sun*8200.0,age)*3.8;
-                                float light=exp(-shadow);
+                                // One mid-depth tap carries the old two-sample optical depth (1.7 @ 2.4 km + 3.8 @ 8.2 km);
+                                // beyond 60 km a half-res shadow is unresolvable, so the far view lights the cloud flat.
+                                float light=gFarView?.62:exp(-Density(p+_Sa74Sun*3800.0,age)*5.5);
                                 float forward=pow(saturate(dot(direction,-_Sa74Sun)),8.0);
                                 float condensation=smoothstep(height*.45,height*.94,p.y)*smoothstep(18.0,100.0,age);
                                 // Nitrogen oxides formed in the shocked air tint the young debris cloud rust-brown.

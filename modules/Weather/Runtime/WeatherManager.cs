@@ -116,6 +116,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private WeatherVolumeDressing flightClouds;
         private readonly HeatDistortionSorting heatHaze = new HeatDistortionSorting();
         private readonly LightningDirector lightning = new LightningDirector();
+        private bool lightningSuspended;
+        private int strikesAtSuspension;
+        internal bool LightningSuppressed => lightningSuspended || NuclearAftermath.Active;
         private readonly SkyPhenomena phenomena = new SkyPhenomena();
         private bool prewarmAttempted;
         private bool canopyShaderActive;
@@ -342,6 +345,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             viewDensity = viewPrecipitation = viewCondensation = 0f;
             viewTransmission = 1f;
             lightning.Reset();
+            lightningSuspended = false;
             phenomena.Reset();
             if (rainRoot != null)
             {
@@ -791,8 +795,10 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             UpdateLighting();
 
             // Night sky: occasional aurora on clear nights, and sprites and
-            // jets that the lightning below fires over distant night storms.
-            bool skyPhenomena = settings.SkyPhenomenaEnabled.Value;
+            // jets that the lightning below fires over distant night storms. A strategic burst owns
+            // the sky for the rest of the mission, so ordinary storm displays stand down.
+            bool nuclear = NuclearAftermath.Active;
+            bool skyPhenomena = settings.SkyPhenomenaEnabled.Value && !nuclear;
             lightning.Phenomena = skyPhenomena ? phenomena : null;
             if (skyPhenomena)
             {
@@ -806,13 +812,30 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             else phenomena.Reset();
 
             // Storms remain visible/audible from dry air; they do not depend on a rain emitter.
-            bool bolts = settings.LightningEnabled.Value && !SkyYielded, thunder = settings.RainAudioEnabled.Value && !SkyYielded;
+            bool bolts = settings.LightningEnabled.Value && !SkyYielded && !nuclear;
+            bool thunder = settings.RainAudioEnabled.Value && !SkyYielded && !nuclear;
             // A climate with no storms (the arctic) has no lightning either, whatever cell the tape still holds.
-            if ((bolts || thunder) && WeatherClimate.Storms(WeatherClimate.Id(WeatherClimate.Local)))
+            if (nuclear)
+            {
+                if (!lightningSuspended)
+                {
+                    lightning.Suspend();
+                    strikesAtSuspension = lightning.Strikes;
+                    lightningSuspended = true;
+                }
+            }
+            else if ((bolts || thunder) && WeatherClimate.Storms(WeatherClimate.Id(WeatherClimate.Local)))
+            {
+                lightningSuspended = false;
                 lightning.Tick(Field, missionTime, cloudPosition, currentCam,
                     settings.ReducedFlashes.Value || !bolts,
                     thunder, isCockpit);
-            else lightning.Reset();
+            }
+            else
+            {
+                lightningSuspended = false;
+                lightning.Reset();
+            }
 
             float cloudMist = RainVisualsEnabled ? cloudMoisture * rainExposure : 0f;
             bool wantSystems = visualIntensity > 0.02f || canopyWetness > 0.001f || cloudMist > 0.02f ||
@@ -1032,6 +1055,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "feedCloudFrames", Visuals.CloudProbePass.FeedFramesDrawn },
                 { "lightningStrikes", lightning.Strikes },
                 { "lightningFlash", lightning.FlashNow },
+                { "lightningSuppressed", LightningSuppressed ? 1 : 0 },
+                { "lightningStrikesSinceSuspension", lightningSuspended ? Mathf.Max(0, lightning.Strikes - strikesAtSuspension) : 0 },
                 { "thunderQueued", lightning.QueuedThunder },
                 { "thunderVoices", lightning.ThunderVoices },
                 { "auroraLevel", phenomena.AuroraLevel },

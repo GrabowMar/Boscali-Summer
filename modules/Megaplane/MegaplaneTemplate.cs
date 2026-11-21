@@ -102,6 +102,12 @@ namespace BoscaliSummer.Modules.Megaplane
             p.minimumRadarAlt = 300f;
             ((Unit)aircraft).definition = definition;
 
+            // The bomber has ~30 damage islands; the carrier's body and inboard pods need their own. Clones register in
+            // Awake like the donor's (hierarchy order of the shared prefab: same ids on every peer).
+            AddIsland(go.transform, "body_F", null);     // forward fuselage, y 20..46 design (assets/.../breaks.py)
+            AddIsland(go.transform, "hump", null);       // dorsal plateau: silos and barbettes ride on it
+            AddIsland(go.transform, "pod1_L", "engine_L");
+            AddIsland(go.transform, "pod1_R", "engine_R");
             Transform model = MegaplaneArt.Build(go.transform);
             model.name = "MegaplaneVisuals";
             Dictionary<string, Transform> nodes = model.GetComponentsInChildren<Transform>(true).GroupBy(t => t.name).ToDictionary(g => g.Key, g => g.First());
@@ -117,6 +123,7 @@ namespace BoscaliSummer.Modules.Megaplane
             definition.mass = Mass;
             go.GetComponent<Rigidbody>().mass = Mass;
             go.AddComponent<MegaplaneDamage>();
+            go.AddComponent<MegaplaneFx>();
             go.AddComponent<MegaplaneFlight>();
             go.AddComponent<MegaplaneGear>();
             go.AddComponent<MegaplaneFans>();
@@ -131,19 +138,38 @@ namespace BoscaliSummer.Modules.Megaplane
         // panel takes what it carries. The inboard pair shares one island: one nuclear engine group per side.
         private static readonly Dictionary<string, string> Mapping = new Dictionary<string, string>
         {
-            { "fuselage_F", "Fuselage_Cockpit" }, { "nose", "Fuselage_Cockpit" }, { "fuselage_R", "Fuselage_Aft" }, { "tail", "BayDoor_L" },
+            { "fuselage_F", "Fuselage_Cockpit" }, { "nose", "Fuselage_Cockpit" }, { "fuselage_R", "Fuselage_Aft" }, { "tail", "Fuselage_TailCone" },
             { "hstab", "Tailplane" }, { "intake_L", "Strongback_L" }, { "intake_R", "Strongback_R" },
-            { "engine_L", "Wing_Inner_L" }, { "engine_R", "Wing_Inner_R" }, { "nacelle_L", "Pod_L1" }, { "nacelle_R", "Pod_R1" },
-            { "gearbay_L", "Wing_Mid_L" }, { "gearbay_R", "Wing_Mid_R" }, { "wing1b_L", "Wing_Outer_L" }, { "wing1b_R", "Wing_Outer_R" },
+            { "engine_L", "Wing_Root_L" }, { "engine_R", "Wing_Root_R" }, { "nacelle_L", "Pod_L2" }, { "nacelle_R", "Pod_R2" },
+            { "gearbay_L", "Wing_Inner_L" }, { "gearbay_R", "Wing_Inner_R" }, { "wing1b_L", "Wing_Mid_L" }, { "wing1b_R", "Wing_Mid_R" },
             { "flap_L", "Pod_L3" }, { "flap_R", "Pod_R3" }, { "wing1a_L", "Flap_Outer_L" }, { "wing1a_R", "Flap_Outer_R" },
-            { "wing2_L", "Aileron_L" }, { "wing2_R", "Aileron_R" }, { "wingtip_L", "Pod_L4" }, { "wingtip_R", "Pod_R4" },
+            { "wing2_L", "Wing_Outer_L" }, { "wing2_R", "Wing_Outer_R" }, { "wingtip_L", "Wing_Tip_L" }, { "wingtip_R", "Wing_Tip_R" },
             { "aileron_L", "Aileron_L" }, { "aileron_R", "Aileron_R" }, { "nozzle_L", "Boom_L" }, { "nozzle_R", "Boom_R" },
             { "vstab1_L", "Fin_L" }, { "vstab1_R", "Fin_R" }, { "vstab2_L", "Rudder_L" }, { "vstab2_R", "Rudder_R" },
             { "rudder_L", "Rudder_L" }, { "rudder_R", "Rudder_R" },
+            { "body_F", "Fuselage_Forward" }, { "hump", "Fuselage_Hump" }, { "pod1_L", "Pod_L1" }, { "pod1_R", "Pod_R1" },
         };
-        private static readonly Dictionary<string, string> ExtraArt = new Dictionary<string, string> { { "nacelle_L", "Pod_L2" }, { "nacelle_R", "Pod_R2" } };
+        private static readonly Dictionary<string, string> ExtraArt = new Dictionary<string, string>();
         // Position-only islands share another island's art.
-        private static readonly HashSet<string> NoArt = new HashSet<string> { "nose", "wing2_L", "wing2_R", "vstab2_L", "vstab2_R" };
+        private static readonly HashSet<string> NoArt = new HashSet<string> { "nose", "vstab2_L", "vstab2_R" };
+
+        /// <summary>A new damage island: a copy of the donor's "tail" island stripped to its AeroPart, under `parent`
+        /// (an island name, or the airframe root).</summary>
+        private static void AddIsland(Transform root, string name, string parent)
+        {
+            AeroPart[] parts = root.GetComponentsInChildren<AeroPart>(true);
+            AeroPart donor = parts.First(p => p.name == "tail");
+            Transform under = parent == null ? root : parts.First(p => p.name == parent).transform;
+            GameObject go = Object.Instantiate(donor.gameObject, under);
+            go.name = name;
+            foreach (Transform child in go.transform.Cast<Transform>().ToList()) Object.DestroyImmediate(child.gameObject);
+            foreach (Component c in go.GetComponents<Component>())
+                if (c is Collider || c is Renderer || c is MeshFilter || c is FuelTank || c is AudioSource || c is LODGroup) Object.DestroyImmediate(c);
+            AeroPart part = go.GetComponent<AeroPart>();
+            part.Joints = new PartJoint[0];
+            Set(part, "disintegrateObjects", new GameObject[0]);   // pointed at the donor's children, now gone
+            Set(part, "damageMaterial", null);
+        }
 
         private static void RefitAirframe(Aircraft aircraft, Transform model, Dictionary<string, Transform> nodes)
         {
@@ -186,7 +212,7 @@ namespace BoscaliSummer.Modules.Megaplane
             foreach (MeshFilter mesh in art)
             {
                 AeroPart owner = mesh.GetComponentInParent<AeroPart>(true);
-                if (owner == null || mesh.name.Contains("Canopy")) continue;   // glazing: no hull of its own
+                if (owner == null || mesh.name.Contains("Canopy") || mesh.name.StartsWith("Int_")) continue;   // glazing and interior: no hull of their own
                 var collider = mesh.gameObject.AddComponent<MeshCollider>();
                 collider.sharedMesh = mesh.sharedMesh;
                 collider.convex = true;
@@ -212,6 +238,9 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             pierce /= HitPointScale;
             blast /= HitPointScale;
+            // fire (burning wreckage, napalm, DamageParticles) arrives once per hitbox in reach: once per island per tick
+            if (fire > 0f && pierce == 0f && blast == 0f && !Group.AcceptFire()) return;
+            fire /= HitPointScale;
             if (pierce == 0f && blast > 0f) affected *= BlastShare;
             float before = Owner.hitPoints;
             Owner.TakeDamage(pierce, blast, affected, fire, impact, dealer);
@@ -225,7 +254,7 @@ namespace BoscaliSummer.Modules.Megaplane
         }
         private MegaplaneDamage damage;
         public void ApplyDamage(float pierce, float blast, float fire, float impact) =>
-            // the same 20x toughness as TakeDamage: one entry point must not armour the island 20x weaker than the other
+            // the same toughness as TakeDamage: one entry point must not armour the island 20x weaker than the other
             Owner.ApplyDamage(pierce / HitPointScale, blast / HitPointScale, fire, impact);
         public void TakeShockwave(Vector3 origin, float overpressure, float blastPower)
         {
@@ -236,7 +265,7 @@ namespace BoscaliSummer.Modules.Megaplane
         public Unit GetUnit() => Owner.GetUnit();
         public float GetMass() => Owner.GetMass();
         public Transform GetTransform() => Owner.GetTransform();
-        private const float HitPointScale = 20f;   // a carrier shrugs off what downs a bomber
+        private const float HitPointScale = 8f;    // a carrier shrugs off what downs a bomber, not what downs a destroyer
     }
 
     // Several art meshes share an island: one shockwave hits it once.
@@ -249,6 +278,14 @@ namespace BoscaliSummer.Modules.Megaplane
             if (lastFrame == Time.frameCount && lastOrigin == origin) return false;
             lastFrame = Time.frameCount;
             lastOrigin = origin;
+            return true;
+        }
+        private int lastFireFrame = -1;
+        // fire arrives once per hitbox in reach (DamageParticles overlap sphere): one hit per island per frame
+        internal bool AcceptFire()
+        {
+            if (lastFireFrame == Time.frameCount) return false;
+            lastFireFrame = Time.frameCount;
             return true;
         }
     }

@@ -19,6 +19,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<BoardScopeMode> ScopeMode { get; }
         public ConfigEntry<bool> ShowStores { get; }
         public ConfigEntry<bool> PageMissileCam { get; }
+        public ConfigEntry<bool> TargetCam { get; }
         public ConfigEntry<bool> ShowLamps { get; }
         public ConfigEntry<bool> ShowGauges { get; }
         public ConfigEntry<bool> ShowTicker { get; }
@@ -92,7 +93,9 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 "Show stores, countermeasures and power. Off gives back the game's native panels." + live);
 
             PageMissileCam = config.Bind(section, "PageMissileCam", d.PageMissileCam,
-                "Show the missile camera card (the newest own missile in the air) beside the board." + live);
+                "Show the missile camera card (the newest own missile in the air) beside the board. Off also stops its camera rendering." + live);
+            TargetCam = config.Bind(section, "TargetCam", true,
+                "Show the TARGET CAM card (the targeting pod's picture) in the left column. The pod camera is the game's own and keeps feeding the cockpit tac screen." + live);
 
             ShowLamps = config.Bind(section, "ShowLamps", d.ShowLamps,
                 "Show the lamp row: the aircraft's switch states and the threat lamps." + live);
@@ -212,7 +215,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             ConfigEntryBase[] all =
             {
                 Enabled, Layout, Scale, Shade, Declutter, ScopeMode, ShowStores,
-                PageMissileCam,
+                PageMissileCam, TargetCam,
                 ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts,
                 ArPath, ArDomes, ArMissiles, ArBeacons, HudFx,
                 ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts, Brow, Arcs, Boot, Reactive, VisorSound, TextEdge,

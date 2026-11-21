@@ -23,7 +23,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private const string Name = "SRB-2 Torch";
         private const float AxisBelowSaddle = 0.273f; // models/Torch.py: the case axis under the saddle top (the model's origin)
         private const float NozzleX = 0.182f;         // models/Torch.py NOZZLE_EXITS: the two nozzle exits either side of the centreline
-        private static VLSBooster booster;
 
         public static void Register(ModuleContext context)
         {
@@ -32,25 +31,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 Key = VanguardKeys.TorchMount,
                 Donor = "AGM_heavy_single",
                 Carriers = new[] { "AGM_heavy_single", "AGM_heavy_triple", "ARM1_single" },
-                Ready = () => Booster() != null,
+                Ready = () => GameAccess.VlsBoosterOrNull() != null,
                 Build = Build
             });
             context.AddSceneService<TorchHud>(60);
-        }
-
-        /// <summary>The first vanilla VLS booster found on a mount's missile prefab (the anti-ship missiles carry one).</summary>
-        private static VLSBooster Booster()
-        {
-            if (booster != null) return booster;
-            Encyclopedia e = GameAccess.EncyclopediaOrNull;
-            if (e == null) return null;
-            foreach (WeaponMount mount in e.weaponMounts)
-            {
-                GameObject prefab = mount != null && mount.info != null ? mount.info.weaponPrefab : null;
-                VLSBooster found = prefab != null ? prefab.GetComponentInChildren<VLSBooster>(true) : null;
-                if (found != null) return booster = found;
-            }
-            return null;
         }
 
         private static void Build(WeaponMount mount)
@@ -69,7 +53,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
             // The bottle is the booster cloned whole, under the inactive template so nothing wakes: only its VLSBooster brain goes
             // (it would reach for a missile that is not there), plus the collider and the other scripts; the trail emitters stay.
-            VLSBooster source = Booster();
+            VLSBooster source = GameAccess.VlsBoosterOrNull();
             GameObject bottle = UnityEngine.Object.Instantiate(source.gameObject, root.transform);
             bottle.name = "TorchBottle";
             foreach (MonoBehaviour part in bottle.GetComponentsInChildren<MonoBehaviour>(true))

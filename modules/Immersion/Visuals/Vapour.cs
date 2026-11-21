@@ -18,7 +18,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
 
         private sealed class Craft
         {
-            public ParticleSystem Cone, Tips;
+            public ParticleSystem Cone;
+            /// <summary>One ribbon system per wingtip: a shared system with ribbonCount 2 splits by buffer slot, and slots reshuffle as particles die, so ribbons jumped between wings.</summary>
+            public ParticleSystem[] Tips = new ParticleSystem[2];
             public int Seen;
             /// <summary>Left and right wingtip as a point in the owning wing part's space (follows sweep, flex and break-off).</summary>
             public Transform[] TipPart = new Transform[2];
@@ -79,8 +81,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             {
                 if (kv.Key != null && kv.Value.Seen == frame) continue;
                 Stop(kv.Value.Cone);
-                if (kv.Key == null || (kv.Value.Cone == null || kv.Value.Cone.particleCount == 0) &&
-                    (kv.Value.Tips == null || kv.Value.Tips.particleCount == 0)) gone.Add(kv.Key);
+                if (kv.Key == null || Empty(kv.Value.Cone) && Empty(kv.Value.Tips[0]) && Empty(kv.Value.Tips[1])) gone.Add(kv.Key);
             }
             foreach (Aircraft a in gone) { Free(crafts[a]); crafts.Remove(a); }
         }
@@ -95,14 +96,14 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             float half = a.definition != null && a.definition.width > 2f ? a.definition.width * .5f : a.maxRadius * .8f;
             Transform t = a.transform, datum = Datum.origin;
             var colour = new Color(light, light, light, .85f * Mathf.Clamp01(tips * 2f));
-            // Ribbons alternate left/right by particle index, so both sides always emit (a lost wing falls back to the guess).
+            // Both sides always emit (a lost wing falls back to the guess).
             for (int i = 0; i < 2; i++)
             {
                 Transform part = c.TipPart[i];
                 Vector3 at = part != null && part.IsChildOf(t)
                     ? part.TransformPoint(c.TipLocal[i])
                     : t.position + t.right * ((i == 0 ? -1 : 1) * half * .97f) - t.forward * 1.5f;
-                c.Tips.Emit(new ParticleSystem.EmitParams
+                c.Tips[i].Emit(new ParticleSystem.EmitParams
                 {
                     position = datum.InverseTransformPoint(at),
                     startColor = colour, startSize = .45f, startLifetime = TipLife, applyShapeToPosition = false,
@@ -205,7 +206,14 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             Quiet(coneGo.GetComponent<ParticleSystemRenderer>(), puff, false);
             cone.Play();
 
-            // Wingtips: two ribbons (particles alternate left/right) in Datum space, so they stay where they were laid.
+            var craft = new Craft { Cone = cone, Tips = { [0] = Tip(puff), [1] = Tip(puff) } };
+            FindTips(a, craft);
+            return craft;
+        }
+
+        /// <summary>One wingtip ribbon in Datum space, so it stays where it was laid.</summary>
+        private static ParticleSystem Tip(Material puff)
+        {
             var tipGo = new GameObject("BoscaliWingtipVapour") { hideFlags = HideFlags.DontSave };
             ParticleSystem tips = tipGo.AddComponent<ParticleSystem>();
             tips.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -215,7 +223,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             tm.simulationSpace = ParticleSystemSimulationSpace.Custom;
             tm.customSimulationSpace = Datum.origin;
             tm.startSpeed = 0f;
-            tm.maxParticles = 400;
+            tm.maxParticles = 200;
             var te = tips.emission;
             te.rateOverTime = 0f;
             var ts = tips.shape;
@@ -233,17 +241,17 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             var trails = tips.trails;
             trails.enabled = true;
             trails.mode = ParticleSystemTrailMode.Ribbon;
-            trails.ribbonCount = 2;
+            trails.ribbonCount = 1;
             trails.sizeAffectsWidth = true;
             trails.inheritParticleColor = true;
             trails.dieWithParticles = true;
             trails.worldSpace = false;
             Quiet(tipGo.GetComponent<ParticleSystemRenderer>(), Contrails.Material() ?? puff, true);
             tips.Play();
-            var craft = new Craft { Cone = cone, Tips = tips };
-            FindTips(a, craft);
-            return craft;
+            return tips;
         }
+
+        private static bool Empty(ParticleSystem ps) => ps == null || ps.particleCount == 0;
 
         private static void Quiet(ParticleSystemRenderer r, Material m, bool ribbon)
         {
@@ -265,7 +273,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private static void Free(Craft c)
         {
             if (c.Cone != null) Object.Destroy(c.Cone.gameObject);
-            if (c.Tips != null) Object.Destroy(c.Tips.gameObject);
+            foreach (ParticleSystem tip in c.Tips) if (tip != null) Object.Destroy(tip.gameObject);
         }
 
         internal void Reset()
