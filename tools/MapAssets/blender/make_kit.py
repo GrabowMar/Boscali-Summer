@@ -1483,10 +1483,11 @@ def market(b, v):
                 b.beam((x + dx, dy, 0), (x + dx, dy, 2.2), 0.06, WOOD, 3)
         b.box((x, 0, 2.3), (1.2, 1.0, 0.1), (RED, BLUE, OLIVE)[k % 3], (0, 0, 4 * k))
         b.box((x, 0, 0.8), (1.0, 0.7, 0.08), WOOD)
+    if b.mid:
+        b.box((0, -1.3, 0.4), (2.0, 0.3, 0.3), RED)
     if b.fine:
         for x in (-2.4, 0, 2.4):
             b.box((x + 0.3, -0.5, 1.0), (0.3, 0.3, 0.25), WOOD)
-        b.box((0, -1.3, 0.4), (2.0, 0.3, 0.3), RED)
 
 
 def jetty(b, v):
@@ -1565,10 +1566,11 @@ def camp(b, v):
     b.box((0, 0, 0.9), (2.2, 0.8, 0.15), WOOD)
     b.cyl((-1.2, 0, 1.0), 0.4, 0.5, IRON, 6)
     b.cyl((-0.4, 0, 1.0), 0.35, 0.4, PANEL_D, 6)
+    if b.mid:
+        b.box((0, 1.1, 1.6), (1.2, 0.08, 0.4), RED)
     if b.fine:
         for x in (-1.8, 0.4):
             b.box((x, -1.2, 0.5), (0.5, 0.4, 0.4), WOOD)
-        b.box((0, 1.1, 1.6), (1.2, 0.08, 0.4), RED)
 
 
 def fuel_point(b, v):
@@ -1638,9 +1640,10 @@ def billboard(b, v):
         b.beam((x, 0, 0), (x, 0, 6), 0.16, IRON, 4)
     b.box((0, 0, 5.0), (3.4, 0.15, 1.6), PANEL_D)
     b.box((0, 0, 5.0), (3.2, 0.05, 1.45), PANEL)
-    if b.fine:
+    if b.mid:
         b.box((0, 0.08, 5.0), (2.8, 0.04, 0.5), RED)
         b.box((0, 0.08, 4.2), (2.8, 0.04, 0.25), YELLOW)
+    if b.fine:
         b.beam((2.0, 0, 0), (2.0, 0, 3), 0.04, IRON, 3)
 
 
