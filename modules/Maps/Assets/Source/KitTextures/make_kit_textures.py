@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
 """Generate the scenery kit's detail and decal textures.
 
-Adapted from cloveric/claude-drawing-skill (MIT), lib/core.py: blur,
-height_normals and the font/text helpers. No image model, no network,
-deterministic seeds.
+Adapted from cloveric/claude-drawing-skill, lib/core.py (height_normals and
+the font/text helpers). No image model, no network, deterministic seeds.
+
+MIT License
+Copyright (c) 2025 cloveric
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions: The above copyright
+notice and this permission notice shall be included in all copies or
+substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS",
+WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+https://github.com/cloveric/claude-drawing-skill
 """
 import argparse
 import hashlib
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 HERE = Path(__file__).resolve().parent
 S, D = 512, 1024
-
-
-def blur(a, sigma):
-    lo, hi = float(a.min()), float(a.max())
-    img = Image.fromarray(np.uint8((a - lo) / max(hi - lo, 1e-9) * 255), "L")
-    return np.asarray(img.filter(ImageFilter.GaussianBlur(sigma)), np.float32) / 255
+USED_CELLS = ((0, 0), (1, 0), (2, 0), (3, 0), (0, 1), (1, 1), (2, 1), (3, 1),
+              (0, 2), (1, 2), (2, 2), (3, 2), (2, 3))
 
 
 def pfbm(size, scale, octaves=5, seed=0, fx=1.0, fy=1.0):
@@ -179,6 +187,12 @@ def main(check):
             bad.append("detail maps do not tile")
         if d[..., 3].max() < 0.9 or d[..., 3].min() > 0.01:
             bad.append("decal atlas alpha is not a cutout")
+        used = set(USED_CELLS)
+        unused = [(i, j) for j in range(4) for i in range(4) if (i, j) not in used]
+        for i, j in USED_CELLS:
+            if d[j * 256:(j + 1) * 256, i * 256:(i + 1) * 256, 3].max() < 0.5:
+                bad.append("decal cell %d,%d is empty" % (i, j))
+        print("decal cells used", sorted(used), "unused", unused)
         for name, p in paths.items():
             print(name, p.stat().st_size, hashlib.sha256(p.read_bytes()).hexdigest()[:16])
         print("PASS" if not bad else "FAIL " + "; ".join(bad))

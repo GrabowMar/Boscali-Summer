@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 MAGIC = b"BSK2"
+ROOT = Path(__file__).resolve().parents[5]
+REPORTS = ROOT / "reports" / "map-buildings-2026-11-20"
 CAPS = {
     "antenna_field": 1062, "boat": 600, "bunker": 612, "capacitor": 1326,
     "castle": 1314, "chapel": 1458, "containers": 1656, "crane": 1152,
@@ -20,17 +22,17 @@ CAPS = {
 }
 NEW_CAPS = {
     "house": 550, "shop": 500, "barn": 500, "shed": 320, "fence": 160,
-    "utility_pole": 200, "water_pump": 320, "market": 300, "pier": 420,
+    "utility_pole": 200, "water_pump": 320, "market": 300, "jetty": 420,
     "checkpoint": 340, "watchtower": 420, "camp": 320, "fuel_point": 380,
-    "clutter": 280, "wreck": 280, "billboard": 180,
+    "clutter": 280, "vehicle_wreck": 280, "billboard": 180,
 }
 NEW = {"house", "shop", "barn", "shed", "fence", "utility_pole", "water_pump",
-       "market", "pier", "checkpoint", "watchtower", "camp", "fuel_point",
-       "clutter", "wreck", "billboard"}
+       "market", "jetty", "checkpoint", "watchtower", "camp", "fuel_point",
+       "clutter", "vehicle_wreck", "billboard"}
 SHAPES = {"house": 3, "shop": 2, "barn": 2, "shed": 1, "fence": 3,
-          "utility_pole": 2, "water_pump": 1, "market": 1, "pier": 2,
+          "utility_pole": 2, "water_pump": 1, "market": 1, "jetty": 2,
           "checkpoint": 1, "watchtower": 1, "camp": 2, "fuel_point": 2,
-          "clutter": 4, "wreck": 2, "billboard": 1}
+          "clutter": 4, "vehicle_wreck": 2, "billboard": 1}
 
 
 def read(path):
@@ -82,6 +84,16 @@ def area(a, b, c):
 def check(path, target):
     shapes = read(path)
     problems, kinds = [], {}
+    atlas = None
+    atlas_path = ROOT / "modules" / "Maps" / "Assets" / "Source" / "KitTextures" / "kit_decals.png"
+    if atlas_path.is_file():
+        from PIL import Image
+        atlas = Image.open(atlas_path).convert("RGBA")
+    baseline = {}
+    baseline_path = REPORTS / "before-kit_models.bytes"
+    if baseline_path.is_file():
+        baseline = {s["name"]: [len(idx) // 3 for _, idx in s["levels"]]
+                    for s in read(baseline_path)}
     names = [s["name"] for s in shapes]
     if len(names) != len(set(names)):
         problems.append("duplicate shape names")
@@ -113,9 +125,20 @@ def check(path, target):
                         problems.append(s["name"] + ": decal on LOD" + str(level))
                     if not all(decal):
                         problems.append(s["name"] + ": mixed decal triangle")
+                    if any(v[6] != 192 for v in (a, b, c)):
+                        problems.append(s["name"] + ": decal alpha is not exactly 192")
                     if any(not (0 <= v[7] <= 1 and 0 <= v[8] <= 1)
                            for v in (a, b, c)):
                         problems.append(s["name"] + ": decal UV outside atlas")
+                    if atlas is not None:
+                        u0, u1 = min(v[7] for v in (a, b, c)), max(v[7] for v in (a, b, c))
+                        v0, v1 = min(v[8] for v in (a, b, c)), max(v[8] for v in (a, b, c))
+                        px0 = min(1023, max(0, int(u0 * 1024)))
+                        px1 = min(1024, max(1, int(u1 * 1024)))
+                        py0 = min(1023, max(0, int((1 - v1) * 1024)))
+                        py1 = min(1024, max(1, int((1 - v0) * 1024)))
+                        if atlas.crop((px0, py0, px1, py1)).getextrema()[3][1] < 128:
+                            problems.append(s["name"] + ": decal samples empty atlas cell")
         if shape_decals > 16:
             problems.append(s["name"] + ": more than 8 decals")
     caps = dict(CAPS)
@@ -146,11 +169,19 @@ def check(path, target):
             problems.append("existing LOD1 %d over 14395" % ex_tot[1])
         if ex_tot[2] > 5524:
             problems.append("existing LOD2 %d over 5524" % ex_tot[2])
+    for s in shapes:
+        if s["name"] not in baseline:
+            continue
+        for level, factor in ((1, 1.10), (2, 1.05)):
+            have = len(s["levels"][level][1]) // 3
+            was = baseline[s["name"]][level]
+            if have > was * factor:
+                problems.append("%s: LOD%d %d over baseline %d (+%.0f%% allowed)"
+                                % (s["name"], level, have, was, (factor - 1) * 100))
     report = {"shapes": len(shapes), "kinds": len(kinds), "lod": tot,
               "kinds_detail": kinds, "problems": problems}
-    out = Path("reports/map-buildings-2026-11-20")
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "kit-report.json").write_text(json.dumps(report, indent=2) + "\n")
+    REPORTS.mkdir(parents=True, exist_ok=True)
+    (REPORTS / "kit-report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({"shapes": len(shapes), "kinds": len(kinds), "lod": tot,
                       "problems": len(problems)}, indent=2))
     for p in problems[:40]:

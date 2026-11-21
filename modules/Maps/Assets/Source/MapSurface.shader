@@ -160,6 +160,7 @@ Shader "Boscali/MapSurface"
             struct Attributes { float3 positionOS : POSITION; float3 normalOS : NORMAL; half4 color : COLOR; };
             float4 vert(Attributes v) : SV_POSITION
             {
+                if (v.color.a > .72 && v.color.a < .78) return float4(0, 0, -1, 0);
                 float3 positionWS = SwayedWS(v.positionOS, v.color.a);
                 float4 positionCS = TransformWorldToHClip(ApplyShadowBias(positionWS, TransformObjectToWorldNormal(v.normalOS), _LightDirection));
                 #if UNITY_REVERSED_Z
@@ -182,7 +183,11 @@ Shader "Boscali/MapSurface"
             #pragma vertex vert
             #pragma fragment frag
             struct Attributes { float3 positionOS : POSITION; half4 color : COLOR; };
-            float4 vert(Attributes v) : SV_POSITION { return TransformWorldToHClip(SwayedWS(v.positionOS, v.color.a)); }
+            float4 vert(Attributes v) : SV_POSITION
+            {
+                if (v.color.a > .72 && v.color.a < .78) return float4(0, 0, -1, 0);
+                return TransformWorldToHClip(SwayedWS(v.positionOS, v.color.a));
+            }
             half4 frag() : SV_Target { return 0; }
             ENDHLSL
         }
@@ -199,6 +204,12 @@ Shader "Boscali/MapSurface"
             Varyings vert(Attributes v)
             {
                 Varyings o;
+                if (v.color.a > .72 && v.color.a < .78)
+                {
+                    o.positionCS = float4(0, 0, -1, 0);
+                    o.normalWS = half3(0, 1, 0);
+                    return o;
+                }
                 o.positionCS = TransformWorldToHClip(SwayedWS(v.positionOS, v.color.a));
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
                 return o;
