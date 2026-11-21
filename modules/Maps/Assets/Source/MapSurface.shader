@@ -7,6 +7,13 @@ Shader "Boscali/MapSurface"
         _Sway ("Wind Sway (m)", Float) = 0
         _Cull ("Cull", Float) = 2
         _Detail ("Detail Contrast", Range(0,1)) = .35
+        [Toggle(_DETAIL)] _DetailSurfaces ("Generated detail and decals", Float) = 0
+        _DetailTex ("Detail", 2D) = "grey" {}
+        _DetailNormal ("Detail normal", 2D) = "bump" {}
+        _DetailScale ("Detail repeats per metre", Float) = .35
+        _DetailStrength ("Detail strength", Range(0,1)) = .6
+        _DecalTex ("Decal atlas", 2D) = "white" {}
+        _DecalStrength ("Decal strength", Range(0,1)) = 1
         [Toggle(_TEXTURED)] _Textured ("Surfaces by vertex alpha", Float) = 0
         _TexA ("Concrete (alpha 1)", 2D) = "white" {}
         _TexB ("Sheet metal (alpha 0)", 2D) = "white" {}
@@ -23,6 +30,7 @@ Shader "Boscali/MapSurface"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
         CBUFFER_START(UnityPerMaterial)
         float _Sway, _Cull, _Detail, _Textured;
+        float _DetailSurfaces, _DetailScale, _DetailStrength, _DecalStrength;
         float4 _TexTile, _TexGain;
         CBUFFER_END
         float3 SwayedWS(float3 positionOS, half weight)
@@ -45,7 +53,10 @@ Shader "Boscali/MapSurface"
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #pragma multi_compile_fog
             #pragma shader_feature_local _TEXTURED
+            #pragma shader_feature_local _DETAIL
             TEXTURE2D(_TexA); TEXTURE2D(_TexB); TEXTURE2D(_TexC); SAMPLER(sampler_TexA);
+            TEXTURE2D(_DetailTex); TEXTURE2D(_DetailNormal); TEXTURE2D(_DecalTex);
+            SAMPLER(sampler_DetailTex); SAMPLER(sampler_DetailNormal); SAMPLER(sampler_DecalTex);
             struct Attributes { float3 positionOS : POSITION; float3 normalOS : NORMAL; half4 color : COLOR; float2 uv : TEXCOORD0; };
             struct Varyings
             {
@@ -89,13 +100,37 @@ Shader "Boscali/MapSurface"
                 // field perturbs the normal so kit rock and markings catch the light at close range.
                 half grain = Grain(i.positionOS.xz);
                 half3 albedo = i.color.rgb * (1 - _Detail * .5 + _Detail * grain);
+                float fade = saturate(300.0 / distance(_WorldSpaceCameraPos, i.positionWS));
+                half decal = step(.72, i.color.a) * step(i.color.a, .78);
+                #ifdef _DETAIL
+                half3 detail = SAMPLE_TEXTURE2D(_DetailTex, sampler_DetailTex, i.uv * _DetailScale).rgb;
+                albedo *= lerp(1, detail * 1.08, _DetailStrength * fade * (1 - decal));
+                if (decal < .5)
+                {
+                    half3 dn = SAMPLE_TEXTURE2D(_DetailNormal, sampler_DetailNormal, i.uv * _DetailScale).xyz * 2 - 1;
+                    half3 dp1 = ddx(i.positionWS), dp2 = ddy(i.positionWS);
+                    float2 duv1 = ddx(i.uv), duv2 = ddy(i.uv);
+                    half3 dp2perp = cross(dp2, normal), dp1perp = cross(normal, dp1);
+                    half3 t = dp2perp * duv1.x + dp1perp * duv2.x;
+                    half3 bt = dp2perp * duv1.y + dp1perp * duv2.y;
+                    float invmax = rsqrt(max(dot(t, t), dot(bt, bt)));
+                    normal = normalize(t * dn.x * invmax + bt * dn.y * invmax + normal * dn.z);
+                }
+                #endif
                 #ifdef _TEXTURED
                 half3 concrete = SAMPLE_TEXTURE2D(_TexA, sampler_TexA, i.uv * _TexTile.x).rgb * _TexGain.x;
                 half3 metal = SAMPLE_TEXTURE2D(_TexB, sampler_TexA, i.uv * _TexTile.y).rgb * _TexGain.y;
                 half3 gabion = SAMPLE_TEXTURE2D(_TexC, sampler_TexA, i.uv * _TexTile.z).rgb * _TexGain.z;
-                albedo *= i.color.a > .75 ? concrete : i.color.a < .25 ? metal : gabion;
+                albedo *= i.color.a > .85 ? concrete : i.color.a < .25 ? metal : i.color.a > .4 && i.color.a < .6 ? gabion : half3(1, 1, 1);
                 #endif
-                float fade = saturate(300.0 / distance(_WorldSpaceCameraPos, i.positionWS));
+                #ifdef _DETAIL
+                if (decal > .5)
+                {
+                    half4 d = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, i.uv);
+                    clip(d.a - .5);
+                    albedo = lerp(albedo, i.color.rgb * d.rgb, _DecalStrength);
+                }
+                #endif
                 float e = .6;
                 float2 dg = float2(Grain(i.positionOS.xz + float2(e, 0)) - Grain(i.positionOS.xz - float2(e, 0)),
                                    Grain(i.positionOS.xz + float2(0, e)) - Grain(i.positionOS.xz - float2(0, e))) / (2.0 * e);
@@ -125,6 +160,7 @@ Shader "Boscali/MapSurface"
             struct Attributes { float3 positionOS : POSITION; float3 normalOS : NORMAL; half4 color : COLOR; };
             float4 vert(Attributes v) : SV_POSITION
             {
+                if (v.color.a > .72 && v.color.a < .78) return float4(0, 0, -1, 0);
                 float3 positionWS = SwayedWS(v.positionOS, v.color.a);
                 float4 positionCS = TransformWorldToHClip(ApplyShadowBias(positionWS, TransformObjectToWorldNormal(v.normalOS), _LightDirection));
                 #if UNITY_REVERSED_Z
@@ -147,7 +183,11 @@ Shader "Boscali/MapSurface"
             #pragma vertex vert
             #pragma fragment frag
             struct Attributes { float3 positionOS : POSITION; half4 color : COLOR; };
-            float4 vert(Attributes v) : SV_POSITION { return TransformWorldToHClip(SwayedWS(v.positionOS, v.color.a)); }
+            float4 vert(Attributes v) : SV_POSITION
+            {
+                if (v.color.a > .72 && v.color.a < .78) return float4(0, 0, -1, 0);
+                return TransformWorldToHClip(SwayedWS(v.positionOS, v.color.a));
+            }
             half4 frag() : SV_Target { return 0; }
             ENDHLSL
         }
@@ -164,6 +204,12 @@ Shader "Boscali/MapSurface"
             Varyings vert(Attributes v)
             {
                 Varyings o;
+                if (v.color.a > .72 && v.color.a < .78)
+                {
+                    o.positionCS = float4(0, 0, -1, 0);
+                    o.normalWS = half3(0, 1, 0);
+                    return o;
+                }
                 o.positionCS = TransformWorldToHClip(SwayedWS(v.positionOS, v.color.a));
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
                 return o;
