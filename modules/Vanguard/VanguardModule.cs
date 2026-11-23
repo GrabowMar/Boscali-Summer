@@ -79,7 +79,7 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<LanceEngineDraw>(60);
             context.AddSceneService<Presentation.TowCable>(60);
             context.AddSceneService<Presentation.MaldjHud>(60);
-            context.AddSceneService<SkywellService>(60);
+            context.AddService<ISkywellTenderView>(context.AddSceneService<SkywellService>(60));   // the megaplane sim hooks read the tender through it
             context.AddSceneService<Networking.SkywellNet>(60);
             context.AddSceneService<Presentation.SkywellVisuals>(60);
             context.AddService<ISkywellControl>(context.AddSceneService<Presentation.SkywellHud>(60));

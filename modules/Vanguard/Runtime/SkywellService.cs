@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Vanguard.Domain;
@@ -15,7 +16,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     /// tender returns to the tow position. Nothing here, or anywhere in SKYWELL, ever moves a receiver: AI receivers that need service
     /// are called in and fly to the hold slot on their own flight loop (SkywellVisuals.SteerAfterPilot). AI tankers deploy on their own.
     /// </summary>
-    internal sealed partial class SkywellService : MonoBehaviour, ISceneService
+    internal sealed partial class SkywellService : MonoBehaviour, ISceneService, ISkywellTenderView
     {
         public const float FuelStockKg = 8000f;
         public const float AiEngageRange = 1500f;   // host: AI receivers astern within this of the zone are called in
@@ -111,6 +112,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         internal static string StateOf(Aircraft tanker) =>
             instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.State.ToString() : "none";
+
+        string ISkywellTenderView.TenderState(Aircraft tanker) => StateOf(tanker);
 
         public static int Rounds(Aircraft tanker) =>
             instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.Rounds : -1;

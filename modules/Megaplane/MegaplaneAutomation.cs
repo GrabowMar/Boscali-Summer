@@ -1,6 +1,8 @@
 #if !PUBLIC_RELEASE
 using System.Collections.Generic;
 using System.Linq;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Megaplane
@@ -97,7 +99,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 stations = a.weaponStations.Select(s => (s.WeaponInfo != null ? s.WeaponInfo.weaponName : "-") + " " + s.Ammo).ToArray(),
                 drones = UnitRegistry.allUnits.Count(u => u is Missile m && !m.disabled && m.owner == a && m.definition != null && m.definition.jsonKey.StartsWith("VG_")),
                 mounts = a.weaponManager.hardpointSets.Select(s => s.name + ": " + string.Join(" ", s.hardpoints.Select(h => h.transform == null ? "null" : h.transform.childCount + "c/" + h.transform.GetComponentsInChildren<Renderer>().Count(x => x.enabled) + "r/" + h.transform.GetComponentsInChildren<Renderer>().Select(x => x.bounds.size.magnitude).DefaultIfEmpty(0f).Max().ToString("0.0") + "m"))).ToArray(),
-                tender = BoscaliSummer.Modules.Vanguard.Runtime.SkywellService.StateOf(a), vehiclesNew = vehiclesNow - vehicleBase, hasTender = a.weaponStations.Any(s => s.WeaponInfo != null && s.WeaponInfo.name.Contains("Skywell")),
+                tender = ModuleServices.TryGet(out ISkywellTenderView tenders) ? tenders.TenderState(a) : "none", vehiclesNew = vehiclesNow - vehicleBase, hasTender = a.weaponStations.Any(s => s.WeaponInfo != null && s.WeaponInfo.name.Contains("Skywell")),
             };
         }
 
