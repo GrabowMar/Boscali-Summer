@@ -5,6 +5,7 @@ From this directory, in the activated workspace:
     python build_status.py
     blender -b --factory-startup --python-exit-code 1 --python verify_rig.py
     blender -b --factory-startup --python-exit-code 1 --python verify_assist.py
+    blender -b --factory-startup --python-exit-code 1 --python verify_junctions.py
 
 The second command requires Pillow and derives the cockpit damage diagram from
 the final exported mesh. Use the workspace nomodkit venv for that command.
@@ -40,6 +41,7 @@ sys.path.insert(0,str(HERE))
 from bsmp import read_model
 from export_bsmp import write_model
 from forebody import make_forebody
+from crown import finish_crown_shading
 from structures import detail_structure
 from finish import finish_surface
 from build_lods import write_lods
@@ -117,6 +119,7 @@ def build():
     detail_boom_services(nodes)
     fit_wing_splices(nodes)
     fit_reactor(nodes)
+    finish_crown_shading(nodes)
     bpy.context.view_layer.update()
     root = nodes["BS_Megaplane"]
     write_lods(nodes, ASSETS/"megaplane.lod.gz")

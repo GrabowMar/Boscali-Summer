@@ -22,111 +22,64 @@ def upper_at(objects,x,y):
     return max(heights,default=None)
 
 
-def original_shoulders(nodes):
-    # Each longitudinal segment terminates on an existing damage seam. The outer
-    # wing takes its glove with it; the forward two chines ride the pressure hull.
-    stations=np.array([
-        (-40,15.4,7.5),(-32,22.0,7.25),(-21,32.0,7.25),(-6,39.5,7.1),
-        (7,40.7,7.1),(15,37.8,7.0),(22.428,32.8,6.70),(34,25.5,6.20),
-        (43,21.5,5.90),(51.588,18.75,5.50),(60,17.1,5.02),(68,15.65,4.50),
-        (76,14.0,4.0),(82,12.3,3.45),(88,10.45,2.95),(94,8.05,2.35)])
-    for sign,side in ((-1,"L"),(1,"R")):
-        wing=nodes["Wing_Root_"+side]
-        def cross(y):
-            half=np.interp(y,stations[:,0],stations[:,1])
-            z=np.interp(y,stations[:,0],stations[:,2])
-            body=nodes["Fuselage_Aft" if y < -20.187 else "Fuselage_Center" if y<22.428
-                       else "Fuselage_Forward" if y<51.588 else "Fuselage_Cockpit"]
-            # The platform is let into the upper shoulder, leaving the lower pressure wall accessible.
-            inside=min(half*.64,11.65)
-            inner_z=upper_at([body],inside*sign,y)
-            if inner_z is None:
-                inner_z=z+3
-            top_z=inner_z-.23
-            strip=inside+(half-inside)*.61
-            underneath=upper_at([wing],strip*sign,y)
-            across_z=top_z+(z+.85-top_z)*.64
-            if underneath is not None:
-                across_z=max(across_z,underneath+.22)
-            inner_z2=z-(2.4 if y>45 else 3.15)
-            section = [Vector((sign*x,y,h)) for x,h in
-                    ((inside,top_z),(strip,across_z),(half-.46,z+.62),(half,z+.10),
-                     (half-.14,z-.39),(half-1.0,z-.85),(inside-.4,inner_z2))]
-            # Feather the last metres into the cockpit cheek. The terminating
-            # cross-section lies entirely under the pressure skin.
-            if y > 82:
-                blend = (y - 82) / 12
-                for point in section:
-                    ceiling = upper_at([body], point.x, y)
-                    if ceiling is not None:
-                        point.z -= blend * max(0., point.z - ceiling + .18)
-            return section
-        splits=[(-40,22.428,wing),(22.428,51.588,nodes["Fuselage_Forward"]),
-                (51.588,94,nodes["Fuselage_Cockpit"])]
-        for k,(begin,end,owner) in enumerate(splits):
-            upper,lower=Surface(),Surface()
-            ys=sorted({begin,end,*[float(v) for v in stations[:,0] if begin<v<end]})
-            for y0,y1 in zip(ys,ys[1:]):
-                left,right=cross(y0),cross(y1)
-                for j in range(6):
-                    normal=(0,0,1) if j<=1 else (sign,0,0) if j<=3 else (0,0,-1)
-                    material=("ChineTop","Skin","ChineTop","ChineEdge","ChineLower","ChineLower")[j]
-                    shell=upper if j<3 else lower
-                    shell.face([left[j],left[j+1],right[j+1],right[j]],material,normal)
-            for y,d in ((begin,-1),(end,1)):
-                finish = "ChineLower" if y in (-40,94) else "Primer"
-                upper.face(cross(y),finish,(0,d,0))
-            if k==0:
-                for mesh,surface in (("Fairing_WingRootUp_",upper),("Fairing_WingRootLow_",lower)):
-                    obj=nodes[mesh+side]
-                    world=obj.matrix_world.copy()
-                    obj.parent=owner
-                    obj.matrix_world=world
-                    surface.install(obj)
-            else:
-                obj=child_mesh("Strake_"+owner.name+"_"+side,owner)
-                for i,face in enumerate(lower.faces):
-                    material=lower.materials[lower.slots[i]]
-                    upper.face([lower.points[j] for j in face],material,(sign,0,-1))
-                upper.install(obj)
-                nodes[obj.name]=obj
-
-
 def machinery_trunks(nodes):
-    # Removable radiator packs straddle the central deck apertures. The gaps are
-    # measured from the four real game launch blocks, which need clear overhead space.
-    owner=nodes["Fuselage_Hump"]
-    outer=Surface()
-    for sign in (-1,1):
-        centre=sign*6.8
-        for y0,y1 in ((-34.6,-13.5),(-2.1,10.9),(21.0,27.3)):
-            stations=[(y0,.83,.34),(y0+1.6,1.55,1.03),(y1-2.5,1.55,1.07),(y1,1.02,.33)]
-            rings=[]
-            for y,w,h in stations:
-                z=upper_at([owner,nodes["Fuselage_Center"],nodes["Fuselage_Forward"]],centre,y)
-                if z is None: z=11.45
-                rings.append([Vector((centre+dx,y,z+dz)) for dx,dz in
-                             ((-w,-.09),(-w+.12,h*.68),(-w*.72,h),
-                              (w*.72,h),(w-.12,h*.68),(w,-.09))])
-            for u,v in zip(rings,rings[1:]):
-                for j in range(5):
-                    outer.face([u[j],u[j+1],v[j+1],v[j]],"ChineLower" if j in (0,4) else "ChineTop",
-                               ((-1 if j<2 else 1) if j!=2 else 0,0,1 if 0<j<4 else 0))
-            for r,d in ((rings[0],-1),(rings[-1],1)):
-                outer.face(r,"Mech",(0,d,0))
-            if y1-y0<7:continue
-            # Shutters are recessed into removable dark trays, with a service strip on one side.
-            for y in np.arange(y0+2.2,y1-2.6,2.8):
-                z=upper_at([owner],centre,y)
-                if z is None: continue
-                z+=1.081
-                for v in np.arange(-.83,.89,.22):
-                    outer.face([(centre+dx,y+v+dy,z+dz) for dx,dy,dz in
-                                ((-.82,0,.013),(.82,0,.013),(.82,.12,.055),(-.82,.12,.055))],
-                               "Dark",(0,0,1))
-    obj=child_mesh("Dorsal_ServiceTrunks",owner)
-    outer.install(obj)
-    nodes[obj.name]=obj
+    """Form four low radiator outlets in the skin of the removable service cover."""
+    owner = nodes["Fuselage_Hump"]
+    surface = Surface()
+
+    def point(x, y, height):
+        z = upper_at([owner], x, y)
+        if z is None:
+            raise ValueError(f"Radiator outlet overhangs its detachable cover at {x}, {y}")
+        return (x, y, z + height)
+
+    for centre in (-6.8, 6.8):
+        for aft, fore in ((-34.6, -13.5), (-2.1, 10.9)):
+            # The shoe sinks into the compound-curved cover. Its top grows
+            # gradually out of the skin before opening into the louvred trough.
+            mouth_aft, mouth_fore = aft + 2.9, fore - 2.9
+            stations = sorted({aft, aft + .8, mouth_aft, mouth_fore, fore - .8, fore,
+                               *np.arange(aft + 1.4, fore, 1.4)})
+            rows = []
+            for y in stations:
+                t = min(y - aft, fore - y, 2.9) / 2.9
+                rise = t*t*(3 - 2*t)
+                width = .54 + 1.12*rise
+                height = .038 + .405*rise
+                rows.append([point(centre + x*width, y, h) for x, h in
+                             ((-1., -.045), (-.87, height*.26), (-.61, height),
+                              (-.46, height), (.46, height), (.61, height),
+                              (.87, height*.26), (1., -.045))])
+            for y, a, b in zip(stations, rows, rows[1:]):
+                for j in range(7):
+                    if j == 3 and mouth_aft <= y < mouth_fore:
+                        continue
+                    surface.face((a[j], a[j+1], b[j+1], b[j]), "Skin", (0, 0, 1))
+            for row, normal in ((rows[0], -1), (rows[-1], 1)):
+                surface.face(row, "Skin", (0, normal, 0))
+
+            # Walls and floor leave a real recess beneath the inclined blades.
+            lip = .46 * 1.66
+            bed = lip - .075
+            ys = [y for y in stations if mouth_aft <= y <= mouth_fore]
+            for a, b in zip(ys, ys[1:]):
+                surface.face([point(centre+x, y, .17) for x,y in
+                              ((-bed,a),(bed,a),(bed,b),(-bed,b))], "Dark", (0,0,1))
+                for side in (-1, 1):
+                    surface.face([point(centre+side*x, y, h) for x,y,h in
+                                  ((lip,a,.443),(lip,b,.443),(bed,b,.17),(bed,a,.17))],
+                                 "Mech", (-side,0,0))
+            for y, direction in ((mouth_aft, 1), (mouth_fore, -1)):
+                surface.face([point(centre+x, y, h) for x,h in
+                              ((-lip,.443),(lip,.443),(bed,.17),(-bed,.17))],
+                             "Mech", (0,direction,0))
+            for y in np.arange(mouth_aft + .18, mouth_fore - .35, .48):
+                surface.face([point(centre+x, y+dy, h) for x,dy,h in
+                              ((-bed,0,.22),(bed,0,.22),(bed,.31,.395),(-bed,.31,.395))],
+                             "ChineLower", (0,0,1))
+    obj = child_mesh("Dorsal_ServiceTrunks", owner)
+    surface.install(obj)
+    nodes[obj.name] = obj
 
 
 def reshape(nodes):
@@ -278,14 +231,15 @@ def inspection_covers(nodes):
 
 
 def rebuild_planform(nodes):
+    from junctions import fit_junctions
     skin=bpy.data.materials["BS_Megaplane_Skin"]
     paint(skin,(.112,.131,.150),.042,.48)
     new_paint("ChineTop",(.143,.158,.169),.48,skin)
     new_paint("ChineLower",(.078,.092,.108),.42,skin)
     new_paint("ChineEdge",(.092,.113,.125),.58,skin)
     new_paint("SparPanel",(.137,.153,.172),.51,skin)
-    original_shoulders(nodes)
     machinery_trunks(nodes)
     reshape(nodes)
+    fit_junctions(nodes)
     inspection_covers(nodes)
     hinge_markers(nodes)

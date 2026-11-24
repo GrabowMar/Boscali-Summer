@@ -8,6 +8,7 @@ from bisect import bisect_left
 from math import atan2, cos, pi, radians, sin
 import bpy
 from mathutils import Vector
+from crown import bridge_radius, dorsal_crown, forward_crown, separate_forward_aerials, smooth
 
 
 class Surface:
@@ -90,6 +91,9 @@ def make_forebody(nodes):
         vertex.co.x += p.x*.19*weight
         vertex.co.z += 1.8*weight
     front.data.update()
+    forward_crown(front,nodes["DorsalBarbette_0"])
+    dorsal_crown(nodes)
+    separate_forward_aerials(nodes)
     seam = set()
     for face in front.data.polygons:
         if not front.data.materials[face.material_index].name.endswith("_Skin"):
@@ -113,26 +117,36 @@ def make_forebody(nodes):
              (.10,.956),(.53,.74),(.78,.60),(.93,.42),(1.,0.)]
     plan_x = [(0.,0.),(.15,.20),(.42,.51),(.77,.84),(1.,1.)]
     plan_y = [(0.,1.),(.15,.943),(.42,.736),(.77,.342),(1.,0.)]
-    latitudes = sorted(set([z for z,_ in profile]+[v for v,_ in sections]+[low,high]))
+    latitudes = sorted(set([z for z,_ in profile]+[v for v,_ in sections]+[low,high]+
+                           [high+(1-high)*t for t in (.15,.28,.42,.56,.69,.80,.89,.95,.982,.996)]))
+    def width(v):
+        return bridge_radius(v,high,width_at(sections,v),width_at(sections,high))
+    def reach_at(v):
+        return bridge_radius(v,high,width_at(reach,v),width_at(reach,high))
     def strip(y,v,s):
         t = (y-start)/(cap_start-start)
         # The aft lip still exactly matches the detachable pressure section.
         amount = t*t*(3-2*t)
         original = width_at(profile,v)
-        width = original+(13.1*width_at(sections,v)-original)*amount
+        breadth = original+(13.1*width(v)-original)*amount
         bottom_z = bottom+1.68*min(1,(y-start)/(gear_end-start))
         roof_z = bottom+height-1.05*amount
-        return Vector((s*width,y,bottom_z+(roof_z-bottom_z)*(v+1)*.5))
+        crown_tangent=(cap_start-start)*(-.058*(t**3-2*t*t+t)-.085*(t**3-t*t))
+        z=bottom_z+(roof_z-bottom_z)*(v+1)*.5+crown_tangent*smooth((v-.15)/.65)
+        return Vector((s*breadth,y,z))
     def cap(phi,v):
         t=abs(phi)/(pi/2)
         z=strip(cap_start,v,1).z
-        longitudinal=width_at(reach,v)*width_at(plan_y,t)
-        return Vector(((1 if phi>=0 else -1)*13.1*width_at(sections,v)*width_at(plan_x,t),
+        roll=smooth((v-high)/.14)
+        across=(1-roll)*width_at(plan_x,t)+roll*sin(pi*t/2)
+        forward=(1-roll)*width_at(plan_y,t)+roll*cos(pi*t/2)
+        longitudinal=reach_at(v)*forward
+        return Vector(((1 if phi>=0 else -1)*13.1*width(v)*across,
                        cap_start+(tip-cap_start)*longitudinal,z-2.05*longitudinal))
     shell, glass, frame = Surface(), Surface(), Surface()
     for s in (-1,1):
         for v0,v1 in zip(latitudes,latitudes[1:]):
-            stations=(start,(start+gear_end)/2,gear_end,66.,72.,cap_start)
+            stations=(start,53.2,(start+gear_end)/2,gear_end,66.,72.,76.,78.,cap_start)
             for y0,y1 in zip(stations,stations[1:]):
                 if y0<gear_end and v0<gear_edge-.00001:
                     continue

@@ -155,6 +155,44 @@ def verify_splice_sections(nodes, check):
                         check(good, f"{web.name} at {fraction}/{level} has recess {depth:.3f} m")
 
 
+def elevation(mesh, x, y):
+    p = mesh.ray_cast((x,y,50), (0,0,-1))[0]
+    if p is None:
+        raise ValueError(f"Missing supporting skin at {x:.3f}, {y:.3f}")
+    return p.z
+
+
+def verify_crown(nodes, check):
+    forward = nodes["Fuselage_Forward"]
+    aft, bridge = tree(forward, 'X', 0), tree(nodes["Fuselage_Cockpit"], 'X', 0)
+    y = 51.588
+    for x in (-9, -6, -3, 0, 3, 6, 9):
+        a, b = elevation(aft,x,y-.005), elevation(bridge,x,y+.005)
+        slope_a = (a-elevation(aft,x,y-.3))/.295
+        slope_b = (elevation(bridge,x,y+.3)-b)/.295
+        check(abs(b-a)<.003 and abs(slope_a-slope_b)<.025,
+              f"Pressure roof steps or changes slope at the bridge seam, x={x} m")
+    check(nodes["Detail_ForwardAerials"].parent == forward, "Forward aerials must leave with their skin")
+
+
+def verify_radiator_outlets(nodes, check):
+    ducts = nodes["Dorsal_ServiceTrunks"]
+    cover = nodes["Fuselage_Hump"]
+    check(ducts.parent == cover, "Radiators must leave with the dorsal cover")
+    cover_mesh, duct_mesh = tree(cover, 'X', 0), tree(ducts, 'X', 0)
+    points = np.unique(vertices(ducts) + position(ducts), axis=0)
+    above = [z-elevation(cover_mesh,x,y) for x,y,z in points]
+    check(-.06 < min(above) < -.02 and max(above) < .47, "Radiator lips must bed into the cover")
+    for x in (-6.8, 6.8):
+        for y in (-24.05, 4.4):
+            rim = elevation(duct_mesh, x+.84, y) - elevation(cover_mesh, x+.84, y)
+            samples = [y+i*.025 for i in range(24)]
+            relief = [elevation(duct_mesh,x,s) - elevation(cover_mesh,x,s) for s in samples]
+            check(rim-min(relief) > .21 and max(relief)-min(relief) > .17,
+                  f"Missing recessed louvres at {x}, {y}")
+    print(f"Four louvred outlets on the removable roof, maximum rise {max(above):.3f} m")
+
+
 def verify(nodes):
     errors = []
     def check(test, description):
@@ -162,6 +200,8 @@ def verify(nodes):
             errors.append(description)
 
     verify_splice_sections(nodes, check)
+    verify_crown(nodes, check)
+    verify_radiator_outlets(nodes, check)
     materials = set()
     minimum, maximum = np.full(3,np.inf), np.full(3,-np.inf)
     triangles = 0
