@@ -1129,7 +1129,9 @@ def analyse_singletons(repo):
                                + r")?" + re.escape(name) + r"\s*=\s*null\b")
             files = {fd}
             if holder is not None:
-                files |= {t.fd for t in repo.types_by_name.get(holder.name, []) if t.kind == holder.kind}
+                # Other parts of the same partial type only (same namespace and nesting), not a namesake elsewhere.
+                files |= {t.fd for t in repo.types_by_name.get(holder.name, [])
+                          if t.kind == holder.kind and t.full == holder.full}
             if not any(reset.search(f.masked) for f in files):
                 missing.append("%s:%s.%s" % (fd.path, owner_name or "?", name))
     return sorted(set(missing))
