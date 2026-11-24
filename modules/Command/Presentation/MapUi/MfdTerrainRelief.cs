@@ -2472,7 +2472,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     [HarmonyPatch(typeof(UnitMapIcon), nameof(UnitMapIcon.UpdateIcon))]
     internal static class MfdReliefUnitIconPatch
     {
+        // After Wing's WingMapTint.MapIconColorPatch: its badge measures the icon before Fit rescales and ProjectIcon moves it.
         [HarmonyPostfix]
+        [HarmonyAfter("com.marci.boscalisummer.module.wing")]
         private static void Postfix(UnitMapIcon __instance, float mapDisplayFactor)
         {
             MapSymbology.Apply(__instance, MfdTerrainRelief.IsDrawing);

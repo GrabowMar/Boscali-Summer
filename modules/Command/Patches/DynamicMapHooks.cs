@@ -40,6 +40,8 @@ namespace BoscaliSummer.Modules.Command.Patches
     [HarmonyPatch(typeof(DynamicMap), "MapControls")]
     internal static class MapControlsPanelGuardPatch
     {
+        // After Wing's WmcMapControlsPatch: its CENTER/FIT moves the view that BlockNativeControls reads through TryGetCursorCoordinates.
+        [HarmonyAfter("com.marci.boscalisummer.module.wing")]
         private static bool Prefix(DynamicMap __instance)
         {
             if (MfdMapInteractions.BlockNativeControls(__instance)) return false;
@@ -62,6 +64,8 @@ namespace BoscaliSummer.Modules.Command.Patches
     [HarmonyPatch(typeof(UnitMapIcon), nameof(UnitMapIcon.ClickIcon))]
     internal static class MapBoxIconClickGuardPatch
     {
+        // After Wing's WmcMapSelection.ClickIconPatch: both prefixes always run and act on the same click (WMC selection first).
+        [HarmonyAfter("com.marci.boscalisummer.module.wing")]
         private static bool Prefix(UnitMapIcon __instance, MapIcon.ClickSource clickSource)
         {
             if (MfdMapInteractions.BlockIconClick() || ReliefNavigator.BlockIconClick()) return false;

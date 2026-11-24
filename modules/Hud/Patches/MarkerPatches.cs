@@ -37,7 +37,9 @@ namespace BoscaliSummer.Modules.Hud.Patches
     [HarmonyPatch(typeof(HUDUnitMarker), "UpdateColor")]
     internal static class MarkerColorPatch
     {
+        // After Wing's WingHudTint.UpdateColorPatch: the ink captures the colour the tint wrote. Priority.Last keeps it after other plugins.
         [HarmonyPriority(Priority.Last)]
+        [HarmonyAfter("com.marci.boscalisummer.module.wing")]
         private static void Postfix(HUDUnitMarker __instance) => MarkerInk.Capture(__instance);
     }
 }

@@ -126,6 +126,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return null;
         }
 
+        // After Chatter's ChatterKillPatch and Wing's kill prefixes: the scope opened here tags the next feed line, which must be the kill's.
+        [HarmonyAfter("com.marci.boscalisummer.module.chatter", "com.marci.boscalisummer.module.wing")]
         private static void Prefix(PersistentID killedID, KillType killedType)
         {
             try

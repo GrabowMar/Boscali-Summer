@@ -109,6 +109,8 @@ namespace BoscaliSummer.Modules.Maps.Patches
     {
         internal static Func<string, Mission> Resolve;
 
+        // After Scenario's LaunchMissionPatch and Gamemodes' GamemodeLaunchPatch: every prefix runs and the last __result writer wins.
+        [HarmonyAfter("com.marci.boscalisummer.module.scenario", "com.marci.boscalisummer.module.gamemodes")]
         private static bool Prefix(string missionName, ref Mission __result)
         {
             if (Resolve == null || string.IsNullOrEmpty(missionName)) return true;

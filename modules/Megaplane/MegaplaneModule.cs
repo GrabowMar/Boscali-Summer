@@ -37,6 +37,8 @@ namespace BoscaliSummer.Modules.Megaplane
     internal static class MegaplaneEncyclopediaPatch
     {
         private static void Prefix(Encyclopedia __instance) => __instance.aircraft.RemoveAll(d => d != null && d.jsonKey == MegaplaneTemplate.Key);
+        // After SeaStructures' SeaEncyclopediaPatch and Skylark's SkylarkEncyclopediaPatch: each appends to IndexLookup, whose order is the wire index.
+        [HarmonyAfter("com.marci.boscalisummer.module.sea-content", "com.marci.boscalisummer.module.skylark")]
         private static void Postfix(Encyclopedia __instance)
         {
             if (MegaplaneTemplate.Definition != null || !MegaplaneBlueprinterPatch.Available) MegaplaneTemplate.Register(__instance);

@@ -20,7 +20,7 @@ tree, skipping `bin/`, `obj/` and `.git/`. Output is LF, sorted and timestamp-fr
 |---|---|
 | `docs/generated/MODULES.md` | One row per owner (`modules/<Name>`, `Core`, `AvionicsUi`, `Dev`): `IModule` class, id, display name, declared dependencies, `BoscaliMod.Compose` roster condition, mission profile (core / battlefield / optional), csproj compile status, files, lines, Harmony patches, contracts, settings sections, network messages, sim hooks; plus the module dependency graph (mermaid and a list) and the roster order. |
 | `docs/generated/CONTRACTS.md` | Each `Core/Contracts` interface: who registers it as a service, which classes implement it, who resolves it; services registered under non-contract keys; the other Contracts types and the owners that reference them. |
-| `docs/generated/HARMONY.md` | Every patch: target `Type.Method` (or `dynamic`), owner, patch class, file, form; targets patched by two or more owners are flagged. |
+| `docs/generated/HARMONY.md` | Every patch: target `Type.Method` (or `dynamic`), owner, patch class, file, form, declared order (`[HarmonyAfter]`/`[HarmonyBefore]` ids); targets patched by two or more owners are flagged and listed with their review from `tools/arch/harmony-shared.json` (classification, order pairs, reason). |
 | `docs/generated/SETTINGS.md` | Config sections and keys in declaration order per owner and file, SET client settings, SET SERVER host views. |
 | `docs/generated/NETWORK.md` | Protocol constants and Mirage message types per owner. |
 | `docs/generated/SIMHOOKS.md` | `*Automation`, `*Proof`, `*Probe`, `*Demo` types with their static methods (nomodkit calls them by name), and `BoscaliSummer.*` names spelled as strings in mod code. |
@@ -53,7 +53,10 @@ found structurally while literals are read from the original text. Detected form
   whose body uses `AccessTools.Method/DeclaredMethod/PropertyGetter/...(typeof(T), ...)`, `typeof(T).GetMethod(...)`,
   a `foreach` over a literal name array, or a `StartsWith("X")` scan (shown as `T.X*`), following one helper call in
   the same class or `Type.Method()` elsewhere; and manual `harmony.Patch(...)`. `get_X`/`set_X` normalise to
-  `T.X (Getter|Setter)`. Types are compared by simple name. Anything else is `dynamic`.
+  `T.X (Getter|Setter)`. Types are compared by simple name. Anything else is `dynamic`. Order declarations are read
+  from `[HarmonyAfter(...)]` / `[HarmonyBefore(...)]` on the class or any of its methods (literal or `const string`
+  ids, merged per class, so a class with a prefix and a postfix reports the union) and from
+  `new HarmonyMethod(...) { after = new[] { "..." } }` inside a manual `Patch(...)` call.
 - **Dev-only**: code inside `#if !PUBLIC_RELEASE` (also `#else` of `#if PUBLIC_RELEASE`) or in files the release
   build does not compile.
 
@@ -83,7 +86,19 @@ found structurally while literals are read from the original text. Detected form
    (`path:Type.Field`) and each needs a hand-written `r4_reasons` entry, or `--check` fails. Today: none. The check
    sees only the field name and a `= null` somewhere; whether that runs at the right time is in
    [STATIC-STATE.md](../../docs/architecture/STATIC-STATE.md).
-6. **Ratchets** that fail only when a number grows: per-owner `Plugin.Settings` / `Plugin.Logger` reads (global
+6. **R5**: every game method patched by two or more owners has an entry in `tools/arch/harmony-shared.json` (hand-written,
+   never generated) with its `owners`, a `classification` (`INDEPENDENT`: the relative order of our patches cannot
+   change the outcome; `ORDER-SENSITIVE`: it can) and a `reason`. `--check` fails when a shared target is missing, when
+   its owner set changed since the review (new sharing), when an entry is no longer shared, when an ORDER-SENSITIVE entry
+   has no `order` or an INDEPENDENT one has one, when an `order` pair `[earlier, later]` (module ids) is not declared
+   in code (a patch of the later module's owner on that target with `[HarmonyAfter("com.marci.boscalisummer.module.<earlier>")]`,
+   or the earlier one's with `[HarmonyBefore(...<later>)]`), and when any `HarmonyAfter`/`HarmonyBefore` names a
+   `com.marci.boscalisummer.module.*` id that no module has. Pairs are checked by owner folder, so for Command
+   (`command`, `strategic-command`) and SeaStructures (`sea`, `sea-content`) either module's patch counts. How to
+   classify: [RECIPES §4](../../docs/architecture/RECIPES.md#4-new-harmony-patch-robust-to-game-updates) step 4. The
+   review itself (reading the patch bodies) is not automated: R5 only makes sure it happened and that the code says what
+   the file says.
+7. **Ratchets** that fail only when a number grows: per-owner `Plugin.Settings` / `Plugin.Logger` reads (global
    state; new code takes `ModuleContext.Settings` / `Logger`), the number of `.cs` files over 1500 lines, per-owner
    namespace declarations outside the owner's prefix (`BoscaliSummer.Modules.<Owner>`, `BoscaliSummer.Core` for Core,
    `NOAvionics` or `BoscaliSummer.AvionicsUi` for AvionicsUi, `BoscaliSummer.Dev` for Dev), and per-owner Harmony

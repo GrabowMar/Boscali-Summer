@@ -14,6 +14,8 @@ namespace BoscaliSummer.Modules.Support.Patches
 
         private static bool Prepare() => TargetMethod() != null;
 
+        // After FireAndDestruction's MissileImpactPatch: it reads `armed` by value before this prefix disarms rods, EMPs and flares.
+        [HarmonyAfter("com.marci.boscalisummer.module.fire-and-destruction")]
         private static void Prefix(
             Missile __instance,
             Unit relativeUnit,

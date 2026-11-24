@@ -21,6 +21,9 @@ namespace BoscaliSummer.Modules.Gamemodes.Patches
     internal static class GamemodeLaunchPatch
     {
         internal static Func<string, Mission> Resolve;
+
+        // After Scenario's LaunchMissionPatch (Maps' MapLaunchPatch runs after this): every prefix runs and the last __result writer wins.
+        [HarmonyAfter("com.marci.boscalisummer.module.scenario")]
         private static bool Prefix(string missionName, ref Mission __result)
         {
             const string scheme = "gamemode:";

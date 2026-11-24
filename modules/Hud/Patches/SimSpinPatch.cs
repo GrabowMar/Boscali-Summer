@@ -30,8 +30,10 @@ namespace BoscaliSummer.Modules.Hud.Patches
             Active = yawDegS != 0f || rollDeg != 0f || zoom != 0f;
             if (installed) return;
             installed = true;
+            // After Immersion's CockpitHeadRotationPatch: both compose cam.transform.localRotation, and the spin goes on top
+            // (tools/arch/harmony-shared.json).
             new Harmony("boscali.sim.spin").Patch(AccessTools.Method(typeof(CameraCockpitState), "UpdateState"),
-                postfix: new HarmonyMethod(typeof(SimSpinPatch), nameof(Postfix)));
+                postfix: new HarmonyMethod(typeof(SimSpinPatch), nameof(Postfix)) { after = new[] { "com.marci.boscalisummer.module.immersion" } });
         }
 
         public static void Stop() => Active = false;

@@ -288,6 +288,8 @@ namespace BoscaliSummer.Modules.Skylark
     [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.UseFuel))]
     internal static class SkylarkBatteryFuelPatch
     {
+        // After Ares' AresFuelPatch: its fuel cheat zeroes fuelDrawn, which this prefix reads (tools/arch/harmony-shared.json).
+        [HarmonyAfter("com.marci.boscalisummer.module.ares")]
         private static bool Prefix(Aircraft __instance, float fuelDrawn, ref bool __result)
         {
             if (fuelDrawn > 0f || !SkylarkDrive.IsSilent(__instance)) return true;

@@ -187,6 +187,8 @@ namespace BoscaliSummer.Modules.Ares.Runtime
     {
         private const float OneHit = 50f;
 
+        // After Spooktober's FallenAcePartDamagePatch: the ace's lives see unmultiplied damage, then ONE-HIT KILLS scales what remains.
+        [HarmonyAfter("com.marci.boscalisummer.module.spooktober")]
         private static bool Prefix(UnitPart __instance, ref float pierceDamage, ref float blastDamage, ref float fireDamage, ref float impactDamage,
             PersistentID dealerID)
         {

@@ -39,12 +39,16 @@ namespace BoscaliSummer.Modules.Megaplane
             yield return AccessTools.Method(typeof(Hangar), nameof(Hangar.CanSpawnAircraft));
         }
 
+        // After Skylark's SkylarkHangarAvailabilityPatch: both append to the hangar's availableAircraft, so this fixes the list order.
+        [HarmonyAfter("com.marci.boscalisummer.module.skylark")]
         private static void Prefix(Hangar __instance) => MegaplaneHangars.Include(__instance);
     }
 
     [HarmonyPatch(typeof(Hangar), "SpawnAircraft")]
     internal static class MegaplaneHangarAirStartPatch
     {
+        // After Gamemodes' HeavyweightQueuedSpawnPatch: __runOriginal must already carry its refusal.
+        [HarmonyAfter("com.marci.boscalisummer.module.gamemodes")]
         private static bool Prefix(Hangar __instance, NuclearOption.Networking.Player player, AircraftDefinition definition, Loadout loadout, float fuelLevel,
             LiveryKey livery, Transform ___spawnTransform, ref GameObject ___spawnedObject, bool __runOriginal)
         {

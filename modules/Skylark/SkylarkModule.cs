@@ -61,6 +61,8 @@ namespace BoscaliSummer.Modules.Skylark
             __instance.aircraft.RemoveAll(d => d != null && d.jsonKey == SkylarkTemplate.Key);
             __instance.weaponMounts.RemoveAll(m => m != null && m.jsonKey == SkylarkWeapons.TurretKey);
         }
+        // After SeaStructures' SeaEncyclopediaPatch (Megaplane's runs after this): each appends to IndexLookup, whose order is the wire index.
+        [HarmonyAfter("com.marci.boscalisummer.module.sea-content")]
         private static void Postfix(Encyclopedia __instance)
         {
             if (SkylarkTemplate.Definition != null) SkylarkTemplate.Register(__instance);

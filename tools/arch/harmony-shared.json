@@ -1,0 +1,266 @@
+{
+  "_note": "Review of every game method patched by two or more owners (archmap rule R5). Hand-written; archmap --check fails when a shared target or a new owner on one is missing here, when an entry is stale, or when an ORDER-SENSITIVE pair is not declared in code. classification: INDEPENDENT (the relative order of our patches cannot change the outcome) or ORDER-SENSITIVE (it can). order: [earlier, later] module ids; the later module's patch on the target carries [HarmonyAfter(\"com.marci.boscalisummer.module.<earlier>\")] (or the earlier one [HarmonyBefore(...)] naming the later). HarmonyX runs every prefix even after one returned false, so a skipping prefix does not shield later prefixes; prefixes always run before postfixes, so only patches of the same kind can be order-sensitive.",
+  "targets": {
+    "AeroPart.AeroPart_OnInitialize": {
+      "owners": ["Megaplane", "Skylark"],
+      "classification": "INDEPENDENT",
+      "reason": "Both prefixes act only on parts of their own aircraft (Megaplane.Is vs the Skylark jsonKey): disjoint instances."
+    },
+    "Aircraft.FilterInputs": {
+      "owners": ["Megaplane", "Progression", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "Two skip predicates (Megaplane aircraft, Skywell-steered receiver) that read no state the other writes; Progression's is the only postfix."
+    },
+    "Aircraft.StartEjectionSequence": {
+      "owners": ["Spooktober", "Wing"],
+      "classification": "INDEPENDENT",
+      "reason": "Both prefixes may skip with their own side effects (Wing's block counter, the ace's rebirth); every prefix runs and neither reads what the other writes."
+    },
+    "Aircraft.UseFuel": {
+      "owners": ["Ares", "Skylark"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["ares", "skylark"]],
+      "reason": "Ares' AresFuelPatch writes ref fuelDrawn = 0; Skylark's SkylarkBatteryFuelPatch reads fuelDrawn to decide whether a silent Skylark skips the draw."
+    },
+    "AircraftActionsReport.ReportText": {
+      "owners": ["Chatter", "Hud"],
+      "classification": "INDEPENDENT",
+      "reason": "One prefix (Chatter takes the notice) and one postfix (Hud reads the box); prefixes always run before postfixes."
+    },
+    "Building.OnStartClient": {
+      "owners": ["Trenches", "UrbanCombat"],
+      "classification": "INDEPENDENT",
+      "reason": "Postfixes on disjoint buildings: Trenches strips its own positions' dugout, UrbanCombat dresses garrison/rooftop names."
+    },
+    "Building.OnStartServer": {
+      "owners": ["Trenches", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "Postfixes: Trenches hides its own positions' dugout; Vanguard only records the building's position for SA-74."
+    },
+    "Bullet.TrajectoryTrace": {
+      "owners": ["FireAndDestruction", "Immersion"],
+      "classification": "INDEPENDENT",
+      "reason": "Read-only prefixes capture state into __state; the postfixes submit to separate managers (impact fires, near-miss crack)."
+    },
+    "CameraCockpitState.UpdateState": {
+      "owners": ["Hud", "Immersion"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["immersion", "hud"]],
+      "reason": "Both postfixes multiply cam.transform.localRotation (quaternions do not commute). Hud's SimSpinPatch is dev-only and patched by hand under its own Harmony id when a sim starts, so it ran after Immersion; its HarmonyMethod now says so."
+    },
+    "CombatAI.ChooseHQTarget": {
+      "owners": ["Spooktober", "Wing"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["wing", "spooktober"]],
+      "reason": "Wing's WingTargetPatch (filtered station list, Veto) and WingSquad.AceTargetPatch and Spooktober's FallenAceTargetPatch all rewrite __result; they serve different searchers today, but the ace's choice stays last."
+    },
+    "CommandLineArgParser.LoadMission": {
+      "owners": ["Gamemodes", "Maps", "Scenario"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["scenario", "gamemodes"], ["gamemodes", "maps"]],
+      "reason": "Three prefixes each resolve a name and write __result; all run, so the last one that resolves wins (Maps over Gamemodes over Scenario)."
+    },
+    "DetectorManager.RequestLoSCheck": {
+      "owners": ["CombatAdjust", "Trenches"],
+      "classification": "INDEPENDENT",
+      "reason": "Two pure skip predicates (smoke, trench works); the original is skipped if either says so."
+    },
+    "DynamicMap.MapControls": {
+      "owners": ["Command", "Comms", "Wing"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["wing", "command"]],
+      "reason": "Wing's WmcMapControlsPatch applies a pending CENTER/FIT to the view; Command's MapControlsPanelGuardPatch then reads the cursor's map position (TryGetCursorCoordinates). Comms' prefix is a pure predicate."
+    },
+    "Encyclopedia.AfterLoad": {
+      "owners": ["Megaplane", "SeaStructures", "Skylark"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["sea-content", "skylark"], ["skylark", "megaplane"]],
+      "reason": "Each postfix appends definitions to Encyclopedia.IndexLookup, whose order is the network index every peer must agree on (SeaStructures' also runs before Blueprinter)."
+    },
+    "FactionHQ.RpcUpdateTrackingInfo": {
+      "owners": ["CombatAdjust", "Pmc", "Support"],
+      "classification": "INDEPENDENT",
+      "reason": "Three skip gates (link discipline, peace, CYBER relay hold) reading their own scopes; CombatAdjust's stat counters run whatever the others return."
+    },
+    "Factory.ProduceUnit": {
+      "owners": ["Gamemodes", "Nation"],
+      "classification": "INDEPENDENT",
+      "reason": "Two pure skip predicates (competitive gamemode, nation-managed factory)."
+    },
+    "Gun.Fire": {
+      "owners": ["Megaplane", "Skylark", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "Skip prefixes on disjoint guns (Megaplane battery turrets, Skylark Halberd, Vanguard LANCE); their side effects touch only their own state."
+    },
+    "HUDUnitMarker.UpdateColor": {
+      "owners": ["Hud", "Wing"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["wing", "hud"]],
+      "reason": "Hud's MarkerColorPatch captures the colour Wing's WingHudTint.UpdateColorPatch writes; Priority.Last already put it last (kept, it also orders it after other plugins)."
+    },
+    "Hangar.CanSpawnAircraft": {
+      "owners": ["Megaplane", "Skylark"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["skylark", "megaplane"]],
+      "reason": "Both prefixes append their aircraft to the hangar's availableAircraft array; the order fixes the list order where a hangar offers both."
+    },
+    "Hangar.GetAvailableAircraft": {
+      "owners": ["Megaplane", "Skylark"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["skylark", "megaplane"]],
+      "reason": "Same patch classes as Hangar.CanSpawnAircraft: both append to availableAircraft."
+    },
+    "Hangar.SpawnAircraft": {
+      "owners": ["Gamemodes", "Megaplane"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["gamemodes", "megaplane"]],
+      "reason": "Megaplane's MegaplaneHangarAirStartPatch reads __runOriginal, so Gamemodes' HeavyweightQueuedSpawnPatch refusal must come first or the air start spawns a refused aircraft."
+    },
+    "MapBuilding.Destruct": {
+      "owners": ["FireAndDestruction", "UrbanCombat"],
+      "classification": "INDEPENDENT",
+      "reason": "Postfixes into separate state: the ruin, scar and collapse (FireAndDestruction) and the garrison nest kill (UrbanCombat)."
+    },
+    "MapBuilding.TakeShockwave": {
+      "owners": ["FireAndDestruction", "UrbanCombat"],
+      "classification": "INDEPENDENT",
+      "reason": "One postfix (hit ledger) and one prefix (records blast power); different kinds."
+    },
+    "MapLoader.Load": {
+      "owners": ["Gamemodes", "Maps"],
+      "classification": "INDEPENDENT",
+      "reason": "Prefixes on disjoint loader state: Gamemodes clears the loaded-map keys for a Fuzzball reload, Maps lists the mod's maps."
+    },
+    "MessageFeed.Enqueue": {
+      "owners": ["Command", "Hud"],
+      "classification": "INDEPENDENT",
+      "reason": "Read-only postfixes into separate ledgers (TacticalLog, EventFeed)."
+    },
+    "MessageManager.UserCode_RpcKillMessage_*": {
+      "owners": ["Chatter", "Command", "Nation", "Wing"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["chatter", "command"], ["wing", "command"]],
+      "reason": "Command's TacticalLogKillPatch opens a scope that tags the next MessageFeed line with the kill; Chatter's and Wing's prefixes (radio, kill credit and awards) can post lines and run before it. Nation's prefix only books war support."
+    },
+    "Missile.DetectCollisions": {
+      "owners": ["CombatAdjust", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "One transpiler (water velocity guard) and one prefix (torpedo/HAMILCAR); different kinds."
+    },
+    "Missile.Detonate": {
+      "owners": ["Support", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "Prefixes on disjoint missiles (Support rods, Vanguard SA-74); neither changes arguments."
+    },
+    "Missile.SetAimpoint": {
+      "owners": ["CombatAdjust", "Spooktober", "Wing"],
+      "classification": "INDEPENDENT",
+      "reason": "Each prefix adds an offset to ref aimPoint that it computes without reading aimPoint; vector addition commutes."
+    },
+    "Missile.StartMissile": {
+      "owners": ["CombatAdjust", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "Postfixes that attach separate rigs and book entries."
+    },
+    "Missile.UserCode_RpcDetonate_897349600": {
+      "owners": ["FireAndDestruction", "Support", "Vanguard"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["fire-and-destruction", "support"]],
+      "reason": "Support's SupportMissileDetonatePatch sets ref armed = false for its rods, EMPs and flares; FireAndDestruction's MissileImpactPatch reads armed and so still sees them armed. Vanguard's SA-74 skip touches neither."
+    },
+    "Mission.OnSceneLoaded": {
+      "owners": ["Core", "Gamemodes"],
+      "classification": "INDEPENDENT",
+      "reason": "Core's mission-profile prefix and Gamemodes' postfix; different kinds."
+    },
+    "MissionManager.SetMission": {
+      "owners": ["Core", "Pmc"],
+      "classification": "INDEPENDENT",
+      "reason": "Core's mission-profile prefix and Pmc's postfix; different kinds."
+    },
+    "MissionPosition.TryGetClosestPosition": {
+      "owners": ["AirSurvival", "TheaterOps"],
+      "classification": "INDEPENDENT",
+      "reason": "Both postfixes write destination/__result, but for disjoint unit types (AirSurvival: Aircraft; TheaterOps: GroundVehicle)."
+    },
+    "MountedCargo.Fire": {
+      "owners": ["Gamemodes", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "Gamemodes' prefix is a pure skip; Vanguard's Skywell toggle reads nothing Gamemodes writes."
+    },
+    "MountedTroops.Fire": {
+      "owners": ["Gamemodes", "UrbanCombat"],
+      "classification": "INDEPENDENT",
+      "reason": "One prefix (pure skip) and one postfix (air assault deploy); different kinds."
+    },
+    "NetworkManagerNuclearOption.RegisterPrefabs": {
+      "owners": ["SeaStructures", "Spooktober", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "Postfixes registering different prefabs with the ClientObjectManager, keyed by prefab hash, not by order."
+    },
+    "Pilot.ApplyDamage": {
+      "owners": ["Spooktober", "Squad", "Wing"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["wing", "spooktober"]],
+      "reason": "Wing's WingPilotFatalDamagePatch rewrites the ref damage arguments and both Wing prefixes read them to judge lethality; Spooktober's FallenAcePilotDamagePatch rewrites them for the ace. Squad's prefix reads only `dead`."
+    },
+    "PilotDismounted.Capture": {
+      "owners": ["DynamicOperations", "Wing"],
+      "classification": "INDEPENDENT",
+      "reason": "Observers: prefix/postfix pairs recording a rescue into separate state."
+    },
+    "Radar.CanSeeRadarReturn": {
+      "owners": ["Pmc", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "Both prefixes only ever write __result = false and skip; the same value whoever writes last."
+    },
+    "TargetDetector.DetectTarget": {
+      "owners": ["CombatAdjust", "Pmc", "Support", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "CombatAdjust and Support open scopes on their own thread-statics and restore them in their own finalizers; Pmc and Vanguard are pure skip predicates."
+    },
+    "Turret.FixedUpdate": {
+      "owners": ["Performance", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "One prefix (sleeping-turret skip) and one postfix (ALE-X lock delay); different kinds."
+    },
+    "Unit.RecordDamage": {
+      "owners": ["HighCommand", "Squad"],
+      "classification": "INDEPENDENT",
+      "reason": "Postfixes recording the damager into separate state."
+    },
+    "Unit.ReportKilled": {
+      "owners": ["Squad", "Support"],
+      "classification": "INDEPENDENT",
+      "reason": "Postfixes recording the kill into separate state."
+    },
+    "UnitDefinition.IsAllowed": {
+      "owners": ["Core", "Gamemodes"],
+      "classification": "INDEPENDENT",
+      "reason": "Both postfixes only turn __result from true to false; the conjunction does not depend on order."
+    },
+    "UnitMapIcon.ClickIcon": {
+      "owners": ["Command", "Wing"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["wing", "command"]],
+      "reason": "Both prefixes handle the same click with side effects (Wing's WmcMapSelection.ClickIconPatch selects for WMC, Command's MapBoxIconClickGuardPatch drives the map's selection) and both always run."
+    },
+    "UnitMapIcon.UpdateIcon": {
+      "owners": ["Command", "Wing"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["wing", "command"]],
+      "reason": "Wing's WingMapTint.MapIconColorPatch badges the icon from its current scale; Command's MfdReliefUnitIconPatch then rescales (MapSymbology.Fit) and moves it (ProjectIcon)."
+    },
+    "UnitPart.TakeDamage": {
+      "owners": ["Ares", "Gamemodes", "Spooktober"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["spooktober", "ares"]],
+      "reason": "Spooktober's FallenAcePartDamagePatch rewrites the ref damage (ace lives, gunnery perk) and Ares' AresPartDamagePatch multiplies it for ONE-HIT KILLS. Gamemodes' and Kaiju's prefixes are pure skips."
+    },
+    "WeaponStation.LaunchMount": {
+      "owners": ["Support", "Vanguard"],
+      "classification": "INDEPENDENT",
+      "reason": "Support's CYBER gate is a pure skip; Vanguard's ALE-X/SKYWELL intercepts and AEGIS doors read nothing it writes."
+    }
+  }
+}

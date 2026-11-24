@@ -32,6 +32,8 @@ namespace BoscaliSummer.Modules.Spooktober.Patches
     [HarmonyPatch(typeof(Pilot), nameof(Pilot.ApplyDamage))]
     internal static class FallenAcePilotDamagePatch
     {
+        // After Wing's WingPilotFatalDamagePatch and WingTakeoverPatches: all rewrite or read the same ref damage arguments.
+        [HarmonyAfter("com.marci.boscalisummer.module.wing")]
         private static bool Prefix(Pilot __instance, ref float pierceDamage, ref float blastDamage, ref float fireDamage, ref float impactDamage,
                                    float ___hitPoints)
         {
@@ -88,6 +90,8 @@ namespace BoscaliSummer.Modules.Spooktober.Patches
     [HarmonyPatch(typeof(CombatAI), nameof(CombatAI.ChooseHQTarget))]
     internal static class FallenAceTargetPatch
     {
+        // After Wing's WingTargetPatch and WingSquad.AceTargetPatch: every postfix may rewrite __result; the ace's choice is the last.
+        [HarmonyAfter("com.marci.boscalisummer.module.wing")]
         private static void Postfix(Unit searcher, List<WeaponStation> stationList, ref CombatAI.TargetSearchResults __result)
         {
             Aircraft ace = FallenAce.Current;
