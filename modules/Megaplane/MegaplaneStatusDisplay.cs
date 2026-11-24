@@ -67,4 +67,37 @@ namespace BoscaliSummer.Modules.Megaplane
             return template;
         }
     }
+
+    // Stock HUD tiles subscribe on boarding and only repaint after the next hit.
+    // Show damage already present when a pilot takes this flight deck.
+    [HarmonyPatch(typeof(StatusDisplay), nameof(StatusDisplay.Initialize))]
+    internal static class MegaplaneStatusInitializePatch
+    {
+        private static readonly AccessTools.FieldRef<StatusDisplay, List<PartStatusDisplay>> Tiles =
+            AccessTools.FieldRefAccess<StatusDisplay, List<PartStatusDisplay>>("statusDisplays");
+
+        private static void Postfix(StatusDisplay __instance, Aircraft aircraft)
+        {
+            if (!MegaplaneModule.Is(aircraft)) return;
+            bool damaged = false;
+            foreach (PartStatusDisplay tile in Tiles(__instance))
+            {
+                UnitPart part = aircraft.partLookup.Find(p => p != null && p.name == tile.partImage.name);
+                if (part == null || !part.IsDetached() && part.hitPoints >= 100f) continue;
+                if (part.IsDetached())
+                {
+                    tile.DamageUnsubscribe();
+                    tile.displayCondition = 0f;
+                    tile.partImage.color = new Color(.7f, 0f, .25f, 1f);
+                }
+                else
+                {
+                    tile.displayCondition = Mathf.InverseLerp(tile.redStatusThreshold, 100f, part.hitPoints);
+                    tile.partImage.color = new Color(1f, Mathf.Min(1f, tile.displayCondition * 2f), 0f, 1f - tile.displayCondition);
+                }
+                damaged = true;
+            }
+            if (damaged) __instance.DisplayDamage();
+        }
+    }
 }

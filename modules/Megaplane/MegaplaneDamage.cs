@@ -4,22 +4,22 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
-    /// <summary>Component damage for the G-240. Each donor damage island (MegaplaneTemplate.Mapping) is a component: wing panels,
-    /// engine pods, tailplane, booms, fins, rudders, and the core (flight deck, fuselage). Hits reach an island through its art
+    /// <summary>Component damage for the KY-44. Wing panels and flaps, individual engine pods, pressure hull plates,
+    /// stabilizers and systems each carry native part health. Hits reach an island through its art
     /// hitboxes; when its hit points run out the host breaks it off with the native networked DetachPart (every peer drops the
     /// piece on its own rigidbody, sub-islands go with it, guns on it fall silent through Turret.criticalParts). What is left
     /// sets the handling read by <see cref="MegaplaneFlight"/>: wing lift per side (a weak side drops and drags the carrier
     /// into a turn), pods per side, tailplane pitch authority, fin/rudder yaw authority. Losing most of one wing or the core
     /// disables the carrier; it then glides down in a long burning dive, shedding pieces, instead of dropping like a stone.</summary>
-    internal sealed class MegaplaneDamage : MonoBehaviour
+    internal sealed partial class MegaplaneDamage : MonoBehaviour
     {
         // Share of a side's lift carried by each island (donor chain engine > gearbay > {nacelle, wing1b > {flap, wing1a,
         // wing2 > {wingtip, aileron}}}), mapped to the five wing sections (assets/.../breaks.py): engine = root (to x 35,
-        // with the inboard pod), gearbay = inner, wing1b = mid, wing2 = outer, wingtip = tip; wing1a = outer flap,
-        // flap = third pod. Losing the inner section takes everything outboard and kills the carrier.
+        // with the inboard pod), gearbay = inner, wing1b = mid, wing2 = outer, wingtip = tip;
+        // wing1a and innerFlap are the two trailing flaps. Individual pods only affect propulsion.
         private static readonly Dictionary<string, float> Lift = new Dictionary<string, float>
-        { { "engine", .30f }, { "gearbay", .25f }, { "wing1b", .17f }, { "wing2", .12f }, { "wingtip", .04f },
-          { "wing1a", .06f }, { "aileron", .04f }, { "flap", .02f } };
+        { { "engine", .30f }, { "gearbay", .23f }, { "wing1b", .17f }, { "wing2", .12f }, { "wingtip", .04f },
+          { "wing1a", .06f }, { "aileron", .04f }, { "innerFlap", .04f } };
         private static readonly HashSet<string> Core = new HashSet<string> { "cockpit", "fuselage_F", "fuselage_R", "nose", "intake_L", "intake_R", "reactor" };
         internal static readonly HashSet<string> Critical = new HashSet<string> { "cockpit", "fuselage_F", "fuselage_R", "body_F" };
         private const float DeadSide = .3f, BreakupMin = 3f, BreakupMax = 7f, EffectScale = .80f;
@@ -51,17 +51,22 @@ namespace BoscaliSummer.Modules.Megaplane
                 keys[i] = (n.EndsWith("_L") || n.EndsWith("_R") ? n.Substring(0, n.Length - 2) : n,
                            n.EndsWith("_L") ? "L" : n.EndsWith("_R") ? "R" : null);
                 part.onPartDetached += Separate;
-                if (n == "fuselage_F" || n == "wing2_L" || n == "wing2_R") part.onParentDetached += LoseMount;
+                if (n == "fuselage_F" || n.StartsWith("wing2_") || n.StartsWith("gearbay_")) part.onParentDetached += LoseMount;
                 part.onApplyDamage += e => dirty.Add(part);
             }
         }
 
         /// <summary>Host: hit points of an island after a hit (hitbox path). Breaks it off once they are gone.</summary>
-        internal void AfterHit(AeroPart part, float hitPoints)
+        internal void AfterHit(AeroPart part)
         {
-            if (hitPoints > 0f || !aircraft.IsServer || part == null || part.IsDetached()) return;
+            if (part == null || part.hitPoints > 0f || !aircraft.IsServer || part.IsDetached()) return;
             // a body section shot through kills the carrier (native criticalPart) and then breaks away, as a wing panel does
-            if (Detachable(part)) Break(part); else if (Critical.Contains(part.name)) Break(part, true);
+            if (Detachable(part)) Break(part);
+            else if (Critical.Contains(part.name))
+            {
+                if (!aircraft.disabled) { aircraft.Networkdisabled = true; aircraft.ReportKilled(); }
+                Break(part, true);
+            }
             // the flight-deck section hangs off the root island in the donor chain: without the forward body under it, it goes too
             if (part.name == "body_F") Break(parts.FirstOrDefault(p => p != null && p.name == "fuselage_F"), true);
 
@@ -87,11 +92,14 @@ namespace BoscaliSummer.Modules.Megaplane
                     if (mounted != null && (mounted.name == "noseAssist_L" || mounted.name == "noseAssist_R")) Break(mounted);
             if (part.name == "wing2_L" || part.name == "wing2_R")
                 Break(parts.FirstOrDefault(p => p != null && p.name == "pod4_" + part.name[part.name.Length - 1]));
+            if (part.name == "gearbay_L" || part.name == "gearbay_R")
+                Break(parts.FirstOrDefault(p => p != null && p.name == "innerFlap_" + part.name[part.name.Length - 1]));
         }
 
         // Every peer: a piece leaving overlaps the hull it came from; without this the two convex sets shove each other apart.
         private void Separate(UnitPart part)
         {
+            if (Restoring) return;
             Collider[] piece = part.GetComponentsInChildren<Collider>(true);
             var set = new HashSet<Collider>(piece);
             foreach (Collider hull in aircraft.GetComponentsInChildren<Collider>(true))
@@ -171,9 +179,16 @@ namespace BoscaliSummer.Modules.Megaplane
         // Resize native particle instances on this carrier only. A child airframe island must retain its scale.
         private void LateUpdate()
         {
+            RequestInitialDamage();
             if (dirty.Count == 0) return;
-            foreach (AeroPart p in dirty) if (p != null) ScaleEffects(p.transform);
-            dirty.Clear();
+            // Remote-owner collision commands and native direct hits enter at ApplyDamage.
+            // Finish once the current damage RPC is sent; a break cannot overtake its hit.
+            foreach (AeroPart p in parts)
+                if (dirty.Remove(p) && p != null)
+                {
+                    AfterHit(p);
+                    ScaleEffects(p.transform);
+                }
         }
 
         private void ScaleEffects(Transform island)

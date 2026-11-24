@@ -34,9 +34,9 @@ namespace BoscaliSummer.Modules.Megaplane
     internal static class MegaplaneWire
     {
         /// <summary>Bump on any change to either message's layout.</summary>
-        public const byte ProtocolVersion = 2;
+        public const byte ProtocolVersion = 3;
 
-        internal const byte DropVerb = 0, RecallVerb = 1, RailgunIndex = 2, ReactorIndex = 3;
+        internal const byte DropVerb = 0, RecallVerb = 1, InitialDamageVerb = 2, RailgunIndex = 2, ReactorIndex = 3;
 
         public static void WriteState(NetworkWriter w, MegaplaneStateMessage v)
         {
@@ -71,7 +71,7 @@ namespace BoscaliSummer.Modules.Megaplane
             if (m.Protocol != ProtocolVersion) return m;
             m.Unit = r.ReadPackedUInt32();
             m.Verb = r.ReadByte();
-            if (m.Verb > RecallVerb) m.Protocol = 0;
+            if (m.Verb > InitialDamageVerb) m.Protocol = 0;
             return m;
         }
     }
@@ -91,11 +91,12 @@ namespace BoscaliSummer.Modules.Megaplane
         private static readonly List<MegaplaneRailgun> railguns = new List<MegaplaneRailgun>();
         private static readonly List<MegaplaneReactor> reactors = new List<MegaplaneReactor>();
 
-        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot serverSlot, clientSlot, damageSlot;
         private float nextPoll, nextRefresh;
 
         private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<MegaplaneAskMessage>(ReceiveAsk);
         private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<MegaplaneStateMessage>(ReceiveState);
+        private HandlerSlot DamageHandler => damageSlot ??= HandlerSlot.Of<MegaplaneDamageSeed>(ReceiveDamage);
 
         internal static void Ensure()
         {
@@ -127,6 +128,7 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             ServerHandlers.Release();
             ClientHandlers.Release();
+            DamageHandler.Release();
             if (Instance == this) Instance = null;
         }
 
@@ -159,12 +161,28 @@ namespace BoscaliSummer.Modules.Megaplane
 
         // ---- Host side ---------------------------------------------------------------------
 
+        private static void ReceiveDamage(INetworkPlayer _, MegaplaneDamageSeed message)
+        {
+            if (GameAccess.IsServer() || message.Protocol != MegaplaneWire.ProtocolVersion) return;
+            var id = new PersistentID { Id = message.Unit };
+            if (!id.TryGetUnit(out Unit unit) || !(unit is Aircraft carrier) || carrier.NetId != message.Spawn) return;
+            MegaplaneDamage damage = carrier.GetComponent<MegaplaneDamage>();
+            if (damage != null) damage.Restore(message);
+        }
+
         private void ReceiveAsk(INetworkPlayer sender, MegaplaneAskMessage message)
         {
             if (!GameAccess.IsServer() || message.Protocol != MegaplaneWire.ProtocolVersion || sender == null || !sender.IsAuthenticated) return;
             if (!sender.TryGetPlayer<Player>(out Player player) || player == null) return;
             var unit = new PersistentID { Id = message.Unit };
             if (!unit.TryGetUnit(out Unit u) || !(u is Aircraft carrier)) return;
+            if (message.Verb == MegaplaneWire.InitialDamageVerb)
+            {
+                MegaplaneDamage damage = carrier.GetComponent<MegaplaneDamage>();
+                if (damage != null && carrier.Identity.observers.Contains(sender) && damage.TryMakeSeed(sender, out var seed))
+                    sender.Send(seed);
+                return;
+            }
             // Only the player flying this carrier, on its own side, may dump or recall its fighters.
             if (player.Aircraft != carrier || player.HQ != carrier.NetworkHQ) return;
             MegaplaneBay bay = carrier.GetComponent<MegaplaneBay>();
@@ -199,6 +217,8 @@ namespace BoscaliSummer.Modules.Megaplane
                 (Func<NetworkReader, MegaplaneStateMessage>)MegaplaneWire.ReadState);
             Seams.Install<MegaplaneAskMessage>((Action<NetworkWriter, MegaplaneAskMessage>)MegaplaneWire.WriteAsk,
                 (Func<NetworkReader, MegaplaneAskMessage>)MegaplaneWire.ReadAsk);
+            Seams.Install<MegaplaneDamageSeed>((Action<NetworkWriter, MegaplaneDamageSeed>)MegaplaneDamageSeed.Write,
+                (Func<NetworkReader, MegaplaneDamageSeed>)MegaplaneDamageSeed.Read);
         }
 
         private void Update()
@@ -211,6 +231,7 @@ namespace BoscaliSummer.Modules.Megaplane
             InstallSerializers();
             ServerHandlers.Swap(network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null);
             ClientHandlers.Swap(network?.Client?.MessageHandler);
+            DamageHandler.Swap(network?.Client?.MessageHandler);
             if (GameAccess.IsServer() && Time.unscaledTime >= nextRefresh)
             {
                 // Refresh: a peer that joined mid-operation would otherwise wait for the next transition.

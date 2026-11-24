@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Megaplane
     internal sealed class MegaplaneModule : IModule
     {
         public ModuleMetadata Metadata => new ModuleMetadata("megaplane", "KY-44 Groza");
-        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneClientMapReadyPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch), typeof(MegaplaneLoadoutPatch), typeof(MegaplaneSavedLoadoutPatch), typeof(MegaplaneCargoStationPatch), typeof(MegaplaneHangarAvailabilityPatch), typeof(MegaplaneHangarAirStartPatch), typeof(MegaplaneBatteryFirePatch), typeof(MegaplaneSelfHitPatch) };
+        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneClientMapReadyPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch), typeof(MegaplaneLoadoutPatch), typeof(MegaplaneSavedLoadoutPatch), typeof(MegaplaneCargoStationPatch), typeof(MegaplaneHangarAvailabilityPatch), typeof(MegaplaneHangarAirStartPatch), typeof(MegaplaneBatteryFirePatch), typeof(MegaplaneSelfHitPatch), typeof(MegaplaneStatusInitializePatch) };
         public void Install(ModuleContext context)
         {
             MegaplaneSettings.Current = context.Settings.Megaplane;

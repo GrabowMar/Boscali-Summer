@@ -50,6 +50,7 @@ from hold_interior import outfit_hold
 from planform import rebuild_planform
 from wing_structure import fit_wing_splices
 from reactor import fit_reactor
+from hull_damage import fit_hull_plates
 from nose_assist import add_nose_assist
 from service_finish import detail_boom_services
 from pose import controls
@@ -119,6 +120,7 @@ def build():
     detail_boom_services(nodes)
     fit_wing_splices(nodes)
     fit_reactor(nodes)
+    fit_hull_plates(nodes)
     finish_crown_shading(nodes)
     bpy.context.view_layer.update()
     root = nodes["BS_Megaplane"]

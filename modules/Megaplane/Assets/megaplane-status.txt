@@ -13,6 +13,8 @@ aileron_L
 aileron_R
 wing1a_L
 wing1a_R
+innerFlap_L
+innerFlap_R
 nozzle_L
 nozzle_R
 BS_Megaplane
@@ -38,6 +40,8 @@ noseAssist_L
 pod4_L
 noseAssist_R
 pod4_R
+hullPlate_L
+hullPlate_R
 reactor
 coolant_L
 coolant_R

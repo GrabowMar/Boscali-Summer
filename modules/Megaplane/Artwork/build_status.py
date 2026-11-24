@@ -22,7 +22,8 @@ MIDLINE = [
 SIDES = [
     ("engine", "Wing_Root"), ("gearbay", "Wing_Inner"), ("wing1b", "Wing_Mid"),
     ("wing2", "Wing_Outer"), ("wingtip", "Wing_Tip"), ("aileron", "Aileron"),
-    ("wing1a", "Flap_Outer"), ("intake", "Strongback"), ("nozzle", "Boom"),
+    ("wing1a", "Flap_Outer"), ("innerFlap", "Flap_Inner"),
+    ("intake", "Strongback"), ("nozzle", "Boom"),
     ("vstab1", "Fin"), ("rudder", "Rudder"),
 ]
 
@@ -33,7 +34,6 @@ def ownership():
         for side in ("L", "R"):
             groups[native+"_"+side] = (mesh+"_"+side,)
     for side in ("L","R"):
-        groups["gearbay_"+side] += ("Flap_Inner_"+side,)
         for bank in ("A", "F"):
             groups["gearbay_"+side] += ("LiftBank_"+bank+"_"+side,)
             groups["gearbay_"+side] += tuple(f"LiftDoor_{bank}_{side}_{i}" for i in range(4))
@@ -56,6 +56,10 @@ def ownership():
     for side in ("L", "R"):
         groups["noseAssist_"+side] = ("NoseAssist_"+side,)
         groups["pod4_"+side] = ("Pod_"+side+"4","Pods_Nacelle4_"+side)
+    # In plan the side access plates sit directly under the wing roots and pods.
+    # Draw their two narrow strips on top to show the actual fore/aft station.
+    for side in ("L", "R"):
+        groups["hullPlate_"+side] = ("HullPlate_"+side,)
     # Look through the dorsal service panel on the instrument. Physical
     # separation of the three modules keeps a local coolant leak readable.
     groups["reactor"] = ("ReactorCore",)
@@ -150,9 +154,9 @@ def build_status(mesh_path, atlas_path, manifest_path):
                 projected=list(map(project,vertices))
             for a,b,c in triangles:
                 draw.polygon([projected[a],projected[b],projected[c]], fill=255)
-        if native.startswith(("intake_", "vstab1_", "rudder_")):
+        if native.startswith(("intake_", "vstab1_", "rudder_", "hullPlate_")):
             # Minimum instrument line weight at a 256-pixel native display resolution.
-            part_mask=part_mask.filter(ImageFilter.MaxFilter(5))
+            part_mask=part_mask.filter(ImageFilter.MaxFilter(13 if native.startswith("hullPlate_") else 5))
         labels.paste(i,mask=part_mask)
     body=labels.point(lambda v:255 if v else 0)
     border=ImageChops.subtract(body.filter(ImageFilter.MaxFilter(7)),body.filter(ImageFilter.MinFilter(7)))

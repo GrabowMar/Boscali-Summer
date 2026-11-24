@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Megaplane
         private static readonly AccessTools.FieldRef<UnitPart, GameObject[]> Fragments = AccessTools.FieldRefAccess<UnitPart, GameObject[]>("disintegrationEffects");
 
         private Aircraft aircraft;
+        private MegaplaneDamage damage;
         private GameObject fire, smoke, fireball, debris;
         private readonly Dictionary<AeroPart, int> stage = new Dictionary<AeroPart, int>();
         private readonly Dictionary<AeroPart, GameObject[]> trails = new Dictionary<AeroPart, GameObject[]>();
@@ -30,6 +31,7 @@ namespace BoscaliSummer.Modules.Megaplane
         private void Awake()
         {
             aircraft = GetComponent<Aircraft>();
+            damage = GetComponent<MegaplaneDamage>();
             foreach (FuelTank t in GetComponentsInChildren<FuelTank>(true))
             {
                 fire = fire ?? Fire(t);
@@ -84,7 +86,7 @@ namespace BoscaliSummer.Modules.Megaplane
                     if (trail[i] != null) Destroy(trail[i]);
                 if (now == 0) { stage.Remove(part); trails.Remove(part); wound.Remove(part); }
                 else stage[part] = now;
-                if (now > had) Spawn(debris, part, .65f, hit);
+                if (now > had && !damage.Restoring) Spawn(debris, part, .65f, hit);
             }
             Scorch(part);
         }
@@ -112,6 +114,7 @@ namespace BoscaliSummer.Modules.Megaplane
 
         private void Broke(AeroPart part)
         {
+            if (damage.Restoring) return;
             Vector3 root = part.transform.position;
             if (stage.TryGetValue(part, out int s) && s >= 2) Spawn(fireball, part, .90f, root);
             Spawn(debris, part, .85f, root);
@@ -181,7 +184,6 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             if (Time.time < nextBurn || stage.Count == 0) return;
             nextBurn = Time.time + 1f;
-            MegaplaneDamage damage = GetComponent<MegaplaneDamage>();
             foreach (KeyValuePair<AeroPart, int> s in stage.ToList())
             {
                 AeroPart part = s.Key;
@@ -190,7 +192,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 // the core (flight deck, fuselage) burns for show only: a fire must not kill the carrier on its own
                 if (!aircraft.IsServer || s.Value < 2 || !MegaplaneDamage.Detachable(part) || MegaplaneDamage.Critical.Contains(part.name)) continue;
                 part.TakeDamage(0f, 0f, 0f, 0f, s.Value >= 3 ? BurnSecondFire : BurnPerSecond, PersistentID.None);
-                if (damage != null) damage.AfterHit(part, part.hitPoints);
+                damage.AfterHit(part);
             }
         }
     }

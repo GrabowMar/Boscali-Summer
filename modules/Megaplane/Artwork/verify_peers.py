@@ -77,8 +77,8 @@ def exercise(original, names, pids, timeout, report, before_client):
         raise Fail(PRECONDITION, "Groza failed to replicate matching native identity, airframe and stores within 45 seconds")
     checks = {
         "matching_catalogue_index": host["definitionIndex"] == client["definitionIndex"] >= 0,
-        "groza_native_identity": h["key"] == "BS_Megaplane" and h["prefab"] == 0x42534D50,
-        "groza_final_dimensions_and_lods": h["width"] > 342 and h["length"] > 230 and h["lodIslands"] == 42,
+        "groza_native_identity": h["key"] == "BS_Megaplane" and h["prefab"] == 0x42534D54,
+        "groza_final_dimensions_and_lods": h["width"] > 342 and h["length"] > 230 and h["lodIslands"] == 46,
         "five_replicated_store_selections": len(h["stores"]) == 5 and len(set(h["stores"])) == 5,
     }
     if before_client is not None:

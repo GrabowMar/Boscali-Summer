@@ -14,9 +14,11 @@ namespace BoscaliSummer.Modules.Megaplane
     internal static class MegaplaneTemplate
     {
         internal const string Key = "BS_Megaplane";
-        // one hash per payload: peers with the same choice agree, and a peer with the other choice fails to spawn
-        // the unit loudly instead of silently instantiating different art under the same network identity
-        internal const int PrefabHashFighters = 0x42534D50, PrefabHashRailgun = 0x42534D52;
+        // Mirage uses these only for network instantiation. Mission saves use the definition key.
+        // Different native damage tables must never receive one another's byte-indexed RPCs.
+        private const int NativePartLayout = 1;
+        internal const int PrefabHashFighters = 0x42534D50 + 4 * NativePartLayout;
+        internal const int PrefabHashRailgun = 0x42534D52 + 4 * NativePartLayout;
         internal static int PrefabHash => MegaplaneSettings.Railgun ? PrefabHashRailgun : PrefabHashFighters;
         internal const float Mass = 6500000f;          // The existing gross mass controls collisions and carried momentum.
         internal static AircraftDefinition Definition { get; private set; }
@@ -128,6 +130,20 @@ namespace BoscaliSummer.Modules.Megaplane
             // New root siblings keep the network IDs of all previously shipped parts stable.
             foreach (string island in new[] { "pod4_L", "pod4_R", "reactor", "coolant_L", "coolant_R" })
                 AddIsland(go.transform, island, null);
+            // These outer skins and control surfaces previously formed part of their support.
+            // Append siblings so existing native damage RPC indices stay stable.
+            AeroPart center = go.GetComponent<AeroPart>();
+            float plateMass = center.mass * .008f;
+            foreach (string side in new[] { "L", "R" })
+            {
+                AeroPart inner = go.GetComponentsInChildren<AeroPart>(true).First(part => part.name == "gearbay_" + side);
+                AeroPart flap = AddIsland(go.transform, "innerFlap_" + side, null);
+                flap.mass = inner.mass * .09f;
+                inner.mass -= flap.mass;
+                AeroPart plate = AddIsland(go.transform, "hullPlate_" + side, null);
+                plate.mass = plateMass;
+                center.mass -= plateMass;
+            }
             RefitAirframe(aircraft, model, nodes);
             foreach (string side in new[] { "L", "R" })
                 if (nodes.TryGetValue("NoseAssist_" + side, out Transform housing))
@@ -169,7 +185,7 @@ namespace BoscaliSummer.Modules.Megaplane
         // Donor damage island -> art node it moves to (and whose art it carries). Donor chain per side:
         // engine > gearbay > {nacelle, wing1b > {flap, wing1a, wing2 > {wingtip, aileron}}}. Wing panels take the structural
         // links and pods take leaves, so a lost pod is only that pod (MegaplaneFlight counts surviving pods), while a lost
-        // panel takes what it carries. The inboard pair shares one island: one nuclear engine group per side.
+        // panel takes what it carries. Each of the eight pods has its own engine-health island.
         private static readonly Dictionary<string, string> Mapping = new Dictionary<string, string>
         {
             { "fuselage_F", "Fuselage_Cockpit" }, { "nose", "Fuselage_Cockpit" }, { "fuselage_R", "Fuselage_Aft" }, { "tail", "Fuselage_TailCone" },
@@ -185,6 +201,8 @@ namespace BoscaliSummer.Modules.Megaplane
             { "noseAssist_L", "NoseAssist_L" }, { "noseAssist_R", "NoseAssist_R" },
             { "pod4_L", "Pod_L4" }, { "pod4_R", "Pod_R4" }, { "reactor", "ReactorCore" },
             { "coolant_L", "CoolantPack_L" }, { "coolant_R", "CoolantPack_R" },
+            { "innerFlap_L", "Flap_Inner_L" }, { "innerFlap_R", "Flap_Inner_R" },
+            { "hullPlate_L", "HullPlate_L" }, { "hullPlate_R", "HullPlate_R" },
         };
         private static readonly Dictionary<string, string> ExtraArt = new Dictionary<string, string>();
         // Position-only islands share another island's art.
@@ -225,7 +243,7 @@ namespace BoscaliSummer.Modules.Megaplane
 
         /// <summary>A new damage island: a copy of the donor's "tail" island stripped to its AeroPart, under `parent`
         /// (an island name, or the airframe root).</summary>
-        private static void AddIsland(Transform root, string name, string parent)
+        private static AeroPart AddIsland(Transform root, string name, string parent)
         {
             AeroPart[] parts = root.GetComponentsInChildren<AeroPart>(true);
             AeroPart donor = parts.First(p => p.name == "tail");
@@ -240,6 +258,7 @@ namespace BoscaliSummer.Modules.Megaplane
             Set(part, "disintegrateObjects", new GameObject[0]);   // pointed at the donor's children, now gone
             // UnitPart applies liveries and damage to this list even when a section has no donor renderer.
             Set(part, "damageMaterial", new DamageMaterial());
+            return part;
         }
 
         private static void RefitAirframe(Aircraft aircraft, Transform model, Dictionary<string, Transform> nodes)
@@ -322,15 +341,10 @@ namespace BoscaliSummer.Modules.Megaplane
             if (fire > 0f && pierce == 0f && blast == 0f && !Group.AcceptFire()) return;
             fire /= HitPointScale;
             if (pierce == 0f && blast > 0f) affected *= BlastShare;
-            float before = Owner.hitPoints;
             Owner.TakeDamage(pierce, blast, affected, fire, impact, dealer);
-            // A host applies the RpcDamage at once; elsewhere predict it the way UnitPart.TakeDamage does.
-            ArmorProperties a = Owner.GetArmorProperties();
-            float net = Mathf.Max(pierce - a.pierceArmor, 0f) / Mathf.Max(a.pierceTolerance, .01f) + blast * affected / Mathf.Max(a.blastTolerance, .01f)
-                + Mathf.Max(fire - a.fireArmor, 0f) / Mathf.Max(a.fireTolerance, .01f) + impact;
-            float after = Owner.hitPoints < before ? Owner.hitPoints : before - net;
+            // This path can complete synchronously after the native damage RPC has been sent.
             if (damage == null) damage = Owner.parentUnit != null ? Owner.parentUnit.GetComponent<MegaplaneDamage>() : null;
-            if (damage != null) damage.AfterHit(Owner, after);
+            if (damage != null) damage.AfterHit(Owner);
         }
         private MegaplaneDamage damage;
         public void ApplyDamage(float pierce, float blast, float fire, float impact) =>
