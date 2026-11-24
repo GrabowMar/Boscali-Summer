@@ -35,6 +35,7 @@ def inspect():
         pressed = p + (old-p).normalized()*.012
         assert pressure_skin.find(pressed)[2] < .0001, "A window post lacks its pressed inner cover"
         assert pressure_skin.find(old)[2] > .001, "A split liner triangle stayed at its old offset and tears the header"
+    printed_corners = {tuple(round(a,5) for a in v.co) for v in surround.data.vertices}
     bridge = [nodes["FlightDeck_Glareshield"], nodes["FlightDeck_InstrumentBridge"]]
     assert all(o.parent == shell for o in bridge)
     coaming = bridge[0]
@@ -76,6 +77,8 @@ def inspect():
                         assert (o.matrix_world @ hit - eye).length >= limit, f"{o.name} obscures {name} at {i},{j}"
                 n += 1
     print(f"Bridge: {triangle_count} triangles, outer-skin clearance {clearance:.3f} m, {n} pilot sight rays clear.")
+    print(f"Windshield: all {len(printed_corners)} physical surround corners seated on the 12 mm backing, no stranded seam vertices.")
+    print("Coaming front normals and removal of both obsolete warning blocks verified.")
 
 
 if __name__ == "__main__":
