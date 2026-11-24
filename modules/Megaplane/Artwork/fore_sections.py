@@ -172,10 +172,17 @@ def equip(nodes,body,name,surface,materials):
     pts=surface.vertices; faces=surface.faces
     fixed=Fittings();frame=Fittings()
     tree=BVHTree.FromPolygons(pts,faces,all_triangles=True)
+    def inside(p,h):
+        if name=="NoseChin":
+            # The pressure shell converges on the radome in all three axes. Fold
+            # the chin toward a point inside the forward pressure barrel, so its
+            # inner skins and equipment remain enclosed even at the narrow apex.
+            return p.lerp(Vector((0,90,-1.7)),h/12.)
+        return p-out*h
     # The removable skin carries its own folded inner skin. The well behind it stays on the aircraft.
     for face in faces[:]:
         a,b,c=[pts[i] for i in face]
-        fixed.face([a-out*depth,b-out*depth,c-out*depth],"BayLining",out)
+        fixed.face([inside(a,depth),inside(b,depth),inside(c,depth)],"BayLining",out)
     oldfaces=list(surface.faces)
     dark=bpy.data.materials["BS_Megaplane_BayFrame"]
     primer=bpy.data.materials["BS_Megaplane_SplicePrimer"]
@@ -183,20 +190,20 @@ def equip(nodes,body,name,surface,materials):
         if m not in materials:materials.append(m)
     rims=boundary(surface)
     for face in oldfaces:
-        corners=[(pts[i]-out*.20,-surface.normals[i],Vector(surface.uv[2*i:2*i+2])) for i in reversed(face)]
+        corners=[(inside(pts[i],.20),-surface.normals[i],Vector(surface.uv[2*i:2*i+2])) for i in reversed(face)]
         surface.polygon(corners,materials.index(dark),False)
     for p,q in rims:
-        edge=q-p; inward=edge.cross(out).normalized()
+        edge=q-p; inward=(inside(p,.20)-p).cross(edge).normalized()
         if inward.length<.5:continue
-        pts4=[q,p,p-out*.20,q-out*.20]
+        pts4=[q,p,inside(p,.20),inside(q,.20)]
         surface.polygon([(v,inward,Vector((v.y/16,v.z/16))) for v in pts4],materials.index(primer),False)
-        fixed.face([p-out*.23,q-out*.23,q-out*depth,p-out*depth],"BayFrame",inward)
+        fixed.face([inside(p,.23),inside(q,.23),inside(q,depth),inside(p,depth)],"BayFrame",inward)
     bounds=np.asarray([pts[i] for f in oldfaces for i in f]);lo,hi=bounds.min(axis=0),bounds.max(axis=0)
     center=tuple((lo+hi)/2)
     obj=child_mesh(name,body);obj.location=body.matrix_world.inverted()@Vector(center)
     bpy.context.view_layer.update();surface.install(obj,materials);nodes[name]=obj
     # Fixed pressure backing intercepts a second shot at the recessed liner.
-    proxy(nodes,body,"Back_"+name,[Vector(p)-out*t for p in bounds for t in (depth,depth+.30)])
+    proxy(nodes,body,"Back_"+name,[inside(Vector(p),t) for p in bounds for t in (depth,depth+.30)])
     axis=2 if abs(out.x)>.5 else 0
     side=Vector((0,0,1) if axis==2 else (1,0,0))
     forward=Vector((0,1,0))
@@ -210,7 +217,8 @@ def equip(nodes,body,name,surface,materials):
             point=at(cross,y)
             if point is not None:rs.append(point)
         return rs
-    for k,y in enumerate(np.linspace(lo[1]+.49,hi[1]-.48,6 if name=="NoseChin" else 5)):
+    hardware_end=min(hi[1],112.5) if name=="NoseChin" else hi[1]
+    for k,y in enumerate(np.linspace(lo[1]+.49,hardware_end-.48,6 if name=="NoseChin" else 5)):
         row=traces(y)
         if len(row)<2:continue
         # Closed hat-section flanges with a perforated Warren web. The opposing skin
@@ -218,20 +226,20 @@ def equip(nodes,body,name,surface,materials):
         for i in range(0,len(row)-1,3):
             a,b=row[i],row[min(i+3,len(row)-1)]
             for h,r,m in ((depth*.74,.12,"BayFrame"),(depth*.97,.095,"Mech")):
-                fixed.rod(a-out*h,b-out*h,r,m,6)
-            fixed.rod(a-out*(depth*.74),b-out*(depth*.97),.061,"BayEnamel",5)
-            frame.rod(a-out*.24,b-out*.24,.084,"BayFrame",5)
+                fixed.rod(inside(a,h),inside(b,h),r,m,6)
+            fixed.rod(inside(a,depth*.74),inside(b,depth*.97),.061,"BayEnamel",5)
+            frame.rod(inside(a,.24),inside(b,.24),.084,"BayFrame",5)
         for i in (0,-1):
             p=row[i]
-            fixed.rod(p-out*(depth*.92),p-out*(.36+.12*((k+i)%3)),.105,"BayFrame",6)
+            fixed.rod(inside(p,depth*.92),inside(p,.36+.12*((k+i)%3)),.105,"BayFrame",6)
     # The port and starboard runs differ; the dorsal and ventral routes stay inside their own wells.
     for idx,fraction in enumerate((.37,.66)):
         cross=lo[axis]+(hi[axis]-lo[axis])*fraction
-        path=[at(cross,y) for y in np.linspace(lo[1]+.65,hi[1]-.60,14)]
+        path=[at(cross,y) for y in np.linspace(lo[1]+.65,hardware_end-.60,14)]
         for k,(a,b) in enumerate(zip(path,path[1:])):
             if a is None or b is None:continue
             h=depth*(.86 if idx==0 else .80)
-            a-=out*h;b=b-out*h
+            a,b=inside(a,h),inside(b,h)
             fixed.rod(a,b,.092 if idx else .145,"BayRubber" if idx else "BayEnamel",8)
             if k%3==1:
                 mid=a.lerp(b,.5);fixed.rod(mid-forward*.08,mid+forward*.08,.132 if idx else .183,"Mech",8)
@@ -240,7 +248,7 @@ def equip(nodes,body,name,surface,materials):
         cross=lo[axis]+(hi[axis]-lo[axis])*(.45 if k else .57)
         p=at(cross,lo[1]+(hi[1]-lo[1])*f)
         if p is None:continue
-        p-=out*(depth-.25);dim=(.52,2.4,.95) if axis==2 else (1.52,2.1,.41)
+        p=inside(p,depth-.25);dim=(.52,2.4,.95) if axis==2 else (1.52,2.1,.41)
         fixed.box(p,dim,"BayEnamel",.10)
         lid=p+out*(.28 if axis==2 else .22)
         dim=(.05,2.1,.76) if axis==2 else (1.31,1.85,.05)

@@ -51,6 +51,38 @@ def outer_skin(obj):
     return BVHTree.FromPolygons([obj.matrix_world@v.co for v in mesh.vertices],faces,all_triangles=True)
 
 
+def check_radome(folder,nodes):
+    # The upper and lower surfaces meet at the prow. A backing or rib can cross the
+    # upper sheet even though all exterior vertices still match the original design.
+    shells=set(BAYS)|{"Fuselage_Cockpit","Glass_Canopy","Detail_WindscreenFrames"}
+    internal={prefix+n for prefix in ("Detail_ForePiece_","Detail_ForeBay_") for n in BAYS}
+    actual=shells|internal
+    near={n:near_surface(nodes[n]) for n in actual}
+    near_out={n:outer_skin(nodes[n]) if n in BAYS else near[n] for n in shells}
+    def exterior(name,material):
+        return name not in BAYS or material not in {"BS_Megaplane_BayFrame","BS_Megaplane_SplicePrimer"}
+    far=far_surfaces(folder/"megaplane.lod.gz",nodes,actual)
+    far_out=far_surfaces(folder/"megaplane.lod.gz",nodes,shells,exterior)
+    for tier,all_meshes,outer_meshes in (("near",near,near_out),("far",far,far_out)):
+        rays=0;maximum=0; worst=None;miss=0
+        for y in np.linspace(100.,117.9,70):
+            for theta in np.linspace(0,2*np.pi,120,endpoint=False):
+                direction=Vector((np.sin(theta),0,np.cos(theta)))
+                start=Vector((0,y,-2))+45*direction
+                d,owner=first(all_meshes,start,-direction)
+                wanted,_=first(outer_meshes,start,-direction)
+                if not np.isfinite(d):continue
+                # Through a window opening the opposite inner lining is visible.
+                # It remains inside the shell. Trace that face from its own side.
+                if d>45 and wanted>45:continue
+                if not np.isfinite(wanted):
+                    miss+=1;continue
+                rays+=1
+                if wanted-d>maximum: maximum= wanted-d;worst=(round(y,3), round(theta,3), owner)
+        print(tier,"closed radome interior occlusion:",rays,"rays, max protrusion",round(maximum,6),"m; exterior misses",miss,"worst",worst)
+        assert rays>2600 and maximum<.035 and miss==0,(tier,maximum,worst,miss)
+
+
 def verify(folder,before):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     nodes={o.name:o for o in read_model(folder/"megaplane.mesh.gz",HERE.parent/"Assets")}
@@ -79,6 +111,7 @@ def verify(folder,before):
     for gone in expected:
         for name,(o,d) in SITES.items():
             if gone!=name:assert first(solids,o,d,{gone})[1]==name
+    check_radome(folder,nodes)
     if before:
         old=read_model(before/"megaplane.mesh.gz",HERE.parent/"Assets")
         bpy.context.view_layer.update()

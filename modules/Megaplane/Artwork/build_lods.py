@@ -60,8 +60,15 @@ def reduced_mesh(owner, target, temp, graph):
     temp.data = mesh
     mesh.calc_loop_triangles()
     modifier = temp.modifiers.new("Silhouette reduction", "DECIMATE")
-    modifier.ratio = min(1., target / max(1, len(mesh.loop_triangles)))
-    modifier.use_collapse_triangulate = True
+    if owner.name=="Detail_ForeBay_NoseChin":
+        # The backing doubles back at the tip. An unconstrained edge collapse sends
+        # the long folded rim beyond the radome. Planar reduction keeps it inboard.
+        modifier.decimate_type="DISSOLVE"
+        modifier.angle_limit=np.deg2rad(.12)
+        modifier.delimit={"MATERIAL"}
+    else:
+        modifier.ratio = min(1., target / max(1, len(mesh.loop_triangles)))
+        modifier.use_collapse_triangulate = True
     graph.update()
     evaluated = temp.evaluated_get(graph)
     reduced = evaluated.to_mesh()
