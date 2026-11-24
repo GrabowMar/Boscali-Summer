@@ -18,7 +18,7 @@ sys.path.insert(0, str(HERE))
 from bsmp import read_model
 
 
-def far_surfaces(path, nodes, wanted):
+def far_surfaces(path, nodes, wanted, include_material=None):
     result = {}
     with gzip.open(path, "rb") as stream:
         def integer():
@@ -39,9 +39,9 @@ def far_surfaces(path, nodes, wanted):
             vertices = np.frombuffer(stream.read(32*integer()), "<f4").reshape(-1,8)
             faces = []
             for _ in range(integer()):
-                label()
+                material=label()
                 data = stream.read(2*integer())
-                if name in wanted:
+                if name in wanted and (include_material is None or include_material(name,material)):
                     faces.extend(np.frombuffer(data,"<u2").reshape(-1,3)[:,[0,2,1]].tolist())
             if name in wanted:
                 points = vertices[:,[0,2,1]] + np.asarray(nodes[name].matrix_world.translation)
