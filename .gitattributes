@@ -7,5 +7,10 @@
 *.ogg binary
 *.bundle binary
 
+# Written by tools/arch/archmap.py with LF; keep them LF on every checkout so --check stays byte-stable.
+/docs/generated/*.md text eol=lf linguist-generated=true
+**/MODULE.md text eol=lf
+/tools/arch/** text eol=lf
+
 # The Blueprinter pack is over GitHub's 100 MB file limit, so it goes through Git LFS.
 /assets/BoscaliSummer.nobp filter=lfs diff=lfs merge=lfs -text

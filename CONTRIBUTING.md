@@ -62,7 +62,8 @@ and vanilla replication. Network feature changes also need feature-specific obse
 
 ## Code guidelines
 
-- **Match the code around you:** naming, comment density and layout. Inside a module, `Domain/` holds logic that doesn't depend on the game. `Runtime/`, `Presentation/`, `Networking/`, `Configuration/` and `Patches/` hold the rest.
+- **Match the code around you:** naming, comment density and layout. Inside a module, `Domain/` holds rules that don't depend on the game (offline tests compile it). `Runtime/` (services, managers, sim hooks), `Presentation/` (consoles, HUD, map layers), `Networking/` (messages), `Configuration/` (settings), `Patches/` (Harmony), `Visuals/`, `Audio/` and `Assets/` (embedded data and its sources) hold the rest; a few small modules keep their files at the module root.
+- **Read [AGENTS.md](AGENTS.md) first** (contributors and AI agents alike): module boundaries, what nomodkit pins, where each kind of change goes. Run `python tools/arch/archmap.py --check` before opening a pull request.
 - **Fix the cause, not the symptom.** If several callers share a broken function, fix it once in that function.
 - **Harmony patches must survive game updates.** Look targets up by name and skip a target the running game doesn't have; never hand Harmony a null. One missing method can stop a whole module from loading ([#30](https://github.com/GrabowMar/Boscali-Summer/issues/30) is the example).
 - **Unity objects:** compare `UnityEngine.Object` values with `== null`, never with `?.`, `??` or `is null`, because destroyed Unity objects only compare equal to null through `==`.

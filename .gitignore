@@ -20,7 +20,9 @@ TestResults/
 /trajectory-*.json
 # nomodkit owns development tools and links its tests into the mod checkout.
 /tests/
-/tools/
+/tools/*
+# Architecture map generator and boundary check (see tools/arch/README.md).
+!/tools/arch/
 
 # ---------------------------------------------------------------------------------------------
 # Documentation: Markdown is local-only (specs, plans, agent notes); only these are published
@@ -33,6 +35,14 @@ TestResults/
 !/docs/COMMUNITY_FIXES_2026-10-14.md
 !/docs/MISSION_COMPATIBILITY.md
 !/docs/GAMEMODES.md
+# Architecture docs for contributors and AI agents: the guide, generated maps and per-module maps.
+!/docs/README.md
+!/docs/architecture/
+!/docs/generated/
+!/AGENTS.md
+!/CLAUDE.md
+!**/MODULE.md
+!/tools/arch/README.md
 
 # ---------------------------------------------------------------------------------------------
 # Source art stays local: Blender files, textures, previews and versioned bundle exports.
