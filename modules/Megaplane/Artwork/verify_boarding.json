@@ -1,0 +1,42 @@
+{
+  "name": "ky44-board-damaged-aircraft",
+  "description": "Run with verify_boarding.py. Leave a Groza, apply two exterior hits while its flight deck is inactive, then inspect a fresh native cockpit on that same aircraft.",
+  "mission": "Free Flight",
+  "mods": ["boscalisummer"],
+  "environment": {"config": {"boscalisummer": {"Trenches": {"Enabled": false}, "TheaterOps": {"Enabled": false}, "Events": {"Enabled": false}, "Garrisons": {"Enabled": false}, "DynamicOperations": {"Enabled": false}, "Support": {"Enabled": false}, "Weather": {"Enabled": false}}}},
+  "timeout_s": 80,
+  "ops": [
+    {"op": "atmosphere", "time_of_day": 14, "conditions": 0.025, "cloud_height": 5400},
+    {"op": "seat", "id": "carrier", "aircraft": "KY-44 Groza", "near": [-24500, -17400], "altitude": 1450, "speed": 120, "heading": 150, "view": "orbit", "timeout": 60},
+    {"op": "wait_until", "path": "CombatHUD.i.aircraft", "timeout_s": 40, "cmp": "eq", "value": null},
+    {"op": "wait", "seconds": 0.6},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneSectionProbe.Section", "args": {"id": "carrier", "site": "hull", "impact": 33}, "store": "damaged"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneSectionProbe.Section", "args": {"id": "carrier", "site": "flap", "impact": 110}, "store": "lost"},
+    {"op": "wait", "seconds": 0.4},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneSectionProbe.Section", "args": {"id": "carrier", "site": "hull"}, "store": "outside"},
+    {"op": "wait_until", "path": "CombatHUD.i.aircraft", "truthy": true, "timeout_s": 40},
+    {"op": "wait", "seconds": 0.6},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneSectionProbe.Section", "args": {"id": "carrier", "site": "hull"}, "store": "flankTile"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneSectionProbe.Section", "args": {"id": "carrier", "site": "flap"}, "store": "flapTile"},
+    {"op": "capture", "name": "ky44-fresh-hud-on-damaged-aircraft", "hide_ui": false},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "log_clean", "sources": ["Boscali Summer"]},
+    {"check": "result_equals", "path": "outside.hudBound", "value": false},
+    {"check": "result_equals", "path": "outside.hudSections", "value": 0},
+    {"check": "result_equals", "path": "outside.health", "value": 67},
+    {"check": "result_equals", "path": "lost.health", "value": 0},
+    {"check": "result_equals", "path": "flankTile.hudSections", "value": 46},
+    {"check": "result_equals", "path": "flankTile.health", "value": 67},
+    {"check": "result_equals", "path": "flankTile.hudBound", "value": true},
+    {"check": "result_above", "path": "flankTile.hudAlpha", "min": 0.2},
+    {"check": "result_below", "path": "flankTile.hudAlpha", "max": 0.9},
+    {"check": "result_equals", "path": "flankTile.hudOpposite", "value": 0},
+    {"check": "result_equals", "path": "flapTile.ownsArt", "value": false},
+    {"check": "result_equals", "path": "flapTile.hudAlpha", "value": 1},
+    {"check": "result_equals", "path": "flapTile.hudGreen", "value": 0},
+    {"check": "result_equals", "path": "flapTile.support", "value": 100}
+  ]
+}
