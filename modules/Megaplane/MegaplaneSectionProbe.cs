@@ -56,6 +56,17 @@ namespace BoscaliSummer.Modules.Megaplane
             return a == null ? "{}" : JsonConvert.SerializeObject(Observe(a, Sites[site], impact));
         }
 
+        internal static bool HasFace(string name, Aircraft a, bool attached)
+        {
+            return FindFace(name, a, attached) != null;
+        }
+
+        internal static MeshRenderer FindFace(string name, Aircraft a, bool attached)
+        {
+            return UnityEngine.Object.FindObjectsOfType<MeshRenderer>().FirstOrDefault(r => r.name == name && r.enabled &&
+                !r.forceRenderingOff && r.transform.IsChildOf(a.transform) == attached);
+        }
+
         private static object Observe(Aircraft a, Site site, float impact, bool native = false, bool readHud = false)
         {
             if (impact < 0f || impact > 120f || float.IsNaN(impact)) throw new ArgumentOutOfRangeException(nameof(impact));
@@ -102,6 +113,8 @@ namespace BoscaliSummer.Modules.Megaplane
                 ownsArt = art != null && target != null && art.GetComponentInParent<AeroPart>() == target,
                 affected = parts.Values.Count(p => Health(p) < 99.9f), leftLift = damage.LiftL, rightLift = damage.LiftR,
                 thrust = a.GetComponent<MegaplaneFlight>().Thrust, removedHP = prior - (box != null && box.Owner != null ? box.Owner.hitPoints : prior),
+                stumpFace = site.art == "Wing_Tip_L" && HasFace("Wing_Outer_L__Fore", a, true),
+                debrisFace = site.art == "Wing_Tip_L" && HasFace("Wing_Tip_L__Aft", a, false),
                 hudSections = tiles?.Count ?? 0, hudBound = tile != null && target != null && HarmonyLib.Traverse.Create(tile).Field<UnitPart>("unitPart").Value == target,
                 hudAlpha = tile == null ? -1f : tile.partImage.color.a, hudGreen = tile == null ? -1f : tile.partImage.color.g,
                 hudOpposite = otherTile == null ? -1f : otherTile.partImage.color.a,

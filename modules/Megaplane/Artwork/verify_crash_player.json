@@ -1,0 +1,210 @@
+{
+  "name": "ky44-public-hillside-wreck",
+  "description": "Spawn the public Groza, release it onto the same hillside as the tagged baseline and inspect the settled wreck directly.",
+  "mission": "Free Flight",
+  "mods": [
+    "boscalisummer"
+  ],
+  "environment": {
+    "config": {
+      "boscalisummer": {
+        "Trenches": {
+          "Enabled": false
+        },
+        "TheaterOps": {
+          "Enabled": false
+        },
+        "Events": {
+          "Enabled": false
+        },
+        "Garrisons": {
+          "Enabled": false
+        },
+        "DynamicOperations": {
+          "Enabled": false
+        },
+        "Support": {
+          "Enabled": false
+        },
+        "Weather": {
+          "Enabled": false
+        }
+      }
+    }
+  },
+  "timeout_s": 135,
+  "ops": [
+    {
+      "op": "atmosphere",
+      "time_of_day": 14,
+      "conditions": 0.025,
+      "cloud_height": 5400
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneWreck.Fields.Count",
+      "store": "priorWrecks"
+    },
+    {
+      "op": "wait_until",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneClientMapReadyPatch.Registered",
+      "eq": true,
+      "timeout_s": 85
+    },
+    {
+      "op": "spawn",
+      "id": "carrier",
+      "type": "KY-44 Groza",
+      "at": {
+        "map": [
+          -24500,
+          -17400
+        ]
+      },
+      "altitude": 110,
+      "speed": 105,
+      "heading": 150
+    },
+    {
+      "op": "observe",
+      "follow": "carrier"
+    },
+    {
+      "op": "record",
+      "ids": [
+        "carrier"
+      ],
+      "hz": 12
+    },
+    {
+      "op": "read",
+      "path": "CameraStateManager.i.followingUnit.rb.velocity",
+      "store": "beforeVelocity"
+    },
+    {
+      "op": "write",
+      "path": "CameraStateManager.i.followingUnit.rb.velocity",
+      "value": {
+        "x": 70,
+        "y": -88,
+        "z": -104
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.18
+    },
+    {
+      "op": "capture",
+      "name": "ky44-public-descent",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.2
+    },
+    {
+      "op": "capture",
+      "name": "ky44-public-first-contact",
+      "hide_ui": true
+    },
+    {
+      "op": "camera",
+      "position": [
+        -24190,
+        360,
+        -17340
+      ],
+      "heading": 226,
+      "pitch": 22,
+      "fov": 60
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "capture",
+      "name": "ky44-public-after-contact",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 12
+    },
+    {
+      "op": "capture",
+      "name": "ky44-public-settled",
+      "hide_ui": true
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneWreck.Fields.Count",
+      "store": "afterWrecks"
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneWreck.Fields[0].Pieces.Count",
+      "store": "pieces"
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneWreck.Fields[0].Settled",
+      "store": "rested"
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneWreck.Fields[0].Impact.Water",
+      "store": "water"
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneWreck.Fields[0].frames[0].gameObject.activeInHierarchy",
+      "store": "firstFrame"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "log_clean",
+      "sources": [
+        "Boscali Summer"
+      ]
+    },
+    {
+      "check": "result_equals",
+      "path": "priorWrecks",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "afterWrecks",
+      "value": 1
+    },
+    {
+      "check": "result_above",
+      "path": "pieces",
+      "min": 24
+    },
+    {
+      "check": "result_equals",
+      "path": "rested",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "water",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "firstFrame",
+      "value": true
+    }
+  ]
+}
