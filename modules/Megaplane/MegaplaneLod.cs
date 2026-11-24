@@ -67,7 +67,7 @@ namespace BoscaliSummer.Modules.Megaplane
             }
         }
 
-        private static Mesh ReadMesh(BinaryReader input, string name, Dictionary<string, Material> materials, out Material[] palette)
+        internal static Mesh ReadMesh(BinaryReader input, string name, Dictionary<string, Material> materials, out Material[] palette)
         {
             int vertices = input.ReadInt32();
             var points = new Vector3[vertices];

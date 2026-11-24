@@ -182,6 +182,14 @@ namespace BoscaliSummer.Modules.Megaplane
                 Rotation = aircraft.rb.rotation, Surviving = Mask(aircraft), Water = water, Age = 0f,
                 GearLeg = (byte)Mathf.RoundToInt(255f*gear.Leg), GearDoor = (byte)Mathf.RoundToInt(255f*gear.Door)
             };
+            for (int i = 0; i < owners.Length; i++)
+            {
+                ulong flag = 1UL << i;
+                if ((report.Surviving & flag) == 0) continue;
+                int stage = MegaplaneSkinDamage.Stage(owners[i].hitPoints);
+                if (stage >= 1) report.DamagedSkin |= flag;
+                if (stage >= 2) report.HeavilyDamagedSkin |= flag;
+            }
             Impacted = true;
             // A dying native pilot can disable the unit immediately; let the reliable damage,
             // pilot spawn and camera handoff reach observers before the underlying identity despawns.

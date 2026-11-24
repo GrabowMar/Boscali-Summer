@@ -44,7 +44,6 @@ namespace BoscaliSummer.Modules.Megaplane
         private readonly List<Transform> frames = new List<Transform>();
         private float born, settleTime;
         private bool rested;
-        private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
 
         internal static void Clear()
         {
@@ -119,7 +118,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 float local = severity + .19f * Mathf.Clamp01(1f - Vector3.Distance(at, contactInAirframe) / 145f);
                 clusters[i] = parent >= 0 && clusters[parent] >= 0 && local < Split[i] ? clusters[parent] : i;
             }
-            var block = new MaterialPropertyBlock();
+            string contactSkin = !Impact.Water && severity > .35f ? MegaplaneSkinDamage.ContactSite(prefab.transform, Impact.Surviving, contactInAirframe) : null;
             foreach (MeshFilter source in prefab.GetComponentsInChildren<MeshFilter>(true))
             {
                 bool far = source.name.StartsWith("GrozaLOD_", StringComparison.Ordinal);
@@ -168,9 +167,6 @@ namespace BoscaliSummer.Modules.Megaplane
                     near.sharedMaterials = detailed.GetComponent<MeshRenderer>().sharedMaterials;
                 }
                 piece.Near.Add(near);
-                float heat = Mathf.Clamp01((1f-Vector3.Distance(local, contactInAirframe)/140f) * severity);
-                Scorch(painted,materials,heat,block);
-                if (near != painted) Scorch(near,near.sharedMaterials,heat,block);
                 if (artName == Names[group])
                 {
                     int fore = -1, aft = -1;
@@ -185,6 +181,9 @@ namespace BoscaliSummer.Modules.Megaplane
                         aft = Parents[group];
                     }
                     if (group == 16 || group == 17) fore = Parents[group];
+                    ulong flag = 1UL << group;
+                    int damageStage = (Impact.HeavilyDamagedSkin & flag) != 0 ? 2 : (Impact.DamagedSkin & flag) != 0 ? 1 : 0;
+                    MegaplaneSkinDamage.Wreck(leaf.transform, damageStage, contactSkin, piece.Near, piece.Far);
                     MegaplaneWreckArt.Add(leaf.transform, artName, fore >= 0 && clusters[fore] != cluster,
                         aft >= 0 && clusters[aft] != cluster);
                 }
@@ -193,7 +192,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 {
                     foreach (Transform child in leaf.transform)
                     {
-                        if (child == near.transform) continue;
+                        if (child == near.transform || child.name.StartsWith("GrozaSkinDamage_", StringComparison.Ordinal)) continue;
                         piece.Near.AddRange(child.GetComponentsInChildren<Renderer>(true));
                         foreach (MeshFilter fracture in child.GetComponentsInChildren<MeshFilter>(true))
                             AddFractureSupports(piece,fracture);
@@ -260,20 +259,6 @@ namespace BoscaliSummer.Modules.Megaplane
                         piece.Skin.Add(tip);
                     }
             for (int i=0,stride=Mathf.Max(1,points.Length/64); i<points.Length; i+=stride) piece.Skin.Add(points[i]);
-        }
-
-        private static void Scorch(Renderer renderer,Material[] materials,float heat,MaterialPropertyBlock block)
-        {
-            for (int slot = 0; slot < materials.Length; slot++)
-            {
-                Material mat = materials[slot];
-                if (mat == null || !mat.HasProperty(BaseColor)) continue;
-                Color tint = mat.GetColor(BaseColor);
-                block.Clear();
-                block.SetColor(BaseColor, new Color(tint.r*(.84f-.42f*heat), tint.g*(.82f-.46f*heat),
-                    tint.b*(.78f-.45f*heat), tint.a));
-                renderer.SetPropertyBlock(block, slot);
-            }
         }
 
         private void Plan(Piece p, float severity, Vector3 tangent, float closing)

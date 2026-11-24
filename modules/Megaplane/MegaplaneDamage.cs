@@ -31,6 +31,8 @@ namespace BoscaliSummer.Modules.Megaplane
         private readonly HashSet<AeroPart> dirty = new HashSet<AeroPart>();
         private float nextBreak, nextCheck;
         private int shed;
+        private List<MegaplaneSkinDamage.Live> skins;
+        private float nextSkinCheck;
 
         internal float LiftL { get; private set; } = 1f;
         internal float LiftR { get; private set; } = 1f;
@@ -43,6 +45,7 @@ namespace BoscaliSummer.Modules.Megaplane
         private void Awake()
         {
             aircraft = GetComponent<Aircraft>();
+            skins = MegaplaneSkinDamage.Bind(gameObject);
             parts = GetComponentsInChildren<AeroPart>(true).Where(p => p.gameObject != gameObject).ToArray();
             keys = new (string, string)[parts.Length];
             for (int i = 0; i < parts.Length; i++)
@@ -118,6 +121,12 @@ namespace BoscaliSummer.Modules.Megaplane
 
         private void Update()
         {
+            // Servicing directly restores native health without broadcasting a damage event.
+            if (skins != null && Time.time >= nextSkinCheck)
+            {
+                nextSkinCheck = Time.time + .5f;
+                foreach (var skin in skins) skin.Sync();
+            }
             float l = 0f, r = 0f, pitch = 1f, yawL = 1f, yawR = 1f;
             for (int i = 0; i < parts.Length; i++)
             {

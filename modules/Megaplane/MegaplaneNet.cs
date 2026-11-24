@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Megaplane
     internal static class MegaplaneWire
     {
         /// <summary>Bump on any change to either message's layout.</summary>
-        public const byte ProtocolVersion = 4;
+        public const byte ProtocolVersion = 5;
 
         internal const byte DropVerb = 0, RecallVerb = 1, InitialDamageVerb = 2, RailgunIndex = 2, ReactorIndex = 3;
 

@@ -117,6 +117,7 @@ def main():
         def match(label, left, right):
             for attr in ("key", "unit", "mask", "water", "count", "drawMeshes", "gearLeg", "gearDoor", "pod", "outer", "center"):
                 check(f"{label}: same {attr} on both peers", left[attr] == right[attr])
+            check(f"{label}: retained and ground-contact skin overlays match", left["damageSkins"] == right["damageSkins"])
             check(f"{label}: local damage belongs to the individual wreck",
                   left["privateMesh"] and right["privateMesh"])
             check(f"{label}: same contact-local deformation", left["crushedMeshes"] == right["crushedMeshes"] and
@@ -141,6 +142,9 @@ def main():
         cleaned = command(names[0], "inspect", "historical")["nativeDebris"]
         check("original pre-impact rigidbodies were retained briefly and removed after settling",
               early > 0 and cleaned == 0)
+        expected_skins = {f"GrozaSkinDamage_Wing_Tip_R_{stage}_{lod}" for stage in (1,2) for lod in ("Near","Far")}
+        check("late join preserves both stages of pre-impact wear on the remaining wingtip",
+              all(expected_skins <= set(f["damageSkins"]) for f in late))
         match("historical", *late)
         underway = begin(names[0], "lesser")
         live_fields = [field_for(n,"lesser",underway["id"],False) for n in names]

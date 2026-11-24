@@ -56,6 +56,10 @@ namespace BoscaliSummer.Modules.Megaplane
                     var box = a.GetComponentsInChildren<MegaplaneHitbox>().First(h => h.Owner != null && h.Owner.name == owner);
                     box.TakeDamage(0f, 0f, 1f, 0f, 120f, PersistentID.None);
                 }
+                // Leave an attached panel at reduced native health. Its damaged skin must
+                // remain visible on wreckage reconstructed by a player arriving afterward.
+                var witness = a.GetComponentsInChildren<MegaplaneHitbox>().First(h => h.Owner != null && h.Owner.name == "wingtip_R");
+                witness.TakeDamage(0f, 0f, 1f, 0f, 72f, PersistentID.None);
                 return new { ok = true };
             }
             if (step == "gearReady")
@@ -367,6 +371,7 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 key = impact.Spawn, unit = impact.Unit, gearLeg = (int)impact.GearLeg, gearDoor = (int)impact.GearDoor,
                 crushedMeshes, creasedVertices, maximumCrease, privateMesh,
+                damageSkins = names.Where(n => n.StartsWith("GrozaSkinDamage_",StringComparison.Ordinal)).OrderBy(n => n).ToArray(),
                 gearLegAngle = legAngle, gearDoorAngle = doorAngle, gearLegMatches = Mathf.Abs(legAngle - 90f*(1f-Mathf.SmoothStep(0f,1f,impact.GearLeg/255f))) < 2f,
                 gearDoorMatches = Mathf.Abs(doorAngle - 90f*Mathf.SmoothStep(0f,1f,impact.GearDoor/255f)) < 2f, mask = impact.Surviving.ToString("X16"), water = impact.Water,
                 surfaceError = Mathf.Abs(surface.y-contact.y), artMatchesMask = names.Contains("Wing_Outer_L") == expectedOuter && names.Contains("Pod_R4") == expectedPod,

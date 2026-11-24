@@ -71,7 +71,6 @@ namespace BoscaliSummer.Modules.Megaplane
             // A cold structure sheared off in one impact never passed through the combustion stages.
             if (part.hitPoints <= 0f && had < 2 && (MegaplaneDamage.Detachable(part) || MegaplaneDamage.Critical.Contains(part.name)))
             {
-                Scorch(part);
                 return;
             }
             while (now < Stages.Length && part.hitPoints < Stages[now]) now++;
@@ -87,28 +86,6 @@ namespace BoscaliSummer.Modules.Megaplane
                 if (now == 0) { stage.Remove(part); trails.Remove(part); wound.Remove(part); }
                 else stage[part] = now;
                 if (now > had && !damage.Restoring) Spawn(debris, part, .65f, hit);
-            }
-            Scorch(part);
-        }
-
-        // Vanilla skins darken through the _HitPoints shader; the carrier's own materials are tinted toward soot instead.
-        private static readonly Color Soot = new Color(.16f, .15f, .14f);
-        private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
-        private readonly Dictionary<AeroPart, Renderer[]> skins = new Dictionary<AeroPart, Renderer[]>();
-        private MaterialPropertyBlock block;
-
-        private void Scorch(AeroPart part)
-        {
-            if (!skins.TryGetValue(part, out Renderer[] rs))
-                skins[part] = rs = part.GetComponentsInChildren<Renderer>(true).Where(r => r is MeshRenderer && r.GetComponentInParent<AeroPart>() == part && !r.name.StartsWith("BS_Fx")).ToArray();
-            float k = Mathf.Clamp01(1f - part.hitPoints * .01f) * .85f;
-            block = block ?? new MaterialPropertyBlock();
-            foreach (Renderer r in rs)
-            {
-                if (r == null || r.sharedMaterial == null || !r.sharedMaterial.HasProperty(BaseColor)) continue;
-                r.GetPropertyBlock(block);
-                block.SetColor(BaseColor, Color.Lerp(r.sharedMaterial.GetColor(BaseColor), Soot, k));
-                r.SetPropertyBlock(block);
             }
         }
 

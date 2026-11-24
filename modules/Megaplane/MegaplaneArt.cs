@@ -125,6 +125,17 @@ namespace BoscaliSummer.Modules.Megaplane
             return material;
         }
 
+        internal static Material DamageMarks()
+        {
+            const string name = "BS_Megaplane_DamageMarks";
+            var mat = Material(name, Color.white, .10f, .28f, .999f, false);
+            Texture2D atlas = Texture(name, false);
+            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", atlas);
+            if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", atlas);
+            if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", (float)CullMode.Back);
+            return mat;
+        }
+
         private static Texture2D Texture(string name, bool linear, bool optional = false)
         {
             byte[] bytes = EmbeddedResources.ReadAll(typeof(MegaplaneArt).Assembly, "BoscaliSummer.Megaplane." + name + ".png", 32 * 1024 * 1024);

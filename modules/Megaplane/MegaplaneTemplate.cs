@@ -175,6 +175,7 @@ namespace BoscaliSummer.Modules.Megaplane
             go.AddComponent<MegaplaneCrash>();
             go.AddComponent<MegaplaneAirframeSeams>();
             go.AddComponent<MegaplaneFx>();
+            go.AddComponent<MegaplaneFlightSmoke>();
             go.AddComponent<MegaplaneReactor>();
             go.AddComponent<MegaplaneFlight>();
             go.AddComponent<MegaplaneGear>();
