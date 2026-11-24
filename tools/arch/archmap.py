@@ -1079,6 +1079,62 @@ def analyse_rules(repo):
     return r1, r2, r3, global_state, ns_mismatch, large
 
 
+# R4: UnityEngine.Object roots (engine and game types) that a static singleton may hold. Mod types count when their base
+# list reaches one of these (transitively, by simple name).
+UNITY_ROOTS = {
+    "Object", "MonoBehaviour", "Behaviour", "Component", "ScriptableObject", "GameObject", "Transform", "RectTransform",
+    "NetworkBehaviour", "UIBehaviour", "Graphic", "MaskableGraphic", "Selectable", "Camera", "Canvas", "Renderer",
+    "AudioSource", "Light", "Material", "Texture", "Texture2D", "RenderTexture", "Mesh", "Sprite",
+    "Aircraft", "Unit", "GroundVehicle", "Ship", "Building", "Missile", "Weapon", "Airbase", "Hangar", "Pilot",
+    "FactionHQ", "DynamicMap", "MapIcon", "UnitMapIcon",
+}
+R4_NAMES = ("Active", "Instance", "Current", "Live", "active", "instance", "current", "live", "_instance")
+R4_DECL_RE = re.compile(r"\bstatic\s+(?!readonly\b)(?:volatile\s+)?([A-Za-z_][\w.]*)\??\s+(" + "|".join(R4_NAMES)
+                        + r")\s*(?:\{|=(?![=>])|;)")
+
+
+def unity_types(repo):
+    """Simple names of UNITY_ROOTS plus every mod class whose bases reach one of them."""
+    known = set(UNITY_ROOTS)
+    grew = True
+    while grew:
+        grew = False
+        for t in repo.types:
+            if t.kind == "class" and t.name not in known and any(b in known for b in t.bases):
+                known.add(t.name)
+                grew = True
+    return known
+
+
+def analyse_singletons(repo):
+    """R4: `static <UnityObject> Active|Instance|Current|Live` fields under modules/ and Core/ that are never set to
+    null in their file (or in another file of the same partial type). Returns sorted "path:Type.Field" keys."""
+    unity = unity_types(repo)
+    missing = []
+    for fd in repo.cs.values():
+        if not (fd.path.startswith("modules/") or fd.owner == "Core"):
+            continue
+        M = fd.masked
+        for m in R4_DECL_RE.finditer(M):
+            ty = m.group(1).split(".")[-1]
+            if ty not in unity:
+                continue
+            name = m.group(2)
+            holder = None
+            for t in fd.types:
+                if t.open is not None and t.close is not None and t.open < m.start() < t.close:
+                    holder = t  # innermost: fd.types is sorted by start
+            owner_name = holder.name if holder else ""
+            reset = re.compile(r"(?<![\w.])(?:" + (re.escape(owner_name) + r"\s*\.\s*" if owner_name else "")
+                               + r")?" + re.escape(name) + r"\s*=\s*null\b")
+            files = {fd}
+            if holder is not None:
+                files |= {t.fd for t in repo.types_by_name.get(holder.name, []) if t.kind == holder.kind}
+            if not any(reset.search(f.masked) for f in files):
+                missing.append("%s:%s.%s" % (fd.path, owner_name or "?", name))
+    return sorted(set(missing))
+
+
 def expected_ns(owner):
     if owner == "Core":
         return ["BoscaliSummer.Core"]
@@ -1234,6 +1290,7 @@ def build_model(repo):
     m["protocols"], m["messages"] = analyse_network(repo)
     m["hooks"], m["reflect"] = analyse_hooks(repo)
     m["r1"], m["r2"], m["r3"], m["global"], m["nsmis"], m["large"] = analyse_rules(repo)
+    m["r4"] = analyse_singletons(repo)
     m["pinned"] = analyse_pinned(repo)
     return m
 
@@ -1269,6 +1326,7 @@ def current_numbers(repo, m):
         "r1_cross_module_namespace_refs": {o: len(m["r1"].get(o, ())) for o in repo.owner_list if m["r1"].get(o)},
         "r2_core_files_allowed_to_reference_modules": sorted(p for p, ys in m["r2"].items() if ys),
         "r3_plugin_settings_reads": dict(sorted(m["r3"].items())),
+        "r4_unity_singletons_without_reset": list(m["r4"]),
         "global_state_reads": {o: m["global"][o] for o in repo.owner_list if m["global"].get(o)},
         "large_files": {"threshold_lines": LARGE_FILE_LINES, "count": len(m["large"]), "files": [p for p, _ in m["large"]]},
         "namespace_prefix_mismatches": {o: len(m["nsmis"][o]) for o in repo.owner_list if m["nsmis"].get(o)},
@@ -1724,6 +1782,21 @@ def check(repo, m):
         if cur["r3_plugin_settings_reads"].get(p, 0) < b3[p]:
             hints.append("R3 improved for %s (%d -> %d); run --update-baseline." % (
                 p, b3[p], cur["r3_plugin_settings_reads"].get(p, 0)))
+    # R4: a static Unity singleton is cleared by its owner (OnDestroy `if (Active == this) Active = null;`, OnTeardown,
+    # ResetForScene), so module rollback and scene changes leave no destroyed object behind; exceptions carry a reason.
+    b4 = set(base.get("r4_unity_singletons_without_reset", []))
+    reasons4 = base.get("r4_reasons", {})
+    for key in cur["r4_unity_singletons_without_reset"]:
+        if key not in b4:
+            failures.append("R4 %s is a static UnityEngine.Object singleton that its file never resets to null.\n"
+                            "    fix: clear it where its owner goes away (OnDestroy: `if (Active == this) Active = null;`, "
+                            "context.OnTeardown or ResetForScene); see docs/architecture/STATIC-STATE.md." % key)
+    for key in sorted(b4):
+        if not reasons4.get(key):
+            failures.append("R4 baseline lists %s without a reason.\n    fix: add \"%s\" to r4_reasons in %s "
+                            "(why the singleton may outlive its owner), or reset it." % (key, key, BASELINE))
+        if key not in cur["r4_unity_singletons_without_reset"]:
+            hints.append("R4 improved for %s; run --update-baseline." % key)
     # ratchets
     for key, label, fix in (
             ("global_state_reads", "Plugin.Settings/Plugin.Logger reads", "take settings/logger from ModuleContext"),
@@ -1774,6 +1847,7 @@ def stats(repo, m):
         "sim_hooks": len(m["hooks"]),
         "pinned_files": None if m["pinned"] is None else len(m["pinned"]["pinned"]),
         "pinned_types": None if m["pinned"] is None else len(m["pinned"]["type_refs"]),
+        "r4_unity_singletons_without_reset": list(m["r4"]),
         "unbalanced_brace_files": sorted(fd.path for fd in repo.cs.values() if fd.unbalanced),
     }
 
@@ -1796,8 +1870,10 @@ def main(argv=None):
         # Hand-written R3 reasons survive a regeneration for the files that still need them.
         old_reasons = (load_baseline() or {}).get("r3_reasons", {})
         data["r3_reasons"] = {p: old_reasons[p] for p in data["r3_plugin_settings_reads"] if p in old_reasons}
+        old_reasons4 = (load_baseline() or {}).get("r4_reasons", {})
+        data["r4_reasons"] = {k: old_reasons4[k] for k in data["r4_unity_singletons_without_reset"] if k in old_reasons4}
         data = {"_note": "Ratchet baseline for tools/arch/archmap.py --check; regenerate with --update-baseline. "
-                         "r3_reasons is hand-written and kept across regenerations.", **data}
+                         "r3_reasons and r4_reasons are hand-written and kept across regenerations.", **data}
         write_file(BASELINE, json.dumps(data, indent=2, sort_keys=True) + "\n")
         print("wrote " + BASELINE)
     if args.write:

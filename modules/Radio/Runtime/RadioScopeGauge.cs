@@ -8,6 +8,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private readonly RadioManager manager;
         public RadioScopeGauge(RadioManager manager) { this.manager = manager; }
         public void Register() => ScopeGauges.Register("radio", Read);
+        public void Unregister() => ScopeGauges.Unregister("radio", Read);
         public bool Read(out GaugeSpec gauge)
         {
             gauge = default;

@@ -43,6 +43,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public WmcMapInput() => active = this;
 
+        internal void ReleaseActive() { if (active == this) active = null; }
+
         public string Prompt(string scope) => MapOrders.Prompt(Mode, scope);
 
         /// <summary>Arms a mode for the next right-clicks; says why when it cannot.</summary>

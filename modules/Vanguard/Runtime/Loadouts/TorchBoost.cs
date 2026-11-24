@@ -284,7 +284,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (hardpoint != null && fuel > 0f) hardpoint.ModifyMass(-fuel);
             if (craft is null || !Fleet.TryGetValue(craft, out List<TorchPod> pods)) return;
             pods.Remove(this);
-            if (pods.Count == 0) Fleet.Remove(craft);
+            if (pods.Count > 0) return;
+            // The last bottle on this aircraft: drop every per-aircraft entry so destroyed aircraft do not pile up across missions.
+            Fleet.Remove(craft);
+            HeldUntil.Remove(craft);
+            NextReplay.Remove(craft);
         }
     }
 }

@@ -1,7 +1,7 @@
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
-// Unity calls Awake by reflection.
+// Unity calls Awake and OnDestroy by reflection.
 #pragma warning disable IDE0051
 
 namespace BoscaliSummer.Modules.Wing.Runtime
@@ -18,5 +18,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public double AiMsPerFrame;
 
         private void Awake() => Instance = this;
+
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
     }
 }

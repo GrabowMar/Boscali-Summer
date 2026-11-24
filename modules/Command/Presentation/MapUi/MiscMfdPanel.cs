@@ -53,7 +53,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             builtExtras = null;
         }
 
-        private void OnDestroy() => ResetForScene();
+        private void OnDestroy()
+        {
+            ResetForScene();
+            if (Active == this) Active = null;
+        }
 
         private void Update()
         {

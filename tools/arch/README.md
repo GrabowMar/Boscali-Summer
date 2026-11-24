@@ -73,7 +73,17 @@ found structurally while literals are read from the original text. Detected form
    entry in `r3_reasons` (why it cannot take injected settings yet), or `--check` fails. Today: three Command map files
    that nomodkit's Relief Unity check compiles against a stub `Plugin`, and `ImpactFireManager`'s fallback for an
    unconfigured manager (nomodkit's Forest manager Unity check sets only `Plugin.Settings`).
-5. **Ratchets** that fail only when a number grows: per-owner `Plugin.Settings` / `Plugin.Logger` reads (global
+5. **R4**: a `static` field under `modules/` or `Core/` named `Active`, `Instance`, `Current` or `Live` (also the
+   lower-case and `_instance` spellings) whose type is a `UnityEngine.Object` is never assigned `null` in its file or
+   in another file of the same partial type. Unity types are a fixed set of engine and game roots (`UNITY_ROOTS` in
+   `archmap.py`: `MonoBehaviour`, `Component`, `GameObject`, `Aircraft`, `Unit`, ...) plus every mod class whose base
+   list reaches one of them (by simple name). The owner clears it where it goes away (`OnDestroy`:
+   `if (Active == this) Active = null;`, `context.OnTeardown`, `ResetForScene`), so module rollback and scene changes
+   leave no destroyed object reachable. Exceptions are listed in `r4_unity_singletons_without_reset`
+   (`path:Type.Field`) and each needs a hand-written `r4_reasons` entry, or `--check` fails. Today: none. The check
+   sees only the field name and a `= null` somewhere; whether that runs at the right time is in
+   [STATIC-STATE.md](../../docs/architecture/STATIC-STATE.md).
+6. **Ratchets** that fail only when a number grows: per-owner `Plugin.Settings` / `Plugin.Logger` reads (global
    state; new code takes `ModuleContext.Settings` / `Logger`), the number of `.cs` files over 1500 lines, per-owner
    namespace declarations outside the owner's prefix (`BoscaliSummer.Modules.<Owner>`, `BoscaliSummer.Core` for Core,
    `NOAvionics` or `BoscaliSummer.AvionicsUi` for AvionicsUi, `BoscaliSummer.Dev` for Dev), and per-owner Harmony
@@ -84,8 +94,8 @@ When a number improves, `--check` still passes and prints a hint to run `--updat
 ## Updating the baseline
 
 `python tools/arch/archmap.py --update-baseline` rewrites `tools/arch/baseline.json` from the current code, including
-the R2 allowlist and the R3 counts; `r3_reasons` is kept for files still listed (a newly listed file gets no
-reason, so `--check` fails until you write one). Run it after a deliberate change (a split file, a removed global read, a new composition-root
+the R2 allowlist, the R3 counts and the R4 exceptions; `r3_reasons` and `r4_reasons` are kept for entries still listed
+(a newly listed entry gets no reason, so `--check` fails until you write one). Run it after a deliberate change (a split file, a removed global read, a new composition-root
 reference) and review the JSON diff: every number that went up is a boundary you are choosing to loosen.
 A parser improvement can also move numbers (for example a `dynamic` patch becoming resolved and therefore shared).
 

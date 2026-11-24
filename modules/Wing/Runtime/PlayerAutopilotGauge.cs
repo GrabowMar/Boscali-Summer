@@ -16,6 +16,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         public static void Register() => ScopeGauges.Register("ap", Read);
 
+        public static void Unregister() => ScopeGauges.Unregister("ap", Read);
+
         public static bool Read(out GaugeSpec gauge)
         {
             gauge = default;

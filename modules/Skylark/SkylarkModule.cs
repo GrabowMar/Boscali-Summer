@@ -19,8 +19,15 @@ namespace BoscaliSummer.Modules.Skylark
             context.AddSceneService<SkylarkNet>(81);
             ScopeGauges.Register("drive", SkylarkDrive.ReadGauge);
             // A Skylark is a command platform while, and only while, its C2 mast is out (the mast costs radar signature).
-            CommandPlatform.Provider = a => a.definition != null && a.definition.jsonKey == SkylarkTemplate.Key && !a.disabled
+            Func<Aircraft, bool> platform = a => a.definition != null && a.definition.jsonKey == SkylarkTemplate.Key && !a.disabled
                 && a.TryGetComponent(out SkylarkMast mast) && mast.Deployed;
+            CommandPlatform.Provider = platform;
+            // Both are Core statics outside the context: give them back when the mission profile switches Skylark off.
+            context.OnTeardown(() =>
+            {
+                ScopeGauges.Unregister("drive", SkylarkDrive.ReadGauge);
+                if (CommandPlatform.Provider == platform) CommandPlatform.Provider = null;
+            });
         }
     }
 

@@ -68,6 +68,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         public WingService() => Instance = this;
 
+        /// <summary>The host is going away (module rollback): the static handle lets go of this deactivated service.</summary>
+        internal void ReleaseInstance() { if (Instance == this) Instance = null; }
+
         public static int MaxMembers => WingSettings.Instance.MaxWingmen.Value;
 
         public void Activate()

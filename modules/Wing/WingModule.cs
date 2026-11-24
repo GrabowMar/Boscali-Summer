@@ -65,7 +65,8 @@ namespace BoscaliSummer.Modules.Wing
             runtime.Register(new WingPlans());
             runtime.Register(new WingChatter());
             runtime.Register(new SpawnService());
-            runtime.Register(new PlayerAutopilot());
+            runtime.Register(new PlayerAutopilot());     // registers the TAC BOARD "ap" gauge (a Core static)
+            context.OnTeardown(PlayerAutopilotGauge.Unregister);
             runtime.Register(new WingHotkeys());
             runtime.Register(new WingHudPanel());
             runtime.Register(new WingScopeFeed());

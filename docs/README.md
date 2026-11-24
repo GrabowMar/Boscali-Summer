@@ -16,6 +16,7 @@
 | [architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md) | Boot, module lifecycle and rollback, services, settings, patching, networking, scene resets, FX, UI, assets, build configurations, known debts |
 | [architecture/RECIPES.md](architecture/RECIPES.md) | Step-by-step changes with code from existing modules |
 | [architecture/GLOSSARY.md](architecture/GLOSSARY.md) | In-game and code terms with owner module and main type |
+| [architecture/STATIC-STATE.md](architecture/STATIC-STATE.md) | Audit of static singletons, Unity-object statics and mutable static collections: who clears each, verdict |
 | [Core/MODULE.md](../Core/MODULE.md) | Core's subfolders and what belongs in Core |
 | [AvionicsUi/MODULE.md](../AvionicsUi/MODULE.md) | The NOAvionics UI kit |
 | `<owner>/MODULE.md` | One per owner (linked from the table in [generated/MODULES.md](generated/MODULES.md)): purpose above, generated facts below |

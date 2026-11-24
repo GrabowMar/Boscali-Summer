@@ -50,6 +50,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             context.Map.Placed += overlay.Ping;
         }
 
+        /// <summary>The host is going away (module rollback): drop the static handles to this panel, its map input and their UI.</summary>
+        internal void ReleaseInstance()
+        {
+            context.Map.ReleaseActive();
+            if (Instance == this) Instance = null;
+        }
+
         public bool Visible => screen != null && screen.isActive && DynamicMap.mapMaximized;
         /// <summary>A page with a scope row that gives orders is on show (spec bezel v2 §6: an unarmed right-click MOVE is TACTICAL's,
         /// FORM's and OPTIONS' only; ROUTE's right-click draws).</summary>

@@ -81,7 +81,26 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (ReferenceEquals(Instance, this))
             {
                 WingNet.Release();
+                ReleaseServiceInstances();
                 Instance = null;
+            }
+        }
+
+        /// <summary>The services are plain objects whose static <c>Instance</c> would otherwise outlive this host after a module
+        /// rollback (still reachable from Dev/Automation, holding the WMC panel's destroyed UI). They are deactivated by then.</summary>
+        private void ReleaseServiceInstances()
+        {
+            for (int i = 0; i < services.Count; i++)
+            {
+                switch (services[i])
+                {
+                    case WingService s: s.ReleaseInstance(); break;
+                    case WingPlans s: s.ReleaseInstance(); break;
+                    case WingChatter s: s.ReleaseInstance(); break;
+                    case SpawnService s: s.ReleaseInstance(); break;
+                    case PlayerAutopilot s: s.ReleaseInstance(); break;
+                    case WmcPanel s: s.ReleaseInstance(); break;
+                }
             }
         }
 

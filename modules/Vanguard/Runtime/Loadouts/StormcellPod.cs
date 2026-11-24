@@ -20,6 +20,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private static readonly AccessTools.FieldRef<PowerSupply, float> MaxCharge = Ref("maxCharge"), ChargeRate = Ref("chargePerRPM");
         private static readonly Dictionary<PowerSupply, RateBoost> Boosts = new Dictionary<PowerSupply, RateBoost>();
+        private static readonly List<PowerSupply> Gone = new List<PowerSupply>();
         private static bool logged;
 
         private sealed class RateBoost
@@ -54,6 +55,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         /// <summary>Adds this pod's capacity and the charge-rate boost; returns the capacity to hand back to <see cref="Unfit"/>.</summary>
         internal static float Fit(PowerSupply supply)
         {
+            PruneDestroyed();
             // Sized on the capacity before any pod: a second pod, or a respawned loadout whose old pod is destroyed only at the end
             // of the frame, must not read an already boosted maxCharge.
             if (!Boosts.TryGetValue(supply, out RateBoost boost))
@@ -84,6 +86,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 Boosts.Remove(supply);
             }
             supply.enabled = true; // let FixedUpdate clamp the charge to the smaller capacity
+        }
+
+        /// <summary>A pod destroyed together with its aircraft (scene unload) skips <see cref="Unfit"/> because its supply is already
+        /// gone: drop those entries so destroyed supplies do not pile up across missions.</summary>
+        private static void PruneDestroyed()
+        {
+            foreach (PowerSupply key in Boosts.Keys) if (key == null) Gone.Add(key);
+            for (int i = 0; i < Gone.Count; i++) Boosts.Remove(Gone[i]);
+            Gone.Clear();
         }
 
         private static AccessTools.FieldRef<PowerSupply, float> Ref(string field)

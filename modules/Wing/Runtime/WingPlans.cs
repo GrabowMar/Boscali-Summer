@@ -92,6 +92,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         public WingPlans() => Instance = this;
 
+        internal void ReleaseInstance() { if (Instance == this) Instance = null; }
+
         public void Activate()
         {
             Plan = new WingPlan();

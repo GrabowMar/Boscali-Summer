@@ -47,6 +47,7 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
         private void OnDestroy()
         {
             if (settings != null) settings.Defeated -= OnDefeated;
+            if (Instance == this) Instance = null;
         }
 
         public void ResetForScene()

@@ -1,5 +1,5 @@
 {
-  "_note": "Ratchet baseline for tools/arch/archmap.py --check; regenerate with --update-baseline. r3_reasons is hand-written and kept across regenerations.",
+  "_note": "Ratchet baseline for tools/arch/archmap.py --check; regenerate with --update-baseline. r3_reasons and r4_reasons are hand-written and kept across regenerations.",
   "global_state_reads": {
     "Autopilot": 13,
     "CombatAdjust": 1,
@@ -64,6 +64,8 @@
     "modules/Command/Presentation/MapUi/MfdTerrainRelief.cs": "nomodkit Run-ReliefUnityCheck.ps1 compiles this file by path against ReliefUnityStubs.cs, whose stub Plugin.Settings.Command (TestCommandSettings) is the only settings type it offers; injecting CommandSettings needs a nomodkit stub change first.",
     "modules/FireAndDestruction/Runtime/ImpactFireManager.cs": "Fallback only for a manager that was never configured: nomodkit ForestManagerUnityCheck adds ImpactFireManager to a bare GameObject against the built DLL and supplies settings only through Plugin.Settings; production always goes through Configure. Drop it once that check calls Configure."
   },
+  "r4_reasons": {},
+  "r4_unity_singletons_without_reset": [],
   "shared_harmony_targets": {
     "AirSurvival": 1,
     "Ares": 2,

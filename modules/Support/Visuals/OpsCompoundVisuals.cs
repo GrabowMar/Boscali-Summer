@@ -55,7 +55,11 @@ namespace BoscaliSummer.Modules.Support.Visuals
             nextScan = 0f;
         }
 
-        private void OnDestroy() => ResetForScene();
+        private void OnDestroy()
+        {
+            ResetForScene();
+            if (live == this) live = null;
+        }
 
         private void Update()
         {

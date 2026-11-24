@@ -43,6 +43,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             PlayerAutopilotGauge.Register();      // the TAC BOARD's AUTOPILOT gauge while a hold is engaged
         }
 
+        internal void ReleaseInstance() { if (Instance == this) Instance = null; }
+
         public void Activate() => Unbind();
 
         public void Deactivate() => Unbind();

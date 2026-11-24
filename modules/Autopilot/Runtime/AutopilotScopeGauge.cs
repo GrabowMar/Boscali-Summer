@@ -11,6 +11,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     {
         public void Register() => ScopeGauges.Register("land", Read);
 
+        public void Unregister() => ScopeGauges.Unregister("land", Read);
+
         public bool Read(out GaugeSpec gauge)
         {
             gauge = default;

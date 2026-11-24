@@ -124,6 +124,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         public SpawnService() => Instance = this;
 
+        internal void ReleaseInstance() { if (Instance == this) Instance = null; }
+
         public void Activate() => Clear();
 
         public void Deactivate() => Clear();

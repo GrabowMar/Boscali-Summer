@@ -17,6 +17,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private static bool Prefix(Aircraft __instance)
         {
+            if (logged.Count >= 64) logged.RemoveWhere(a => a == null);   // destroyed aircraft from earlier missions
             if (SpawnService.Instance != null && SpawnService.Instance.IsPending(__instance) && !__instance.disabled)
             {
                 Blocked++;

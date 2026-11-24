@@ -32,7 +32,9 @@ namespace BoscaliSummer.Modules.Autopilot
             AutopilotLandController controller = context.AddSceneService<AutopilotLandController>(48);
             controller.Configure(settings);
             context.AddSceneService<ApproachScopeFeed>(49).Configure(settings, controller);
-            new AutopilotScopeGauge().Register();      // the TAC BOARD's AUTOPILOT gauge while it flies the landing
+            var landGauge = new AutopilotScopeGauge();
+            landGauge.Register();      // the TAC BOARD's AUTOPILOT gauge while it flies the landing
+            context.OnTeardown(landGauge.Unregister);
             context.AddSceneService<Presentation.AceRadialMenuUi>(50).Configure(settings);
             context.AddClientKey("MENU KEY", "The key that opens the interaction menu: hold it and point, or tap it to keep the menu open.",
                 settings.AceRadialKey);

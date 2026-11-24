@@ -49,6 +49,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             Instance = this;
         }
 
+        internal void ReleaseInstance() { if (Instance == this) Instance = null; }
+
         public void Activate()
         {
             active = true;
