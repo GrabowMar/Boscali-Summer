@@ -72,6 +72,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 ### ✈️ Your wing
 
 - 🧩 **VS-4 Skylark**, a flyable four-fan VTOL scout and precision attacker.
+- **KY-44 Groza**, a flying carrier with a 342 m wingspan, eight engines and an aft cargo ramp. Select it at a hangar that offers the Darkreach for an airborne start. With the default fighter bay, **Insert** releases a fighter and **Delete** recalls it.
 - **Wingmen who listen.** Recruit them, pick their loadouts and formations, and give orders from the **WMC** wing page or the **C** ring.
 - **Careers:** pilots earn grades and perks; build a squadron crest from 48 marks and wear it on the tails.
 - **Enemy aces** hunt you under their own insignia.

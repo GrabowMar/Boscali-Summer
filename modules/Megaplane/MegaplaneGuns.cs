@@ -58,7 +58,8 @@ namespace BoscaliSummer.Modules.Megaplane
                     if (root.parent == null || !st.All(s => s.Weapons.All(w => w != null && w.transform.IsChildOf(root)))) continue;
                     if (st[0].Weapons[0] is MissileLauncher ml && ml.info != null)
                     {
-                        silos.Add(new Donor { Root = root, Info = ml.info, Rate = st.Sum(s => s.Weapons.Sum(w => w.GetFullAmmo())), Ship = def.jsonKey });
+                        // The inactive prefab has serialized ammo. Its per-launcher maxAmmo is populated on enable.
+                        silos.Add(new Donor { Root = root, Info = ml.info, Rate = st.Sum(s => s.Weapons.Sum(w => w.ammo)), Ship = def.jsonKey });
                         continue;
                     }
                     if (!(st[0].Weapons[0] is Gun gun) || gun.info == null || gun.info.missile) continue;
@@ -69,9 +70,9 @@ namespace BoscaliSummer.Modules.Megaplane
             Donor heavy = donors.OrderByDescending(d => d.Info.massPerRound).First();
             Donor ciws = donors.OrderByDescending(d => d.Rate).First();
             WeaponMount side = encyclopedia.weaponMounts.FirstOrDefault(m => m != null && (m.jsonKey == SideDonor || m.name == SideDonor));
-            Donor? silo = silos.Count == 0 ? (Donor?)null : silos.OrderByDescending(d => d.Rate).First();
+            Donor[] siloTypes = silos.OrderByDescending(d => d.Rate).GroupBy(d => d.Info).Select(g => g.First()).Take(2).ToArray();
             Picked = (side != null ? side.jsonKey + " x" + SideScale : "no side mount") + " + " + ciws.Ship + "/" + ciws.Root.name + (railgun ? " + rail " + heavy.Ship + "/" + heavy.Root.name : "");
-            PickedSilo = silo == null ? "none" : silo.Value.Ship + "/" + silo.Value.Root.name + " x" + silo.Value.Rate;
+            PickedSilo = string.Join(", ", siloTypes.Select(d => d.Ship + "/" + d.Info.weaponName + " x" + d.Rate));
 
             foreach (KeyValuePair<string, Transform> node in nodes.Where(n => n.Key.StartsWith("GunMount_") || n.Key.StartsWith("SiloMount_")).ToList())
             {
@@ -82,8 +83,9 @@ namespace BoscaliSummer.Modules.Megaplane
                     continue;
                 }
                 bool isSilo = node.Key.StartsWith("SiloMount_");
-                if (isSilo && silo == null) continue;
-                Donor d = isSilo ? silo.Value : ciws;
+                if (isSilo && siloTypes.Length == 0) continue;
+                bool secondPair = node.Key == "SiloMount_2" || node.Key == "SiloMount_3";
+                Donor d = isSilo ? siloTypes[secondPair && siloTypes.Length > 1 ? 1 : 0] : ciws;
                 GameObject clone = Clone(d.Root.gameObject, host.transform, Prefix + (isSilo ? node.Key : node.Key.Substring("GunMount_".Length)));
                 clone.transform.position = node.Value.position;
                 clone.transform.rotation = aircraft.transform.rotation * Quaternion.Euler(0f, 0f, node.Key.EndsWith("_Down") ? 180f : 0f);

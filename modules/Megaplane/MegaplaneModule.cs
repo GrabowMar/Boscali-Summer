@@ -6,11 +6,11 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
-    /// <summary>G-240 BREAKWATER flying carrier (design/megaplane). G2 slice: registered, air-started, game-logic flight.</summary>
+    /// <summary>Registers the KY-44 Groza and its aircraft systems.</summary>
     internal sealed class MegaplaneModule : IModule
     {
-        public ModuleMetadata Metadata => new ModuleMetadata("megaplane", "G-240 Breakwater");
-        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch), typeof(MegaplaneCargoStationPatch), typeof(MegaplaneHangarAvailabilityPatch), typeof(MegaplaneHangarAirStartPatch), typeof(MegaplaneBatteryFirePatch), typeof(MegaplaneSelfHitPatch) };
+        public ModuleMetadata Metadata => new ModuleMetadata("megaplane", "KY-44 Groza");
+        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch), typeof(MegaplaneLoadoutPatch), typeof(MegaplaneSavedLoadoutPatch), typeof(MegaplaneCargoStationPatch), typeof(MegaplaneHangarAvailabilityPatch), typeof(MegaplaneHangarAirStartPatch), typeof(MegaplaneBatteryFirePatch), typeof(MegaplaneSelfHitPatch) };
         public void Install(ModuleContext context)
         {
             MegaplaneSettings.Current = context.Settings.Megaplane;
@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Megaplane
         }
     }
 
-    // One rigidbody, always: 35 jointed islands on a 240 m frame would only tear and jitter (BOTE replaces this method too).
+    // One rigidbody, always: 35 jointed islands on the carrier frame would only tear and jitter (BOTE replaces this method too).
     // The prefab is still one body when SetLocalSim asks for complex physics, so marking it simple is enough.
     [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.SetComplexPhysics))]
     internal static class MegaplanePhysicsLodPatch

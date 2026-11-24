@@ -9,7 +9,7 @@ using Object = UnityEngine.Object;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
-    /// <summary>G-240 BREAKWATER: a native SFB-81 Darkreach systems clone carrying the Blender blockout at true scale (designed at 240 m, built past the CL-1201 envelope to 380 x 190 m).
+    /// <summary>KY-44 Groza flying carrier with systems inherited from the SFB-81 Darkreach.
     /// Motion comes from <see cref="MegaplaneFlight"/> (BOTE-style game-logic flight), not from the donor's aerodynamics.</summary>
     internal static class MegaplaneTemplate
     {
@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Megaplane
         // the unit loudly instead of silently instantiating different art under the same network identity
         internal const int PrefabHashFighters = 0x42534D50, PrefabHashRailgun = 0x42534D52;
         internal static int PrefabHash => MegaplaneSettings.Railgun ? PrefabHashRailgun : PrefabHashFighters;
-        internal const float Mass = 6500000f;          // 380 m, past CL-1201 (study gross 5,375 t at 340 m); flight is acceleration-driven, so this only weighs collisions
+        internal const float Mass = 6500000f;          // The existing gross mass controls collisions and carried momentum.
         internal static AircraftDefinition Definition { get; private set; }
         internal static string LastError { get; private set; }
         private static GameObject holder;
@@ -72,15 +72,12 @@ namespace BoscaliSummer.Modules.Megaplane
             AircraftDefinition definition = Object.Instantiate(donor);
             definition.name = Key;
             definition.jsonKey = Key;
-            definition.code = "G-240";
-            definition.unitName = "G-240 Breakwater";
-            definition.description = "A 380 m fission-powered flying carrier and invasion hub. It never lands on the map: it arrives in the air, holds its altitude by itself and turns slowly. Point it with the stick, set speed with the throttle.";
+            definition.code = "KY-44";
+            definition.unitName = "KY-44 Groza";
+            definition.description = "A fission-powered flying carrier with a 342 m wingspan, eight engine pods and an internal cargo hold. It launches airborne. Center the stick to hold altitude and use the throttle to set speed.";
             definition.value = 400f;
             definition.radarSize = 3f;
             definition.manpower = 12;
-            definition.width = 380f;
-            definition.length = 190f;
-            definition.height = 53f;
             definition.spawnOffset = new Vector3(0, 18f, 0);   // belly to datum: an air start is always far above it
             definition.restRotation = Vector3.zero;
             // Turret target scores are multiplied by the OWNER's role: the Darkreach bomber role scores missiles 0, so the
@@ -92,6 +89,7 @@ namespace BoscaliSummer.Modules.Megaplane
             definition.aircraftInfo = new AircraftInfo { emptyWeight = Mass * .8f, maxWeight = Mass, maxSpeed = MegaplaneFlight.MaxSpeed * 3.6f, stallSpeed = MegaplaneFlight.MinSpeed * 3.6f, maneuverability = 1f };
             definition.aircraftParameters = Object.Instantiate(donor.aircraftParameters);
             AircraftParameters p = definition.aircraftParameters;
+            p.StatusDisplay = MegaplaneStatusDisplay.Build(p.StatusDisplay, holder.transform);
             p.airfoils = donor.aircraftParameters.airfoils;   // nonserialized IDs index native charts
             p.name = Key + "_Parameters";
             p.aircraftName = definition.unitName;
@@ -110,8 +108,34 @@ namespace BoscaliSummer.Modules.Megaplane
             AddIsland(go.transform, "pod1_R", "engine_R");
             Transform model = MegaplaneArt.Build(go.transform);
             model.name = "MegaplaneVisuals";
+            // BSMP stores the model in metres and bakes rotations/scales into vertices. Include
+            // the gear and tip lights in the encyclopedia and formation-spacing dimensions.
+            var envelope = new Bounds(Vector3.zero, Vector3.zero);
+            foreach (MeshFilter mesh in model.GetComponentsInChildren<MeshFilter>(true))
+            {
+                Bounds bounds = mesh.sharedMesh.bounds;
+                Vector3 origin = model.InverseTransformPoint(mesh.transform.position);
+                envelope.Encapsulate(origin + bounds.min);
+                envelope.Encapsulate(origin + bounds.max);
+            }
+            definition.width = envelope.size.x;
+            definition.height = envelope.size.y;
+            definition.length = envelope.size.z;
             Dictionary<string, Transform> nodes = model.GetComponentsInChildren<Transform>(true).GroupBy(t => t.name).ToDictionary(g => g.Key, g => g.First());
             RefitAirframe(aircraft, model, nodes);
+            foreach (var marker in nodes.Where(n => n.Key.StartsWith("Detail_Bay_WorkLight_")))
+            {
+                marker.Value.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                Light lamp = marker.Value.gameObject.AddComponent<Light>();
+                lamp.type = LightType.Spot;
+                lamp.color = new Color(1f, .87f, .73f);
+                lamp.intensity = 2f;
+                lamp.range = 13f;
+                lamp.spotAngle = 120f;
+                lamp.shadows = LightShadows.None;
+            }
+            FitCockpit(aircraft, nodes);
+            MegaplaneLod.Install(nodes);
             bool railgun = MegaplaneSettings.Railgun && nodes.ContainsKey("Railgun_Pitch");
             MegaplaneGuns.Graft(encyclopedia, aircraft, nodes, railgun);
             // The bay holds one payload: the other's art is switched off (its hitboxes go with it).
@@ -153,6 +177,39 @@ namespace BoscaliSummer.Modules.Megaplane
         // Position-only islands share another island's art.
         private static readonly HashSet<string> NoArt = new HashSet<string> { "nose", "vstab2_L", "vstab2_R" };
 
+        private static void FitCockpit(Aircraft aircraft, Dictionary<string, Transform> nodes)
+        {
+            Transform pilot = nodes["pilot"];
+            // The eye sits just forward of the modeled headrest and looks over the glare shield.
+            aircraft.cockpitViewPoint.position = pilot.TransformPoint(new Vector3(0f, .26f, .30f));
+            // The native camera normally re-enables the donor hull or interior when switching views.
+            // Keep only the Groza glazing and cockpit in both views. Its live display is for the seated pilot.
+            Set(aircraft, "exteriorRenderers", new Renderer[0]);
+            Set(aircraft, "cockpitRenderers", new Renderer[0]);
+            Renderer donor = aircraft.cockpit.GetComponentsInChildren<Renderer>(true).FirstOrDefault(r => r.name == "tacScreen");
+            if (donor == null || donor.sharedMaterial == null) return;
+            var face = new GameObject("GrozaTacticalDisplay");
+            face.layer = donor.gameObject.layer;
+            bool hasLocator = nodes.TryGetValue("TacticalScreen", out Transform locator);
+            face.transform.SetParent(hasLocator ? locator : pilot, false);
+            face.transform.localPosition = hasLocator ? new Vector3(0f, 0f, -.003f) : new Vector3(0f, -.52f, 1.126f);
+            // Sample the same live tactical-view region as the pilot's Darkreach display.
+            var mesh = new Mesh
+            {
+                name = "GrozaTacticalDisplay",
+                vertices = new[] { new Vector3(-.186f, -.18f), new Vector3(-.186f, .18f), new Vector3(.186f, .18f), new Vector3(.186f, -.18f) },
+                uv = new[] { new Vector2(0f, .28f), new Vector2(0f, 1f), new Vector2(.574f, 1f), new Vector2(.574f, .28f) },
+                triangles = new[] { 0, 1, 2, 0, 2, 3 },
+            };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            face.AddComponent<MeshFilter>().sharedMesh = mesh;
+            Renderer display = face.AddComponent<MeshRenderer>();
+            display.sharedMaterial = donor.sharedMaterial;
+            display.enabled = false;
+            Set(aircraft, "cockpitRenderers", new[] { display });
+        }
+
         /// <summary>A new damage island: a copy of the donor's "tail" island stripped to its AeroPart, under `parent`
         /// (an island name, or the airframe root).</summary>
         private static void AddIsland(Transform root, string name, string parent)
@@ -168,7 +225,8 @@ namespace BoscaliSummer.Modules.Megaplane
             AeroPart part = go.GetComponent<AeroPart>();
             part.Joints = new PartJoint[0];
             Set(part, "disintegrateObjects", new GameObject[0]);   // pointed at the donor's children, now gone
-            Set(part, "damageMaterial", null);
+            // UnitPart applies liveries and damage to this list even when a section has no donor renderer.
+            Set(part, "damageMaterial", new DamageMaterial());
         }
 
         private static void RefitAirframe(Aircraft aircraft, Transform model, Dictionary<string, Transform> nodes)
@@ -212,7 +270,10 @@ namespace BoscaliSummer.Modules.Megaplane
             foreach (MeshFilter mesh in art)
             {
                 AeroPart owner = mesh.GetComponentInParent<AeroPart>(true);
-                if (owner == null || mesh.name.Contains("Canopy") || mesh.name.StartsWith("Int_")) continue;   // glazing and interior: no hull of their own
+                // Paint, lamps and interior fittings sit on an existing hull. A convex collider over
+                // disconnected lamps or decals would invent solid surfaces between them.
+                if (owner == null || mesh.name.Contains("Canopy") || mesh.name.StartsWith("Int_") || mesh.name.StartsWith("FlightDeck_") ||
+                    mesh.name.StartsWith("Detail_") || mesh.name.StartsWith("Det_lights_")) continue;
                 var collider = mesh.gameObject.AddComponent<MeshCollider>();
                 collider.sharedMesh = mesh.sharedMesh;
                 collider.convex = true;

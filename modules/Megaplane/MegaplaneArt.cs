@@ -7,8 +7,7 @@ using UnityEngine.Rendering;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
-    /// <summary>Loads the Blender-built node tree (assets/Megaplane/Source/build_megaplane.py --runtime). Same idea as the SA-74N mesh:
-    /// no Unity bundle step while the art is a blockout. Unity frame, metres, nose +Z.</summary>
+    /// <summary>Loads the Blender-built KY-44 assembly in Unity coordinates, metres, nose +Z. The exporter lives in Artwork/.</summary>
     internal static class MegaplaneArt
     {
         private const string Resource = "BoscaliSummer.Megaplane.megaplane.mesh.gz";
@@ -92,6 +91,8 @@ namespace BoscaliSummer.Modules.Megaplane
             {   // a material with its own painted map (break faces: assets/.../damage_textures.py, 4 m UVs from breaks.py)
                 if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", own);
                 if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", own);
+                if (name.EndsWith("_Emit") && material.HasProperty("_EmissionMap"))
+                    material.SetTexture("_EmissionMap", own);
                 color = new Color(1f, 1f, 1f, color.a);   // the map carries the colour
             }
             else if (material.HasProperty("_Cull")) material.SetFloat("_Cull", 0f);   // fans, bores, glass: seen from both sides

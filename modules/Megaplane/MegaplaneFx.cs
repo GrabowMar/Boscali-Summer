@@ -56,7 +56,7 @@ namespace BoscaliSummer.Modules.Megaplane
             var points = new List<Vector3>();
             foreach (MeshFilter mf in part.GetComponentsInChildren<MeshFilter>(true))
             {
-                if (mf.GetComponentInParent<AeroPart>() != part || mf.sharedMesh == null || !mf.sharedMesh.isReadable) continue;
+                if (mf.name.StartsWith("GrozaLOD_") || mf.GetComponentInParent<AeroPart>() != part || mf.sharedMesh == null || !mf.sharedMesh.isReadable) continue;
                 Vector3[] v = mf.sharedMesh.vertices;
                 if (v.Length == 0 || mf.sharedMesh.bounds.size.magnitude < 3f) continue;
                 for (int i = 0; i < 6; i++) points.Add(part.transform.InverseTransformPoint(mf.transform.TransformPoint(v[Random.Range(0, v.Length)])));

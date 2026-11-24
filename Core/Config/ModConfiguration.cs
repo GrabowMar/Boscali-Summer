@@ -67,9 +67,7 @@ namespace BoscaliSummer.Core.Config
         public BoscaliSummer.Modules.CombatAdjust.Configuration.CombatAdjustSettings CombatAdjust { get; }
         public BoscaliSummer.Modules.Compatibility.Configuration.CompatibilitySettings Compatibility { get; }
         public BoscaliSummer.Modules.SeaStructures.Configuration.SeaStructureSettings SeaStructures { get; }
-#if !PUBLIC_RELEASE
         public BoscaliSummer.Modules.Megaplane.MegaplaneSettings Megaplane { get; }
-#endif
 
         public ModConfiguration(ConfigFile config)
         {
@@ -117,9 +115,7 @@ namespace BoscaliSummer.Core.Config
                 CombatAdjust = new BoscaliSummer.Modules.CombatAdjust.Configuration.CombatAdjustSettings(config);
                 Compatibility = new BoscaliSummer.Modules.Compatibility.Configuration.CompatibilitySettings(config);
                 SeaStructures = new BoscaliSummer.Modules.SeaStructures.Configuration.SeaStructureSettings(config);
-#if !PUBLIC_RELEASE
                 Megaplane = new BoscaliSummer.Modules.Megaplane.MegaplaneSettings(config);
-#endif
                 LegacyConfigMigration.RemoveEntries(config);
                 // Last, so every module's entries are present to be sorted into what the
                 // F1 window lists and what stays in the config file only.

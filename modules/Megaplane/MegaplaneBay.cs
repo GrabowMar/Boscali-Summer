@@ -18,21 +18,21 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             const string S = "Megaplane";
             BayFighter = config.Bind(S, "BayFighter", "Fighter1",
-                "Fighter carried on the G-240's two belly trapezes: a prefab name, unit key or unit name (Fighter1 = FS-12 Revoker, SmallFighter1 = FS-20 Vortex). Needs a mission restart.");
+                "Fighter carried on the KY-44's two belly trapezes: a prefab name, unit key or unit name (Fighter1 = FS-12 Revoker, SmallFighter1 = FS-20 Vortex). Needs a mission restart.");
             DropFighterKey = config.Bind(S, "DropFighterKey", new KeyboardShortcut(KeyCode.Insert),
-                "While flying the G-240: open the belly bay, swing the next fighter down on its trapeze and release it as a live AI aircraft of your side.");
+                "While flying the KY-44: open the belly bay, swing the next fighter down on its trapeze and release it as a live AI aircraft of your side.");
             BayPayload = config.Bind(S, "BayPayload", "Fighters",
-                new ConfigDescription("What the G-240's belly bay carries: Fighters (two parasite fighters on trapezes) or Railgun (the RG-240 Trident on a lowering mount). Every player must use the same choice. Needs a game restart.",
+                new ConfigDescription("What the KY-44's belly bay carries: Fighters (two parasite fighters on trapezes) or Railgun (the RG-240 Trident on a lowering mount). Every player must use the same choice. Needs a game restart.",
                     new AcceptableValueList<string>("Fighters", "Railgun")));
             RecallFighterKey = config.Bind(S, "RecallFighterKey", new KeyboardShortcut(KeyCode.Delete),
-                "While flying the G-240: recall the released bay fighters. The bay opens and lowers its empty trapezes; the carrier's datalink flies each fighter to a gate behind and below the bay, then up onto the hook (an automated FICON / DARPA Gremlins style capture). Hold course and speed while they dock.");
+                "While flying the KY-44: recall the released bay fighters. The bay opens and lowers its empty trapezes; the carrier's datalink flies each fighter to a gate behind and below the bay, then up onto the hook (an automated FICON / DARPA Gremlins style capture). Hold course and speed while they dock.");
         }
 
         internal static MegaplaneSettings Current;
         internal static bool Railgun => Current != null && Current.BayPayload.Value == "Railgun";
     }
 
-    /// <summary>Belly fighter bay of the G-240 (build_megaplane.py fighter_bay): two parasite fighters hang on FICON-style
+    /// <summary>Belly fighter bay of the KY-44 (build_megaplane.py fighter_bay): two parasite fighters hang on FICON-style
     /// trapezes. The template carries a render-only copy of the chosen fighter on each yoke; a drop opens the door pairs,
     /// swings the trapeze down 90 deg below the belly and, on the host, spawns that fighter as a real AI aircraft of the
     /// carrier's side at the copy's pose and the carrier's velocity, then retracts and closes.</summary>

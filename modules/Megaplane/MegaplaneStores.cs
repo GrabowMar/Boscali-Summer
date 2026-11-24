@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Megaplane
             new SetSpec { Name = "WING OUTBOARD", Prefix = "Hardpoint_O_", Suffix = new[] { "_1", "_2" } },
             new SetSpec { Name = "CARGO HOLD", Prefix = "Hardpoint_Hold_", Suffix = new[] { "_0" }, Hold = true },
             new SetSpec { Name = "SKYWELL TENDER", Prefix = "Hardpoint_Tender", Hold = true },
+            new SetSpec { Name = "PARATROOP STICK", Prefix = "Hardpoint_Hold_C_1", Hold = true },
         };
 
         private static WeaponMount Mount(Encyclopedia e, string key) => e.weaponMounts.FirstOrDefault(m => m != null && (m.jsonKey == key || m.name == key));
@@ -62,12 +63,14 @@ namespace BoscaliSummer.Modules.Megaplane
             var counts = new List<string>();
             foreach (SetSpec spec in Sets)
             {
+                if (spec.Name == "PARATROOP STICK" && halo == null) continue;
                 List<Transform> points = nodes.Where(n => n.Key.StartsWith(spec.Prefix) && (spec.Suffix == null || spec.Suffix.Any(s => n.Key.EndsWith(s)))).OrderBy(n => n.Key).Select(n => n.Value).ToList();
                 if (points.Count == 0) continue;
                 var set = new HardpointSet
                 {
                     name = spec.Name, hardpoints = new List<Hardpoint>(), precludingHardpointSets = new List<byte>(),
                     weaponOptions = spec.Prefix == "Hardpoint_Tender" ? (tender != null ? new List<WeaponMount> { tender } : new List<WeaponMount>())
+                        : spec.Name == "PARATROOP STICK" ? new List<WeaponMount> { halo }
                         : spec.Hold ? new List<WeaponMount>(cargo) : drones.Concat(donor).ToList(),
                 };
                 foreach (Transform t in points)
@@ -102,6 +105,26 @@ namespace BoscaliSummer.Modules.Megaplane
             Summary = string.Join(", ", counts) + "; fit " + string.Join(" / ", fit.weapons.Select(w => w != null ? w.jsonKey : "-"));
             Debug.Log("[Megaplane] stores: " + Summary + "; cargo options " + string.Join(" ", cargo.Select(c => c.jsonKey)));
         }
+
+        // The Vanguard drone catalogue finishes after Blueprinter has registered our airframe.
+        // Fit its outboard escort to the two template presets when the mount becomes available.
+        internal static void CompletePreset(AircraftDefinition definition)
+        {
+            if (definition == null || Encyclopedia.WeaponLookup == null ||
+                !Encyclopedia.WeaponLookup.TryGetValue("VG_Manta_Wing", out WeaponMount manta) || manta == null) return;
+            foreach (Loadout preset in definition.aircraftParameters.loadouts)
+                if (preset.weapons.Count > 1 && preset.weapons[1] != null && preset.weapons[1].jsonKey == "VG_Remora_ARM1_single")
+                    preset.weapons[1] = manta;
+        }
+
+        internal static Loadout UpgradeLoadout(Loadout loadout, int slots)
+        {
+            if (loadout == null || loadout.weapons.Count != 4 || slots != 5) return loadout;
+            // Retain all four original selections, including empty hardpoints. The new troop lane starts empty.
+            var migrated = new Loadout { weapons = new List<WeaponMount>(loadout.weapons) };
+            migrated.weapons.Add(null);
+            return migrated;
+        }
     }
 
     /// <summary>Ramp and petal doors follow the hold's native BayDoor (opened by every peer's cargo/troop fire replay).
@@ -112,7 +135,8 @@ namespace BoscaliSummer.Modules.Megaplane
         internal const float RampOpen = -22.6f, PetalOpen = 95f, BayDoorOpen = 60f;
         private static readonly AccessTools.FieldRef<BayDoor, float> Amount = AccessTools.FieldRefAccess<BayDoor, float>("openAmount");
         private BayDoor door;
-        private readonly List<(Transform t, Quaternion rest, Vector3 axis, float angle)> parts = new List<(Transform, Quaternion, Vector3, float)>();
+        private readonly List<(Transform t, Quaternion rest, Vector3 axis, float angle, float start, float end)> parts =
+            new List<(Transform, Quaternion, Vector3, float, float, float)>();
         internal float Open => door != null ? Amount(door) : 0f;
 
         private void Awake()
@@ -120,26 +144,54 @@ namespace BoscaliSummer.Modules.Megaplane
             foreach (Transform t in GetComponentsInChildren<Transform>(true))
             {
                 if (t.name == "BS_HoldDoor") door = t.GetComponent<BayDoor>();
-                else if (t.name == "Ramp") parts.Add((t, t.localRotation, Vector3.right, RampOpen));
-                else if (t.name == "AftDoor_L") parts.Add((t, t.localRotation, Vector3.forward, -PetalOpen));
-                else if (t.name == "AftDoor_R") parts.Add((t, t.localRotation, Vector3.forward, PetalOpen));
-                else if (t.name == "BayDoor_L") parts.Add((t, t.localRotation, Vector3.forward, -BayDoorOpen));
-                else if (t.name == "BayDoor_R") parts.Add((t, t.localRotation, Vector3.forward, BayDoorOpen));
+                else if (t.name == "Ramp") parts.Add((t, t.localRotation, Vector3.right, RampOpen, .48f, 1f));
+                else if (t.name == "AftDoor_L") parts.Add((t, t.localRotation, Vector3.forward, -PetalOpen, 0f, .55f));
+                else if (t.name == "AftDoor_R") parts.Add((t, t.localRotation, Vector3.forward, PetalOpen, 0f, .55f));
+                else if (t.name == "BayDoor_L") parts.Add((t, t.localRotation, Vector3.forward, -BayDoorOpen, 0f, 1f));
+                else if (t.name == "BayDoor_R") parts.Add((t, t.localRotation, Vector3.forward, BayDoorOpen, 0f, 1f));
             }
         }
 
         private void Update()
         {
-            float k = Mathf.SmoothStep(0f, 1f, Open);
-            // a piece that broke off keeps its own pose: it no longer follows the carrier's hold door
-            foreach ((Transform t, Quaternion rest, Vector3 axis, float angle) in parts)
-                if (t != null && t.IsChildOf(transform)) t.localRotation = rest * Quaternion.AngleAxis(angle * k, axis);
+            float open = Open;
+            // The petals clear the aft sill before the ramp drops. The same phase
+            // windows sequence the ramp back inside before the petals shut.
+            foreach ((Transform t, Quaternion rest, Vector3 axis, float angle, float start, float end) in parts)
+                if (t != null && t.IsChildOf(transform))
+                {
+                    float k = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(start, end, open));
+                    t.localRotation = rest * Quaternion.AngleAxis(angle * k, axis);
+                }
         }
     }
 }
 
 namespace BoscaliSummer.Modules.Megaplane
 {
+    [HarmonyPatch(typeof(WeaponManager), nameof(WeaponManager.InitializeWeaponManager))]
+    internal static class MegaplaneLoadoutPatch
+    {
+        private static void Prefix(WeaponManager __instance)
+        {
+            Aircraft aircraft = MegaplaneCargoStation.AircraftRef(__instance);
+            if (!MegaplaneModule.Is(aircraft)) return;
+            MegaplaneStores.CompletePreset(aircraft.definition);
+            Loadout fit = MegaplaneStores.UpgradeLoadout(aircraft.loadout, __instance.hardpointSets.Length);
+            if (fit != aircraft.loadout) aircraft.Networkloadout = fit;
+        }
+    }
+
+    [HarmonyPatch(typeof(SavedLoadout), nameof(SavedLoadout.CreateLoadout), typeof(WeaponManager))]
+    internal static class MegaplaneSavedLoadoutPatch
+    {
+        private static void Postfix(WeaponManager weaponManager, ref Loadout __result)
+        {
+            Aircraft aircraft = weaponManager.GetComponentInParent<Aircraft>(true);
+            if (MegaplaneModule.Is(aircraft)) __result = MegaplaneStores.UpgradeLoadout(__result, weaponManager.hardpointSets.Length);
+        }
+    }
+
     internal static class MegaplaneCargoStation
     {
         internal static readonly AccessTools.FieldRef<WeaponManager, Aircraft> AircraftRef = AccessTools.FieldRefAccess<WeaponManager, Aircraft>("aircraft");

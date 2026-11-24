@@ -1,8 +1,10 @@
 #if !PUBLIC_RELEASE
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
+using NuclearOption.SavedMission;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Megaplane
@@ -20,7 +22,7 @@ namespace BoscaliSummer.Modules.Megaplane
             return new
             {
                 registered = true, speed = a.rb.velocity.magnitude, altitude = a.GlobalPosition().y, radarAlt = a.radarAlt,
-                climbRate = a.rb.velocity.y, heading = e.y,
+                climbRate = a.rb.velocity.y, heading = e.y, smoothFrameMs = Time.smoothDeltaTime * 1000f / Mathf.Max(Time.timeScale, .001f),
                 slip = Mathf.Abs(Mathf.DeltaAngle(e.y, Mathf.Atan2(a.rb.velocity.x, a.rb.velocity.z) * Mathf.Rad2Deg)), pitch = Mathf.DeltaAngle(0, e.x), bank = Mathf.DeltaAngle(0, e.z),
                 holdHeading = flight.Heading, holdAltitude = flight.HoldAltitude, thrust = flight.Thrust, fans = a.GetComponent<MegaplaneFans>()?.Count ?? 0, fanSpool = a.GetComponent<MegaplaneFans>()?.Spool ?? 0f,
                 mass = a.rb.mass, simple = HarmonyLib.Traverse.Create(a).Field<bool>("simplePhysics").Value,
@@ -69,6 +71,121 @@ namespace BoscaliSummer.Modules.Megaplane
         }
 
         private static float[] V(Vector3 v) => new[] { v.x, v.y, v.z };
+
+        /// <summary>Run a native aircraft spawn on the test host and inspect the same replica on both peers.</summary>
+        public static string PeerProbe(bool spawn)
+        {
+            if (string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("NOMODKIT_PEER_PORT")))
+                throw new System.InvalidOperationException("Groza peer inspection requires a nomodkit loopback sandbox.");
+            AircraftDefinition definition = MegaplaneTemplate.Definition;
+            if (spawn)
+            {
+                if (NuclearOption.Networking.NetworkManagerNuclearOption.i?.Server?.Active != true || definition == null)
+                    throw new System.InvalidOperationException("Groza must be registered on a running peer host.");
+                if (!Object.FindObjectsOfType<Aircraft>().Any(MegaplaneModule.Is))
+                    NetworkSceneSingleton<Spawner>.i.SpawnAircraft(null, definition.unitPrefab, definition.aircraftParameters.loadouts[0], 1f, default,
+                        new GlobalPosition(10000f, 2500f, -35000f), Quaternion.identity, Vector3.forward * 130f,
+                        null, FactionRegistry.GetSortedHQs()[0], "Groza peer test", .5f, .5f);
+            }
+            return Newtonsoft.Json.JsonConvert.SerializeObject(new
+            {
+                definitionIndex = definition == null ? -1 : ((INetworkDefinition)definition).LookupIndex,
+                aircraft = Object.FindObjectsOfType<Aircraft>().Where(MegaplaneModule.Is).Select(a => new
+                {
+                    key = a.definition.jsonKey, netId = a.Identity.NetId, prefab = a.Identity.PrefabHash,
+                    width = a.definition.width, length = a.definition.length,
+                    lodIslands = a.GetComponentsInChildren<LODGroup>().Count(g => g.GetLODs().Any(l => l.renderers.Any(r => r != null && r.name.StartsWith("GrozaLOD_")))),
+                    stores = a.weaponManager.hardpointSets.Select(s => s.weaponMount == null ? "" : s.weaponMount.jsonKey),
+                }),
+            });
+        }
+
+        /// <summary>Read actual renderer visibility, control-surface pose and seating from the live aircraft.</summary>
+        public static object Inspect(Dictionary<string, object> args)
+        {
+            if (!(args.TryGetValue("idUnit", out object unit) && unit is Aircraft a) || !MegaplaneModule.Is(a)) return new { ok = false };
+            var islands = a.GetComponentsInChildren<LODGroup>().Select(g => new { island = g.name, levels = g.GetLODs() })
+                .Where(g => g.levels.Length == 2 && g.levels[1].renderers.Any(r => r != null && r.name.StartsWith("GrozaLOD_"))).ToArray();
+            Renderer display = a.GetComponentsInChildren<Renderer>(true).FirstOrDefault(r => r.name == "GrozaTacticalDisplay");
+            StatusDisplay schematic = Object.FindObjectsOfType<StatusDisplay>().FirstOrDefault(s => s.name.StartsWith("StatusDisplay_KY44"));
+            var sections = schematic != null ? HarmonyLib.Traverse.Create(schematic).Field<List<PartStatusDisplay>>("statusDisplays").Value : null;
+            return new
+            {
+                ok = true, width = a.definition.width, length = a.definition.length, height = a.definition.height, lodBias = QualitySettings.lodBias,
+                groups = islands.Length, near = islands.Sum(g => g.levels[0].renderers.Length), far = islands.Sum(g => g.levels[1].renderers.Length),
+                nearVisible = islands.Sum(g => g.levels[0].renderers.Count(r => r != null && r.isVisible)),
+                farVisible = islands.Sum(g => g.levels[1].renderers.Count(r => r != null && r.isVisible)),
+                flap = a.GetComponent<MegaplaneSurfaces>().InnerFlapAngle, display = display != null && display.enabled,
+                liveTexture = display != null && display.sharedMaterial.GetTexturePropertyNames().Any(k => display.sharedMaterial.GetTexture(k) is RenderTexture),
+                schematic = a.definition.aircraftParameters.StatusDisplay.name, sections = sections?.Count ?? 0,
+                damagedSections = sections == null ? new string[0] : sections.Where(s => s.partImage.color.a > .02f).Select(s => s.partImage.name).ToArray(),
+                eyeDistance = Camera.main == null ? -1f : Vector3.Distance(Camera.main.transform.position, a.cockpitViewPoint.position),
+                eye = V(a.transform.InverseTransformPoint(a.cockpitViewPoint.position)),
+                camera = Camera.main == null ? null : V(a.transform.InverseTransformPoint(Camera.main.transform.position)),
+            };
+        }
+
+        public static object SavedFit(Dictionary<string, object> args)
+        {
+            if (!(args.TryGetValue("idUnit", out object unit) && unit is Aircraft a) || !MegaplaneModule.Is(a)) return new { valid = false };
+            // A legacy save with an intentionally empty outboard beam must not silently receive the default escort.
+            var saved = new SavedLoadout();
+            foreach (WeaponMount mount in a.loadout.weapons.Take(4))
+                saved.Selected.Add(new SavedLoadout.SelectedMount { Key = saved.Selected.Count == 1 || mount == null ? "" : mount.jsonKey });
+            Loadout loaded = saved.CreateLoadout(a.definition.unitPrefab);
+            string[] oldKeys = saved.Selected.Select(s => s.Key).ToArray();
+            string[] newKeys = loaded.weapons.Select(w => w != null ? w.jsonKey : "").ToArray();
+            var hangars = Object.FindObjectsOfType<Hangar>().Where(h => h.attachedUnit != null && !h.attachedUnit.disabled)
+                .Select(h => h.GetAvailableAircraft()).Where(choices => choices != null && choices.Any(d => d != null && d.jsonKey == "Darkreach")).ToArray();
+            int offered = hangars.Count(choices => choices.Contains(a.definition));
+            return new { valid = newKeys.Length == 5 && newKeys.Take(4).SequenceEqual(oldKeys) && newKeys[4] == "", oldKeys, newKeys,
+                darkreachHangars = hangars.Length, grozaHangars = offered, allHangars = offered == hangars.Length && offered > 0 };
+        }
+
+        /// <summary>Exercise the occupied carrier's native station and report the actual ammunition consumed.</summary>
+        public static object Fire(Dictionary<string, object> args)
+        {
+            if (!(args.TryGetValue("idUnit", out object unit) && unit is Aircraft a) || !MegaplaneModule.Is(a) ||
+                !(args.TryGetValue("weapon", out object weapon) && weapon is string name)) return new { fired = false };
+            WeaponStation station = a.weaponStations.FirstOrDefault(s => s.Ammo > 0 && s.HasTurret() && (name == "@missile"
+                ? s.Weapons.Any(w => w is MissileLauncher)
+                : s.WeaponInfo != null && s.WeaponInfo.weaponName.IndexOf(name, System.StringComparison.OrdinalIgnoreCase) >= 0));
+            if (station == null) return new { fired = false };
+            WeaponStation previous = a.weaponManager.currentWeaponStation;
+            int before = station.GetAmmoTotal();
+            VolleySample sample = a.GetComponent<VolleySample>() ?? a.gameObject.AddComponent<VolleySample>();
+            int previousVolleyRounds = sample.Station == station ? sample.Rounds : 0;
+            try
+            {
+                a.SetActiveStation(station.Number);
+                if (station.Ready())
+                {
+                    station.Fire(a, null);
+                    sample.StartCoroutine(sample.ReadNextPhysicsTick(station, before));
+                }
+            }
+            finally
+            {
+                if (previous != null && previous != station) a.SetActiveStation(previous.Number);
+            }
+            int after = station.GetAmmoTotal();
+            // A missile leaves immediately. A Gun consumes its queued rounds in the next FixedUpdate.
+            return new { fired = after < before || previousVolleyRounds > 0, before, after, previousVolleyRounds, weapon = station.WeaponInfo.weaponName };
+        }
+
+        private sealed class VolleySample : MonoBehaviour
+        {
+            internal WeaponStation Station;
+            internal int Rounds;
+
+            internal IEnumerator ReadNextPhysicsTick(WeaponStation station, int before)
+            {
+                Station = station;
+                Rounds = 0;
+                yield return new WaitForFixedUpdate();
+                Rounds = before - station.GetAmmoTotal();
+            }
+        }
 
         /// <summary>Hardpoint stores: "fire" = text in a station's weapon name or mount key (e.g. "REMORA", "Paratroop", "UGV"),
         /// launched once through the station's own LaunchMount (target: the "idTarget" unit, else none). Reads every station,
@@ -170,6 +287,8 @@ namespace BoscaliSummer.Modules.Megaplane
                 List<MegaplaneHitbox> boxes = names.Select(nm => all.FirstOrDefault(h => h.Owner != null && h.Owner.name == nm)).Where(h => h != null).ToList();
                 if (boxes.Count == 0) boxes = all.Where(h => names.Any(nm => h.transform.name == nm || h.transform.parent != null && h.transform.parent.name == nm)).ToList();
                 if (boxes.Count == 0) return new { state = DamageState(a, d), boxes = all.Take(40).Select(h => h.name + ">" + (h.Owner != null ? h.Owner.name : "-")).ToArray(), before = -1f, after = -1f, armor = (float[])null };
+                if (args.TryGetValue("heal", out object heal) && System.Convert.ToBoolean(heal))
+                    foreach (MegaplaneHitbox h in boxes) h.Owner.Repair();
                 ArmorProperties armor = boxes.Count > 0 ? boxes[0].Owner.GetArmorProperties() : null;
                 float before = boxes.Count > 0 ? boxes[0].Owner.hitPoints : -1f;
                 foreach (MegaplaneHitbox h in boxes)
@@ -214,6 +333,12 @@ namespace BoscaliSummer.Modules.Megaplane
         public static object View(Dictionary<string, object> args)
         {
             if (!(args.TryGetValue("idUnit", out object value) && value is Aircraft a) || Camera.main == null) return new { ok = false };
+            if (args.TryGetValue("release", out object release) && System.Convert.ToBoolean(release))
+            {
+                ShotCam previous = Camera.main.GetComponent<ShotCam>();
+                if (previous != null) { previous.enabled = false; Object.Destroy(previous); }
+                return new { ok = true };
+            }
             float F(string k) => System.Convert.ToSingle(args[k]);
             ShotCam shot = Camera.main.GetComponent<ShotCam>() ?? Camera.main.gameObject.AddComponent<ShotCam>();
             shot.target = a.transform;
