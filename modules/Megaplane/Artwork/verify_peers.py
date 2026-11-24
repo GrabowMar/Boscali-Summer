@@ -20,6 +20,14 @@ def exercise(original, names, pids, timeout, report):
     original(names, pids, timeout, report)
     report["ok"] = False
     report["evidence"]["scope"] = "Groza spawn, damage-island LODs, dimensions and selected loadout on identical loopback game peers"
+    deadline = time.monotonic() + min(45, timeout)
+    while time.monotonic() < deadline:
+        host, client = [inspect_aircraft(name) for name in names]
+        if host["definitionIndex"] == client["definitionIndex"] >= 0:
+            break
+        time.sleep(.5)
+    else:
+        raise Fail(PRECONDITION, "The two game catalogues did not finish loading the Groza")
     inspect_aircraft(names[0], spawn=True)
     deadline = time.monotonic() + min(45, timeout)
     while time.monotonic() < deadline:
@@ -47,14 +55,27 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inst", default="groza", help="sandbox prefix; the two names end in -peer-host and -peer-client")
     parser.add_argument("--timeout", type=float, default=160)
+    parser.add_argument("--late-join", action="store_true", help="spawn the aircraft before launching the client")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[3]
     original = peers._exercise
+    original_wait = peers._wait
+    if args.late_join:
+        def wait_then_spawn(instance, pid, timeout, predicate):
+            snapshot = original_wait(instance, pid, timeout, predicate)
+            if instance.endswith("-peer-host") and snapshot.get("ready") and not snapshot.get("remote_players"):
+                until = time.monotonic() + min(45, timeout)
+                while inspect_aircraft(instance)["definitionIndex"] < 0 and time.monotonic() < until:
+                    time.sleep(.5)
+                inspect_aircraft(instance, spawn=True)
+            return snapshot
+        peers._wait = wait_then_spawn
     peers._exercise = lambda *a: exercise(original, *a)
     try:
         report = peers.cmd_peers(SimpleNamespace(inst=args.inst, mod="boscalisummer", mod_root=str(root), mission="Free Flight", timeout=args.timeout))
     finally:
         peers._exercise = original
+        peers._wait = original_wait
     print(report["text"])
     return 0 if report["ok"] else 1
 

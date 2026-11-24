@@ -1,7 +1,11 @@
 using System;
 using System.Linq;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Modules;
+using Cysharp.Threading.Tasks;
 using HarmonyLib;
+using NuclearOption.Networking;
+using NuclearOption.SceneLoading;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Megaplane
@@ -10,7 +14,7 @@ namespace BoscaliSummer.Modules.Megaplane
     internal sealed class MegaplaneModule : IModule
     {
         public ModuleMetadata Metadata => new ModuleMetadata("megaplane", "KY-44 Groza");
-        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch), typeof(MegaplaneLoadoutPatch), typeof(MegaplaneSavedLoadoutPatch), typeof(MegaplaneCargoStationPatch), typeof(MegaplaneHangarAvailabilityPatch), typeof(MegaplaneHangarAirStartPatch), typeof(MegaplaneBatteryFirePatch), typeof(MegaplaneSelfHitPatch) };
+        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneClientMapReadyPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch), typeof(MegaplaneLoadoutPatch), typeof(MegaplaneSavedLoadoutPatch), typeof(MegaplaneCargoStationPatch), typeof(MegaplaneHangarAvailabilityPatch), typeof(MegaplaneHangarAirStartPatch), typeof(MegaplaneBatteryFirePatch), typeof(MegaplaneSelfHitPatch) };
         public void Install(ModuleContext context)
         {
             MegaplaneSettings.Current = context.Settings.Megaplane;
@@ -40,6 +44,34 @@ namespace BoscaliSummer.Modules.Megaplane
         private static void Postfix(Encyclopedia __instance)
         {
             if (MegaplaneTemplate.Definition != null || !MegaplaneBlueprinterPatch.Available) MegaplaneTemplate.Register(__instance);
+        }
+    }
+
+    // The server immediately sends aircraft and their encyclopedia indices when a joining client finishes its map load.
+    // On a cold start Blueprinter can still be reading the bundles, leading Mirage to permanently discard the spawn.
+    [HarmonyPatch(typeof(MapLoader), nameof(MapLoader.Load))]
+    internal static class MegaplaneClientMapReadyPatch
+    {
+        private static bool Registered => Encyclopedia.Lookup != null && Encyclopedia.Lookup.ContainsKey(MegaplaneTemplate.Key);
+
+        private static void Postfix(ref UniTask<MapLoader.LoadResult> __result)
+        {
+            NetworkManagerNuclearOption manager = GameAccess.NetworkManagerOrNull;
+            if (manager?.Client?.Active == true && manager.Server?.Active != true && MegaplaneBlueprinterPatch.Available && !Registered)
+                __result = WaitForCatalogue(__result, manager);
+        }
+
+        private static async UniTask<MapLoader.LoadResult> WaitForCatalogue(UniTask<MapLoader.LoadResult> loading, NetworkManagerNuclearOption manager)
+        {
+            MapLoader.LoadResult result = await loading;
+            if (result != MapLoader.LoadResult.ChangedScene && result != MapLoader.LoadResult.ChangedWorldPrefab && result != MapLoader.LoadResult.AlreadyLoaded)
+                return result;
+            float deadline = Time.realtimeSinceStartup + 30f;
+            while (manager != null && manager.Client.Active && !Registered && Time.realtimeSinceStartup < deadline)
+                await UniTask.Yield();
+            if (manager != null && manager.Client.Active && !Registered)
+                Debug.LogWarning("[Megaplane] Groza catalogue did not register before the map-load deadline. Continuing the native connection.");
+            return result;
         }
     }
 
