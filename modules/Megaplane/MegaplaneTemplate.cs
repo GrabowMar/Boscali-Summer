@@ -172,6 +172,8 @@ namespace BoscaliSummer.Modules.Megaplane
             definition.mass = Mass;
             go.GetComponent<Rigidbody>().mass = Mass;
             go.AddComponent<MegaplaneDamage>();
+            go.AddComponent<MegaplaneCrash>();
+            go.AddComponent<MegaplaneAirframeSeams>();
             go.AddComponent<MegaplaneFx>();
             go.AddComponent<MegaplaneReactor>();
             go.AddComponent<MegaplaneFlight>();

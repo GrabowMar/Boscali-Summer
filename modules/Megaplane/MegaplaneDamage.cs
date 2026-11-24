@@ -30,6 +30,7 @@ namespace BoscaliSummer.Modules.Megaplane
         private readonly HashSet<Transform> scaled = new HashSet<Transform>();
         private readonly HashSet<AeroPart> dirty = new HashSet<AeroPart>();
         private float nextBreak, nextCheck;
+        private int shed;
 
         internal float LiftL { get; private set; } = 1f;
         internal float LiftR { get; private set; } = 1f;
@@ -147,7 +148,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 aircraft.ReportKilled();
             }
             if (!aircraft.disabled) Overload();
-            if (aircraft.disabled && Time.time > nextBreak)
+            if (aircraft.disabled && shed < 4 && Time.time > nextBreak)
             {
                 // The dying carrier sheds what it still carries, outermost first, a piece every few seconds. The first
                 // pass only schedules that timer: no piece falls off in the same frame the carrier disables.
@@ -155,7 +156,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 {
                     AeroPart next = parts.Where(p => p != null && p.parentUnit != null && p.gameObject != p.parentUnit.gameObject && !p.IsDetached())
                         .OrderByDescending(p => (p.transform.position - transform.position).sqrMagnitude).FirstOrDefault();
-                    if (next != null) Break(next, true);
+                    if (next != null) { Break(next, true); shed++; }
                 }
                 nextBreak = Time.time + Random.Range(BreakupMin, BreakupMax);
             }

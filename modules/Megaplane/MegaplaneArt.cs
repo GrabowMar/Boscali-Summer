@@ -12,10 +12,13 @@ namespace BoscaliSummer.Modules.Megaplane
     {
         private const string Resource = "BoscaliSummer.Megaplane.megaplane.mesh.gz";
 
-        internal static Transform Build(Transform parent)
+        internal static Transform Build(Transform parent) => Load(parent, Resource);
+        internal static Transform BuildWreck(Transform parent) => Load(parent, "BoscaliSummer.Megaplane.megaplane.wreck.gz");
+
+        private static Transform Load(Transform parent, string resource)
         {
-            byte[] bytes = EmbeddedResources.ReadAll(typeof(MegaplaneArt).Assembly, Resource, 32 * 1024 * 1024);
-            if (bytes == null) throw new InvalidDataException("Megaplane artwork is missing.");
+            byte[] bytes = EmbeddedResources.ReadAll(typeof(MegaplaneArt).Assembly, resource, 32 * 1024 * 1024);
+            if (bytes == null) throw new InvalidDataException("Missing aircraft artwork " + resource);
             using (var input = new BinaryReader(new GZipStream(new MemoryStream(bytes), CompressionMode.Decompress)))
             {
                 if (input.ReadInt32() != 0x504D5342 || input.ReadInt32() != 2) throw new InvalidDataException("Invalid Megaplane mesh.");
@@ -67,9 +70,11 @@ namespace BoscaliSummer.Modules.Megaplane
 
         private static Texture2D albedo, normal, mask;
         private static bool maskMissing;
+        private static readonly Dictionary<string, Material> palette = new Dictionary<string, Material>();
 
         private static Material Material(string name, Color color, float metallic, float smoothness, float alpha, bool textured)
         {
+            if (palette.TryGetValue(name, out Material existing) && existing != null) return existing;
             Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
             var material = new Material(shader) { name = name, hideFlags = HideFlags.DontUnloadUnusedAsset };
             if (textured)
@@ -116,6 +121,7 @@ namespace BoscaliSummer.Modules.Megaplane
             if (material.HasProperty("_Color")) material.SetColor("_Color", color);
             if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", metallic);
             if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", smoothness);
+            palette[name] = material;
             return material;
         }
 

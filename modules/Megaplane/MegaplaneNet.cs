@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Megaplane
     internal static class MegaplaneWire
     {
         /// <summary>Bump on any change to either message's layout.</summary>
-        public const byte ProtocolVersion = 3;
+        public const byte ProtocolVersion = 4;
 
         internal const byte DropVerb = 0, RecallVerb = 1, InitialDamageVerb = 2, RailgunIndex = 2, ReactorIndex = 3;
 
@@ -84,7 +84,7 @@ namespace BoscaliSummer.Modules.Megaplane
     /// accepts only from the player actually flying that carrier. Follows the COMMS transport: the game's own Mirage
     /// connection, serializers installed through <see cref="MirageSerializers"/>, handler slots swapped on a slow poll.
     /// </summary>
-    internal sealed class MegaplaneNet : MonoBehaviour
+    internal sealed partial class MegaplaneNet : MonoBehaviour
     {
         internal static MegaplaneNet Instance { get; private set; }
         private static readonly List<MegaplaneBay> bays = new List<MegaplaneBay>();
@@ -129,6 +129,8 @@ namespace BoscaliSummer.Modules.Megaplane
             ServerHandlers.Release();
             ClientHandlers.Release();
             DamageHandler.Release();
+            CrashHandler.Release();
+            ResetCrashes();
             if (Instance == this) Instance = null;
         }
 
@@ -219,6 +221,8 @@ namespace BoscaliSummer.Modules.Megaplane
                 (Func<NetworkReader, MegaplaneAskMessage>)MegaplaneWire.ReadAsk);
             Seams.Install<MegaplaneDamageSeed>((Action<NetworkWriter, MegaplaneDamageSeed>)MegaplaneDamageSeed.Write,
                 (Func<NetworkReader, MegaplaneDamageSeed>)MegaplaneDamageSeed.Read);
+            Seams.Install<MegaplaneCrashRecord>((Action<NetworkWriter, MegaplaneCrashRecord>)MegaplaneCrashRecord.Write,
+                (Func<NetworkReader, MegaplaneCrashRecord>)MegaplaneCrashRecord.Read);
         }
 
         private void Update()
@@ -232,6 +236,8 @@ namespace BoscaliSummer.Modules.Megaplane
             ServerHandlers.Swap(network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null);
             ClientHandlers.Swap(network?.Client?.MessageHandler);
             DamageHandler.Swap(network?.Client?.MessageHandler);
+            CrashHandler.Swap(network?.Client?.MessageHandler);
+            UpdateCrashes(network);
             if (GameAccess.IsServer() && Time.unscaledTime >= nextRefresh)
             {
                 // Refresh: a peer that joined mid-operation would otherwise wait for the next transition.
