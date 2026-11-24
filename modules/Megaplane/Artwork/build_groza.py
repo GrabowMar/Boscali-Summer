@@ -4,11 +4,13 @@ From this directory, in the activated workspace:
     blender -b --factory-startup --python-exit-code 1 --python build_groza.py
     python build_status.py
     blender -b --factory-startup --python-exit-code 1 --python verify_rig.py
+    blender -b --factory-startup --python-exit-code 1 --python verify_assist.py
 
 The second command requires Pillow and derives the cockpit damage diagram from
 the final exported mesh. Use the workspace nomodkit venv for that command.
 The first command opens a fresh scene and writes the packed, metre-scale master
-to assets/KY44Groza. Its root object has sliders for flaps, hold, gear and fans.
+to assets/KY44Groza. Its root object has sliders for flaps, hold, gear, fans
+and the four intake lids on the two nose-lift fans.
 Panel textures live alongside the embedded mesh. To regenerate the textures,
 run build_panels.py in Blender before rebuilding the model.
 
@@ -44,6 +46,10 @@ from build_lods import write_lods
 from flightdeck import frame_displays
 from hold_interior import outfit_hold
 from planform import rebuild_planform
+from wing_structure import fit_wing_splices
+from reactor import fit_reactor
+from nose_assist import add_nose_assist
+from service_finish import detail_boom_services
 from pose import controls
 
 
@@ -107,6 +113,10 @@ def build():
     outfit_hold(nodes)
     finish_surface(nodes)
     rebuild_planform(nodes)
+    add_nose_assist(nodes)
+    detail_boom_services(nodes)
+    fit_wing_splices(nodes)
+    fit_reactor(nodes)
     bpy.context.view_layer.update()
     root = nodes["BS_Megaplane"]
     write_lods(nodes, ASSETS/"megaplane.lod.gz")

@@ -34,3 +34,10 @@ vstab1_L
 vstab1_R
 rudder_L
 rudder_R
+noseAssist_L
+pod4_L
+noseAssist_R
+pod4_R
+reactor
+coolant_L
+coolant_R

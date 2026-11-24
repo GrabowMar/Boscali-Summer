@@ -15,11 +15,12 @@ from mathutils.bvhtree import BVHTree
 # lining and closure geometry so looking into an open bay still shows the hull.
 SHELLS = ("Fuselage_", "Wing_", "Boom_", "Fin_", "Rudder_", "Aileron_", "Flap_",
           "Pod_", "Pods_Nacelle", "Strongback_", "GearSponson_", "TailCap_",
-          "Strake_", "Dorsal_ServiceTrunks")
+          "Strake_", "Dorsal_ServiceTrunks", "NoseAssist_")
 MECHANISMS = ("Gear_", "GearDoor_", "FighterDoor_", "BayDoor_", "AftDoor_",
               "LiftDoor_", "LiftBank_", "Fan_Pod_", "Spoiler", "Pylon_", "WingFence_",
-              "TrapezeArm_", "TrapezeYoke_")
-FIXTURES = ("Fairing_WingRoot", "GunFairing_", "GearWell_", "FinFillet_", "BoomFillet_",
+              "TrapezeArm_", "TrapezeYoke_", "Detail_AssistDuct_", "Detail_AssistFan_",
+              "Detail_AssistLidInner_", "Detail_AssistLidOuter_")
+FIXTURES = ("Fairing_WingRoot", "GunFairing_", "GearWell_", "FinFillet_", "BoomFillet_", "ReactorCore", "CoolantPack_",
             "SiloBlock_", "DefenceBarbette_", "VentralBarbette_", "DorsalBarbette_")
 SINGLE = {"Tailplane", "Elevator", "Ramp", "Hold_Liner", "Hold_Liner_Cut", "Hold_Floor",
           "FighterBay_Liner", "Glass_Canopy", "Detail_NoseRadome", "Detail_WindscreenFrames", "Railgun_Elevator",

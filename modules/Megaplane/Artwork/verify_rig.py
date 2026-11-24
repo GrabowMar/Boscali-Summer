@@ -126,12 +126,42 @@ def cockpit_clearance(nodes, nose_max_y, check):
     print(f'Cockpit exterior clearance: {nearest:.4f} m, {len(furnishings)} interior meshes.')
 
 
+def verify_splice_sections(nodes, check):
+    # Probe through the exported opening and its adjacent sheet on each side of a break.
+    for side, sign in (("L", -1), ("R", 1)):
+        for first, second in (("Inner", "Mid"), ("Mid", "Outer")):
+            for section, normal, end in ((first, sign, "Out"), (second, -sign, "In")):
+                owner = nodes[f"Wing_{section}_{side}"]
+                web = nodes[f"Int_Bulkhead_Splice_{owner.name}_{end}"]
+                check(web.parent == owner, f"Unowned splice {web.name}")
+                stations = vertices(owner) + position(owner)
+                x = max(stations[:,0] * normal) * normal
+                rim = stations[np.abs(stations[:,0]-x) < .001]
+                aft, fore = min(rim[:,1]), max(rim[:,1])
+                shell, detail = tree(owner, 'X', 0), tree(web, 'X', 0)
+                for fraction in (.245, .395, .545, .685, .805):
+                    y = aft + (fore-aft)*fraction
+                    # Sample the section a little inside its rim to avoid edge-ray ambiguity.
+                    roof = shell.ray_cast((x-normal*.05,y,60), (0,0,-1))[0]
+                    floor = shell.ray_cast((x-normal*.05,y,-60), (0,0,1))[0]
+                    if roof is None or floor is None:
+                        raise ValueError(f"Missing skin over {web.name} at {y}")
+                    for level, aperture in ((.5, True), (.80, False)):
+                        z = floor.z + (roof.z-floor.z)*level
+                        ray = ((x+normal*2,y,z),(-normal,0,0))
+                        hits = [hit[3]-2 for part in (shell,detail) if (hit:=part.ray_cast(*ray))[0] is not None]
+                        depth = min(hits, default=99.)
+                        good = .70 < depth < .9 if aperture else .08 < depth < .31
+                        check(good, f"{web.name} at {fraction}/{level} has recess {depth:.3f} m")
+
+
 def verify(nodes):
     errors = []
     def check(test, description):
         if not test:
             errors.append(description)
 
+    verify_splice_sections(nodes, check)
     materials = set()
     minimum, maximum = np.full(3,np.inf), np.full(3,-np.inf)
     triangles = 0

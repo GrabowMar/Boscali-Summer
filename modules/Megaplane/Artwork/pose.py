@@ -8,6 +8,7 @@ def controls(root,nodes):
         "Cargo hold":"0 closed, 1 full cargo opening",
         "Flaps":"Approach flap extension",
         "Fan phase":"One complete fan revolution",
+        "Nose lift":"0 sealed, 1 auxiliary lift inlets fully open",
     }.items():
         root[key]=0.0
         root.id_properties_ui(key).update(min=0,max=1,description=description)
@@ -41,6 +42,11 @@ def controls(root,nodes):
             drive(obj,0,"Flaps",f"{radians(25 if 'Inner' in name else 20)}*control","rotation_axis_angle")
         elif name.startswith("Fan_Pod_"):
             drive(obj,1,"Fan phase","-6.283185307*control")
+        elif name.startswith(("Detail_AssistLidInner_","Detail_AssistLidOuter_")):
+            end = -68*side if "Inner" in name else 68*side
+            drive(obj,1,"Nose lift",f"{radians(end)}*control")
+        elif name.startswith("Detail_AssistFan_"):
+            drive(obj,2,"Fan phase",f"{-side*6.283185307}*control")
         elif name.startswith("Railgun"):
             obj.hide_render=True
             obj.hide_set(True)

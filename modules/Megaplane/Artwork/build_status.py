@@ -37,7 +37,6 @@ def ownership():
         for bank in ("A", "F"):
             groups["gearbay_"+side] += ("LiftBank_"+bank+"_"+side,)
             groups["gearbay_"+side] += tuple(f"LiftDoor_{bank}_{side}_{i}" for i in range(4))
-        groups["wing2_"+side] += ("Pod_"+side+"4","Pods_Nacelle4_"+side)
     # Draw the pressure keel over the wing gloves, which overlap its flanks in plan.
     groups.update(MIDLINE)
     groups["hstab"] = ("Tailplane", "Elevator", "TailCap_L", "TailCap_R")
@@ -52,6 +51,16 @@ def ownership():
         for side in ("L","R"):
             name=native+"_"+side
             groups[name]=groups.pop(name)
+    # The lift-assist fairings sit outboard of the cockpit skin. Keeping their
+    # footprints last leaves them individually readable alongside the pressure hull.
+    for side in ("L", "R"):
+        groups["noseAssist_"+side] = ("NoseAssist_"+side,)
+        groups["pod4_"+side] = ("Pod_"+side+"4","Pods_Nacelle4_"+side)
+    # Look through the dorsal service panel on the instrument. Physical
+    # separation of the three modules keeps a local coolant leak readable.
+    groups["reactor"] = ("ReactorCore",)
+    for side in ("L","R"):
+        groups["coolant_"+side] = ("CoolantPack_"+side,)
     return groups
 
 
