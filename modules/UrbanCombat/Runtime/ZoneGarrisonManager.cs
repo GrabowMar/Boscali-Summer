@@ -53,18 +53,30 @@ namespace BoscaliSummer.Garrisons
 
         public static ZoneGarrisonManager Instance { get; private set; }
 
-        private static UrbanCombatSettings Urban => Plugin.Settings.UrbanCombat;
-        private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
+        // Set by UrbanCombatModule.Install; the static gates the patches read reach them through the live instance.
+        // Every static reader below either checks Instance first or goes through SiegeActive / SiegeScale, which
+        // treat "no manager" as "siege off" (the module is not installed, so nothing is garrisoned).
+        private UrbanCombatSettings urban;
+        private DiagnosticSettings diagnostics;
+        private static UrbanCombatSettings Urban => Instance != null ? Instance.urban : null;
+        private static DiagnosticSettings Diagnostics => Instance != null ? Instance.diagnostics : null;
+
+        internal void Configure(UrbanCombatSettings urbanSettings, DiagnosticSettings diagnosticSettings)
+        {
+            urban = urbanSettings;
+            diagnostics = diagnosticSettings;
+        }
 
         bool IBuildingOccupancy.IsOccupied(GameObject shell) =>
             GarrisonOccupancy.IsOccupied(shell);
 
         internal static bool SiegeActive =>
-            BoscaliMission.FortificationsAllowed && Urban.GarrisonsEnabled.Value && Urban.SiegeEnabled.Value;
+            BoscaliMission.FortificationsAllowed && Urban != null && Urban.GarrisonsEnabled.Value && Urban.SiegeEnabled.Value;
 
         internal static bool ArmorActive => SiegeActive && Urban.SiegeArmorBonus.Value;
 
-        internal static float SiegeScale => Urban.SiegeDefenseScale.Value;
+        /// <summary>The configured scale; 1 (the entry's default) when no manager is live, where tier and nests are 0 anyway.</summary>
+        internal static float SiegeScale => Urban != null ? Urban.SiegeDefenseScale.Value : 1f;
 
         internal static int TierFor(Airbase airbase)
         {

@@ -1,4 +1,5 @@
 #if !PUBLIC_RELEASE
+using BoscaliSummer.Modules.Command.Configuration;
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Ui;
@@ -125,7 +126,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private static string SelectionModes()
         {
-            var settings = Plugin.Settings?.Command;
+            var settings = CommandSettingsScope.Current;
             return settings?.MapClickAdds?.Value + "/" + settings?.MapLeftDragBox?.Value + "/" + settings?.MapBoxSide?.Value;
         }
 
@@ -181,7 +182,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (root != null) foreach (AvControl control in root.GetComponentsInChildren<AvControl>(true))
                 if (control.Label == "LAYERS" || control.Label == "PLOT" || control.Label == "VIEW" || control.Label == "CANCEL") extraControls++;
             state["controlsExtraMenuCount"] = extraControls;
-            state["clickAdds"] = Plugin.Settings?.Command?.MapClickAdds?.Value == true;
+            state["clickAdds"] = CommandSettingsScope.Current?.MapClickAdds?.Value == true;
             state["selectionIds"] = SelectionKey(map);
             state["selectionModes"] = SelectionModes();
             Rect controls = ScreenBounds(root);

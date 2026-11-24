@@ -1,4 +1,5 @@
 #if !PUBLIC_RELEASE
+using BoscaliSummer.Modules.Command.Configuration;
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Command.Domain;
@@ -122,7 +123,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         public static Dictionary<string, object> Relief(Dictionary<string, object> args)
         {
             if (!InScenario("Relief", out Dictionary<string, object> refusal)) return refusal;
-            var entry = Plugin.Settings?.Command?.MapRelief3D;
+            var entry = CommandSettingsScope.Current?.MapRelief3D;
             if (entry == null) return Fail("Relief", "no MapRelief3D setting");
             entry.Value = Bool(args, "on");
             return new Dictionary<string, object> { { "ok", true }, { "relief", entry.Value ? 1 : 0 } };

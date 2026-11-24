@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Modules.UrbanCombat.Configuration;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
@@ -26,6 +27,10 @@ namespace BoscaliSummer.Garrisons
         private readonly List<Mesh> meshes = new List<Mesh>(4);
         private readonly List<Building> scratch = new List<Building>(ScanCap);
         private static Material charMaterial;
+        private UrbanCombatSettings urban;
+
+        /// <summary>Set by UrbanCombatModule.Install; unset, the dressing stays off.</summary>
+        internal void Configure(UrbanCombatSettings settings) => urban = settings;
 
         public void ResetForScene()
         {
@@ -47,7 +52,7 @@ namespace BoscaliSummer.Garrisons
         private void Rebuild()
         {
             scratch.Clear();
-            bool enabled = Plugin.Settings != null && Plugin.Settings.UrbanCombat.GarrisonsEnabled.Value;
+            bool enabled = urban != null && urban.GarrisonsEnabled.Value;
             if (enabled)
             {
                 NestRegistry.Prune();

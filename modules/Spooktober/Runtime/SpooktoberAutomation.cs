@@ -24,6 +24,9 @@ namespace BoscaliSummer.Spooktober
     /// </summary>
     public static class SpooktoberAutomation
     {
+        /// <summary>Command's MapRelief3D entry for hell_map_flat; set by SpooktoberModule.Install, cleared on its rollback.</summary>
+        internal static BepInEx.Configuration.ConfigEntry<bool> MapRelief3D;
+
         public static Dictionary<string, object> Step(Dictionary<string, object> args)
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO")) ||
@@ -92,7 +95,8 @@ namespace BoscaliSummer.Spooktober
                     focusMap.Focus(gateFix.x + Number(args, "x", 0f), gateFix.z + Number(args, "z", 0f));
                     return HellMap(action, "focused on breach");
                 case "hell_map_flat":
-                    Plugin.Settings.Command.MapRelief3D.Value = false;
+                    if (MapRelief3D == null) return Failure("SpooktoberAutomation", action, "Spooktober module not installed");
+                    MapRelief3D.Value = false;
                     return HellMap(action, "flat map requested");
                 case "hell_map_open":
                     SceneSingleton<DynamicMap>.i?.Maximize();

@@ -3,6 +3,7 @@ using BoscaliSummer.Fire;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Modules.FireAndDestruction.Configuration;
 using BoscaliSummer.Modules.FireAndDestruction.Networking;
 
 namespace BoscaliSummer.Modules.FireAndDestruction
@@ -27,15 +28,18 @@ namespace BoscaliSummer.Modules.FireAndDestruction
 
         public void Install(ModuleContext context)
         {
+            FireAndDestructionSettings fire = context.Settings.FireAndDestruction;
+            ScorchDecalMaterialResolver.Diagnostics = context.Settings.Diagnostics;
+            context.OnTeardown(() => ScorchDecalMaterialResolver.Diagnostics = null);
             ImpactFireManager fires = context.AddSceneService<ImpactFireManager>(10);
-            fires.Configure(context.Services);
-            context.AddSceneService<ImpactScorchManager>(15);
+            fires.Configure(context.Services, fire, context.Settings.Diagnostics);
+            context.AddSceneService<ImpactScorchManager>(15).Configure(fire, context.Settings.Diagnostics);
             context.AddClientSetting("WORLD FX", "IMPACT SCORCH",
                 "Scorch marks and dust where explosive hits land on building walls. Client-local cosmetic; applies to new hits.",
                 context.Settings.FireAndDestruction.ImpactScorchEnabled, ClientPreset.Light);
-            context.AddSceneService<BuildingCarver>(16);
-            context.AddSceneService<BuildingHitLedger>(17);
-            context.AddSceneService<RuinAftermathManager>(20);
+            context.AddSceneService<BuildingCarver>(16).Configure(fire);
+            context.AddSceneService<BuildingHitLedger>(17).Configure(fire);
+            context.AddSceneService<RuinAftermathManager>(20).Configure(fire);
             context.AddSceneService<ModNet>(100);
             context.AddService<IFireSuppressionService>(fires);
             context.AddService<IFoliageCover>(fires);

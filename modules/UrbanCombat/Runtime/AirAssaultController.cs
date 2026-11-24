@@ -5,6 +5,7 @@ using System.Reflection;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Modules.UrbanCombat.Configuration;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
@@ -48,6 +49,11 @@ namespace BoscaliSummer.Garrisons
         internal const string HaloMountKey = "AB_Paratroopers_x16";
         /// <summary>Ramp opening before the first pair goes; every peer and the server add the same lead.</summary>
         private const float HaloRampSeconds = 2.5f;
+
+        private UrbanCombatSettings urban;
+
+        /// <summary>Set by UrbanCombatModule.Install.</summary>
+        internal void Configure(UrbanCombatSettings settings) => urban = settings;
 
         private void Awake() => Instance = this;
 
@@ -115,7 +121,7 @@ namespace BoscaliSummer.Garrisons
 
         private void DeployHalo(Aircraft aircraft, MountedTroops troops, WeaponStation station, int aboard, Unit target, GlobalPosition aimpoint)
         {
-            int dropCount = TroopDeploymentMath.ComputeDropSize(aboard, Mathf.Clamp(Plugin.Settings.UrbanCombat.TroopsPerDeploy.Value, 2, HaloGlidePlan.MaxJumpers));
+            int dropCount = TroopDeploymentMath.ComputeDropSize(aboard, Mathf.Clamp(urban.TroopsPerDeploy.Value, 2, HaloGlidePlan.MaxJumpers));
             Vector3 velocity = aircraft.rb != null ? aircraft.rb.velocity : aircraft.transform.forward * 60f;
             // Every peer predicts the same ramp point from replicated state; the stick leaves it once the ramp is down.
             Vector3 exit = ComputeCargoDropExitPosition(aircraft, dropCount) + velocity * HaloRampSeconds;

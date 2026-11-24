@@ -123,12 +123,18 @@ namespace BoscaliSummer.Fire
         private float nextTreeClearFlush;
         private readonly FireVisualPool.Visual[] litVisuals = new FireVisualPool.Visual[3];
 
-        private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
-        private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
+        // Set by FireAndDestructionModule.Install.
+        private FireAndDestructionSettings Fire { get; set; }
+        private DiagnosticSettings Diagnostics { get; set; }
 
         private void Awake() => Instance = this;
 
-        internal void Configure(ServiceRegistry serviceRegistry) => services = serviceRegistry;
+        internal void Configure(ServiceRegistry serviceRegistry, FireAndDestructionSettings fire, DiagnosticSettings diagnostics)
+        {
+            services = serviceRegistry;
+            Fire = fire;
+            Diagnostics = diagnostics;
+        }
 
         private void OnDestroy()
         {

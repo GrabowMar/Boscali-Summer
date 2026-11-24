@@ -51,12 +51,19 @@ namespace BoscaliSummer.Fire
         private bool loggedFirstMark, materialWarm;
         private float warmAt;
 
-        private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
-        private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
+        // Set by FireAndDestructionModule.Install.
+        private FireAndDestructionSettings Fire { get; set; }
+        private DiagnosticSettings Diagnostics { get; set; }
 
-        private static int QueueCapacity => Fire.ImpactScorchQueue;
-        private static int PerFrame => FxBudget.ScaleCount(Fire.ImpactScorchesPerFrame, FxBus.Scales.Particles);
-        private static int MaximumMarks => Fire.MaximumImpactScorches;
+        private int QueueCapacity => Fire.ImpactScorchQueue;
+        private int PerFrame => FxBudget.ScaleCount(Fire.ImpactScorchesPerFrame, FxBus.Scales.Particles);
+        private int MaximumMarks => Fire.MaximumImpactScorches;
+
+        internal void Configure(FireAndDestructionSettings fire, DiagnosticSettings diagnostics)
+        {
+            Fire = fire;
+            Diagnostics = diagnostics;
+        }
 
         private void Awake() => Instance = this;
 

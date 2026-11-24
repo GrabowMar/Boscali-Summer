@@ -1,3 +1,4 @@
+using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Command.Domain;
 using NOAvionics;
@@ -24,7 +25,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         internal static void Tick()
         {
-            bool on = Plugin.Settings?.Command?.MapCursor?.Value != false;
+            bool on = CommandSettingsScope.Current?.MapCursor?.Value != false;
             ModCursor.Base = on ? CursorShape.Arrow : CursorShape.None;
             if (MapUiPointer.WindowHoldsMouse())
             {

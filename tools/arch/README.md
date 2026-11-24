@@ -67,7 +67,12 @@ found structurally while literals are read from the original text. Detected form
 3. **R2**: a file under `Core/` names `BoscaliSummer.Modules.*` and is not in the baseline allowlist
    (`r2_core_files_allowed_to_reference_modules`; today the composition root `Core/BoscaliMod.cs` and
    `Core/Config/ModConfiguration.cs`).
-4. **Ratchets** that fail only when a number grows: per-owner `Plugin.Settings` / `Plugin.Logger` reads (global
+4. **R3**: a file under `modules/` or `Dev/` reads `Plugin.Settings` (also `BoscaliSummer.Plugin.Settings`; comments
+   and strings are masked) more often than `r3_plugin_settings_reads` in the baseline allows. Modules take settings
+   from `ModuleContext.Settings` in `Install` and hand them over. Every baselined file must also have a hand-written
+   entry in `r3_reasons` (why it cannot take injected settings yet), or `--check` fails. Today: three Command map files
+   that nomodkit's Relief Unity check compiles against a stub `Plugin`.
+5. **Ratchets** that fail only when a number grows: per-owner `Plugin.Settings` / `Plugin.Logger` reads (global
    state; new code takes `ModuleContext.Settings` / `Logger`), the number of `.cs` files over 1500 lines, per-owner
    namespace declarations outside the owner's prefix (`BoscaliSummer.Modules.<Owner>`, `BoscaliSummer.Core` for Core,
    `NOAvionics` or `BoscaliSummer.AvionicsUi` for AvionicsUi, `BoscaliSummer.Dev` for Dev), and per-owner Harmony
@@ -78,7 +83,8 @@ When a number improves, `--check` still passes and prints a hint to run `--updat
 ## Updating the baseline
 
 `python tools/arch/archmap.py --update-baseline` rewrites `tools/arch/baseline.json` from the current code, including
-the R2 allowlist. Run it after a deliberate change (a split file, a removed global read, a new composition-root
+the R2 allowlist and the R3 counts; `r3_reasons` is kept for files still listed (a newly listed file gets no
+reason, so `--check` fails until you write one). Run it after a deliberate change (a split file, a removed global read, a new composition-root
 reference) and review the JSON diff: every number that went up is a boundary you are choosing to loosen.
 A parser improvement can also move numbers (for example a `dynamic` patch becoming resolved and therefore shared).
 

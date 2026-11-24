@@ -27,7 +27,9 @@ namespace BoscaliSummer.Fire
         private readonly CollapseBurstPool dust = new CollapseBurstPool(6);
         private readonly BurnScarPool ashPool = new BurnScarPool();
         private int markHead, scarHead;
-        private static BoscaliSummer.Modules.FireAndDestruction.Configuration.FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
+        // Set by FireAndDestructionModule.Install.
+        private BoscaliSummer.Modules.FireAndDestruction.Configuration.FireAndDestructionSettings Fire { get; set; }
+        internal void Configure(BoscaliSummer.Modules.FireAndDestruction.Configuration.FireAndDestructionSettings fire) => Fire = fire;
         private void Awake() => Instance = this;
         private void Start() { if (Fire.ImpactScorchEnabled.Value && !GameManager.IsHeadless) dust.Warm(); }
         private void OnDestroy() { Clear(); if (Instance == this) Instance = null; }

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.FireAndDestruction.Configuration;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -118,10 +119,14 @@ namespace BoscaliSummer.Fire
         internal int MaxAppliesPerFrame { get; private set; }
         internal int CarveCount { get; private set; }
 
+        // Set by FireAndDestructionModule.Install.
+        private FireAndDestructionSettings fire;
+        internal void Configure(FireAndDestructionSettings settings) => fire = settings;
+
         private void Awake() => Instance = this;
         private void Start()
         {
-            if (GameManager.IsHeadless || !Plugin.Settings.FireAndDestruction.ImpactScorchEnabled.Value) return;
+            if (GameManager.IsHeadless || !fire.ImpactScorchEnabled.Value) return;
             NativeSurfaceLibrary.BeginLoad();
             EnsureMaterials();
             StartCoroutine(WarmUp());
@@ -509,7 +514,7 @@ namespace BoscaliSummer.Fire
 
         private Owner Get(MapBuilding building)
         {
-            if (building == null || GameManager.IsHeadless || !Plugin.Settings.FireAndDestruction.ImpactScorchEnabled.Value || !EnsureMaterials()) return null;
+            if (building == null || GameManager.IsHeadless || !fire.ImpactScorchEnabled.Value || !EnsureMaterials()) return null;
             int id = building.GetInstanceID();
             Owner owner = owners.Find(o => o.Id == id);
             if (owner != null) return owner.Dead ? null : owner;

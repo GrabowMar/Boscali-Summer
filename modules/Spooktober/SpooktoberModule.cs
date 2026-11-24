@@ -40,6 +40,10 @@ namespace BoscaliSummer.Modules.Spooktober
             context.AddService<IFallenAce>(new SpookAce());
             context.AddService<IWeatherCameraExclusion>(new HellWeatherExclusion());
             context.AddService<ISetExtras>(new SpookSetExtras(() => ModuleServices.TryGet(out IKaijuBoss _)));
+#if !PUBLIC_RELEASE
+            BoscaliSummer.Spooktober.SpooktoberAutomation.MapRelief3D = context.Settings.Command.MapRelief3D;
+            context.OnTeardown(() => BoscaliSummer.Spooktober.SpooktoberAutomation.MapRelief3D = null);
+#endif
             context.Logger.LogInfo("[Spooktober] Ready.");
         }
 

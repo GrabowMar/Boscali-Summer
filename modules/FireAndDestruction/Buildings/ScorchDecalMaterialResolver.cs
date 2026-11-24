@@ -1,5 +1,6 @@
 using System.Reflection;
 using HarmonyLib;
+using BoscaliSummer.Core.Diagnostics;
 using UnityEngine;
 
 namespace BoscaliSummer.Fire
@@ -20,6 +21,9 @@ namespace BoscaliSummer.Fire
         private static Material[] scan;
         private static int scanAt, bestScore;
         private static Material best;
+
+        /// <summary>Set by FireAndDestructionModule.Install and cleared on its rollback; unset, the result is not logged.</summary>
+        internal static DiagnosticSettings Diagnostics { get; set; }
 
         internal static Material Resolve()
         {
@@ -75,7 +79,7 @@ namespace BoscaliSummer.Fire
             searchedThisScene = true;
             scan = null;
             best = null;
-            if (Plugin.Settings.Diagnostics.VerboseLogging.Value)
+            if (Diagnostics != null && Diagnostics.VerboseLogging.Value)
                 Plugin.Logger.LogInfo(resolved != null
                     ? $"Scorch decal material resolved: '{resolved.name}' " +
                       $"(shader '{resolved.shader.name}', score {bestScore})."

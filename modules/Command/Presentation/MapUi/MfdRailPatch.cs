@@ -1,3 +1,4 @@
+using BoscaliSummer.Modules.Command.Configuration;
 using NOAvionics;
 using System.Collections.Generic;
 using HarmonyLib;
@@ -581,7 +582,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static void EnsureNewsTicker(Canvas canvas, MfdLayout.Columns columns)
         {
-            MfdNewsTicker.Ensure(canvas, columns, Plugin.Settings?.Command);
+            MfdNewsTicker.Ensure(canvas, columns, CommandSettingsScope.Current);
         }
 
         // --------------------------------------------------------------------- restore

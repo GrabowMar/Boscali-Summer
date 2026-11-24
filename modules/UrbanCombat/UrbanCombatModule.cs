@@ -35,13 +35,15 @@ namespace BoscaliSummer.Modules.UrbanCombat
             Plugin.Logger.LogInfo($"[Air Assault] Troop accounting capability: {AirAssaultController.TroopAccountingAvailable}");
             Plugin.Logger.LogInfo("[Urban Combat] Rooftop nests: native MG/AT/23mm AA; 49-position roof search with native collider fallback; local sandbags/flags; maximum 6 per zone, 96 total. Loaded definitions are required at spawn.");
             ZoneGarrisonManager garrisons = context.AddSceneService<ZoneGarrisonManager>(30);
+            garrisons.Configure(context.Settings.UrbanCombat, context.Settings.Diagnostics);
             AirAssaultController assault = context.AddSceneService<AirAssaultController>(31);
+            assault.Configure(context.Settings.UrbanCombat);
             context.AddService<IAirAssaultObservation>(assault);
             context.AddService<IAirAssaultOrders>(context.AddSceneService<AirAssaultNet>(33));
             context.AddService<ILandingZone>(context.AddSceneService<LandingZoneNet>(35));
             context.AddSceneService<LandingZoneCue>(36);
             BaseDefenseAlarmService alarm = context.AddSceneService<BaseDefenseAlarmService>(32);
-            context.AddSceneService<WarzoneDressingService>(34);
+            context.AddSceneService<WarzoneDressingService>(34).Configure(context.Settings.UrbanCombat);
             context.AddService<IBuildingOccupancy>(garrisons);
             context.AddService<IZoneFortificationService>(garrisons);
             context.AddService<IBaseDefenseAlarmService>(alarm);

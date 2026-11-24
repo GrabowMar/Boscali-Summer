@@ -1,3 +1,4 @@
+using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
@@ -102,7 +103,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 // claimed by an armed tool or a commanding selection (rule B) is not an orbit.
                 else if (Input.GetMouseButtonDown(1) &&
                     MfdMapInteractions.RightRule(SceneSingleton<DynamicMap>.i) == MapRightClick.Card &&
-                    Plugin.Settings?.Command?.MapRightDragTurns?.Value != false)
+                    CommandSettingsScope.Current?.MapRightDragTurns?.Value != false)
                     Press(rig, 1, true, mouse, vx, vy);
             }
             if (drag != Drag.None) Hold(rig, mouse, vx, vy, dt);
@@ -128,7 +129,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             anchor = Ground(rig, vx, vy);
             velocity = coast = Vector2.zero;
             if (orbit) return;
-            if (Plugin.Settings?.Command?.MapDoubleClickZoom?.Value != false &&
+            if (CommandSettingsScope.Current?.MapDoubleClickZoom?.Value != false &&
                 Time.unscaledTime - lastClickTime < DoubleClickSeconds &&
                 (mouse - lastClickScreen).sqrMagnitude < Slop * Slop)
             {
@@ -185,7 +186,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Vector2 delta = mouse - lastMouse;
             if (delta.sqrMagnitude > 0f)
             {
-                float speed = Mathf.Clamp(Plugin.Settings?.Command?.MapTurnSensitivity?.Value ?? 1f, .25f, 4f);
+                float speed = Mathf.Clamp(CommandSettingsScope.Current?.MapTurnSensitivity?.Value ?? 1f, .25f, 4f);
                 rig.OrbitAbout(delta.x * OrbitYawPerPixel * speed, -delta.y * OrbitPitchPerPixel * speed,
                     anchor.x, anchor.y, anchor.z);
             }
@@ -212,7 +213,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Vector3 at = free ? Ground(rig, vx, vy) : Vector3.zero;
                 float from = zoomEasing ? targetZoom : rig.Zoom;
                 ZoomTo(rig, from * Mathf.Exp(zoom * ZoomPerUnit *
-                        Mathf.Clamp(Plugin.Settings?.Command?.MapZoomStep?.Value ?? 1f, .25f, 3f)),
+                        Mathf.Clamp(CommandSettingsScope.Current?.MapZoomStep?.Value ?? 1f, .25f, 3f)),
                     free ? vx : .5f, free ? vy : .5f, at.y);
             }
 

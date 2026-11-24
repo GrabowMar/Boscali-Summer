@@ -33,7 +33,14 @@ namespace BoscaliSummer.Fire
         private float nextSelection;
         private float nextVisualTick;
 
-        private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
+        // Set by FireAndDestructionModule.Install.
+        private FireAndDestructionSettings Fire { get; set; }
+
+        internal void Configure(FireAndDestructionSettings fire)
+        {
+            Fire = fire;
+            collapsePool.Configure(fire);
+        }
 
         private void Awake() { Instance = this; debrisPool.Landing = collapsePool.EmitLanding; }
         private void Start() { if (!GameManager.IsHeadless) collapsePool.Warm(); }

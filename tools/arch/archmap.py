@@ -1049,8 +1049,13 @@ def analyse_hooks(repo):
 def analyse_rules(repo):
     r1 = defaultdict(set)        # owner -> {(file, Y)}
     r2 = defaultdict(set)        # core file -> {Y}
+    r3 = {}                      # file under modules/ or Dev/ -> Plugin.Settings reads
     global_state = defaultdict(int)
     ns_mismatch = defaultdict(list)
+
+    def bare(g):
+        return g.start() == 0 or not (M[g.start() - 1].isalnum() or M[g.start() - 1] in "_.")
+
     for fd in repo.cs.values():
         M = fd.masked
         for m in re.finditer(r"BoscaliSummer\.Modules\.(\w+)", M):
@@ -1061,12 +1066,17 @@ def analyse_rules(repo):
                 r2[fd.path].add(y)
         global_state[fd.owner] += sum(1 for g in re.finditer(r"Plugin\s*\.\s*(?:Settings|Logger)(?!\w)", M)
                                       if g.start() == 0 or not (M[g.start() - 1].isalnum() or M[g.start() - 1] == "_"))
+        if fd.path.startswith("modules/") or fd.owner == "Dev":
+            # R3 also catches the fully qualified BoscaliSummer.Plugin.Settings.
+            n = sum(1 for g in re.finditer(r"(?:BoscaliSummer\s*\.\s*)?Plugin\s*\.\s*Settings(?!\w)", M) if bare(g))
+            if n:
+                r3[fd.path] = n
         expected = expected_ns(fd.owner)
         for name, *_ in fd.namespaces:
             if not any(name == e or name.startswith(e + ".") for e in expected):
                 ns_mismatch[fd.owner].append((fd.path, name))
     large = sorted((fd.path, fd.lines) for fd in repo.cs.values() if fd.lines > LARGE_FILE_LINES)
-    return r1, r2, global_state, ns_mismatch, large
+    return r1, r2, r3, global_state, ns_mismatch, large
 
 
 def expected_ns(owner):
@@ -1223,7 +1233,7 @@ def build_model(repo):
     m["binds"], m["client"], m["host"] = analyse_settings(repo)
     m["protocols"], m["messages"] = analyse_network(repo)
     m["hooks"], m["reflect"] = analyse_hooks(repo)
-    m["r1"], m["r2"], m["global"], m["nsmis"], m["large"] = analyse_rules(repo)
+    m["r1"], m["r2"], m["r3"], m["global"], m["nsmis"], m["large"] = analyse_rules(repo)
     m["pinned"] = analyse_pinned(repo)
     return m
 
@@ -1258,6 +1268,7 @@ def current_numbers(repo, m):
     return {
         "r1_cross_module_namespace_refs": {o: len(m["r1"].get(o, ())) for o in repo.owner_list if m["r1"].get(o)},
         "r2_core_files_allowed_to_reference_modules": sorted(p for p, ys in m["r2"].items() if ys),
+        "r3_plugin_settings_reads": dict(sorted(m["r3"].items())),
         "global_state_reads": {o: m["global"][o] for o in repo.owner_list if m["global"].get(o)},
         "large_files": {"threshold_lines": LARGE_FILE_LINES, "count": len(m["large"]), "files": [p for p, _ in m["large"]]},
         "namespace_prefix_mismatches": {o: len(m["nsmis"][o]) for o in repo.owner_list if m["nsmis"].get(o)},
@@ -1697,6 +1708,22 @@ def check(repo, m):
                             "add it to the baseline allowlist deliberately)." % (p, ",".join(sorted(m["r2"][p]))))
     if allowed - set(cur["r2_core_files_allowed_to_reference_modules"]):
         hints.append("R2 allowlist has files that no longer reference modules; run --update-baseline.")
+    # R3: modules/ and Dev/ never read the plugin's static settings; the few baselined files carry a reason.
+    b3 = base.get("r3_plugin_settings_reads", {})
+    reasons = base.get("r3_reasons", {})
+    for p, n in cur["r3_plugin_settings_reads"].items():
+        if n > b3.get(p, 0):
+            failures.append("R3 %s reads Plugin.Settings (%d > baseline %d); modules/ and Dev/ take settings from the "
+                            "module.\n    fix: read context.Settings.<X> in Install and hand it over (constructor, "
+                            "Configure(...), or a static set in Install and cleared in context.OnTeardown)." % (
+                                p, n, b3.get(p, 0)))
+    for p in b3:
+        if not reasons.get(p):
+            failures.append("R3 baseline lists %s without a reason.\n    fix: add \"%s\" to r3_reasons in %s "
+                            "(why it cannot take injected settings), or remove the reads." % (p, p, BASELINE))
+        if cur["r3_plugin_settings_reads"].get(p, 0) < b3[p]:
+            hints.append("R3 improved for %s (%d -> %d); run --update-baseline." % (
+                p, b3[p], cur["r3_plugin_settings_reads"].get(p, 0)))
     # ratchets
     for key, label, fix in (
             ("global_state_reads", "Plugin.Settings/Plugin.Logger reads", "take settings/logger from ModuleContext"),
@@ -1766,7 +1793,11 @@ def main(argv=None):
     code_ = 0
     if args.update_baseline:
         data = current_numbers(repo, m)
-        data = {"_note": "Ratchet baseline for tools/arch/archmap.py --check; regenerate with --update-baseline.", **data}
+        # Hand-written R3 reasons survive a regeneration for the files that still need them.
+        old_reasons = (load_baseline() or {}).get("r3_reasons", {})
+        data["r3_reasons"] = {p: old_reasons[p] for p in data["r3_plugin_settings_reads"] if p in old_reasons}
+        data = {"_note": "Ratchet baseline for tools/arch/archmap.py --check; regenerate with --update-baseline. "
+                         "r3_reasons is hand-written and kept across regenerations.", **data}
         write_file(BASELINE, json.dumps(data, indent=2, sort_keys=True) + "\n")
         print("wrote " + BASELINE)
     if args.write:

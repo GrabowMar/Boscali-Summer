@@ -1,14 +1,14 @@
 {
-  "_note": "Ratchet baseline for tools/arch/archmap.py --check; regenerate with --update-baseline.",
+  "_note": "Ratchet baseline for tools/arch/archmap.py --check; regenerate with --update-baseline. r3_reasons is hand-written and kept across regenerations.",
   "global_state_reads": {
     "Autopilot": 13,
     "CombatAdjust": 1,
-    "Command": 51,
+    "Command": 37,
     "Comms": 1,
     "Core": 34,
     "DynamicOperations": 11,
     "Events": 10,
-    "FireAndDestruction": 27,
+    "FireAndDestruction": 17,
     "HighCommand": 4,
     "Hud": 3,
     "Immersion": 13,
@@ -20,12 +20,12 @@
     "Scenario": 1,
     "Session": 10,
     "Skylark": 2,
-    "Spooktober": 54,
+    "Spooktober": 53,
     "Squad": 2,
     "Support": 97,
     "TheaterOps": 17,
     "Trenches": 17,
-    "UrbanCombat": 45,
+    "UrbanCombat": 40,
     "Vanguard": 27
   },
   "large_files": {
@@ -52,6 +52,16 @@
     "Core/BoscaliMod.cs",
     "Core/Config/ModConfiguration.cs"
   ],
+  "r3_plugin_settings_reads": {
+    "modules/Command/Presentation/MapUi/MapSymbology.cs": 1,
+    "modules/Command/Presentation/MapUi/MfdMapInteractions.cs": 3,
+    "modules/Command/Presentation/MapUi/MfdTerrainRelief.cs": 12
+  },
+  "r3_reasons": {
+    "modules/Command/Presentation/MapUi/MapSymbology.cs": "nomodkit Run-ReliefUnityCheck.ps1 compiles this file by path against ReliefUnityStubs.cs, whose stub Plugin.Settings.Command (TestCommandSettings) is the only settings type it offers; injecting CommandSettings needs a nomodkit stub change first.",
+    "modules/Command/Presentation/MapUi/MfdMapInteractions.cs": "nomodkit Run-ReliefUnityCheck.ps1 compiles this file by path against ReliefUnityStubs.cs, whose stub Plugin.Settings.Command (TestCommandSettings) is the only settings type it offers; injecting CommandSettings needs a nomodkit stub change first.",
+    "modules/Command/Presentation/MapUi/MfdTerrainRelief.cs": "nomodkit Run-ReliefUnityCheck.ps1 compiles this file by path against ReliefUnityStubs.cs, whose stub Plugin.Settings.Command (TestCommandSettings) is the only settings type it offers; injecting CommandSettings needs a nomodkit stub change first."
+  },
   "shared_harmony_targets": {
     "AirSurvival": 1,
     "Ares": 2,

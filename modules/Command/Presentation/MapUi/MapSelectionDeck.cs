@@ -1,3 +1,4 @@
+using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Domain;
 using NOAvionics;
 using TMPro;
@@ -126,7 +127,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static void Choices()
         {
-            var settings = Plugin.Settings?.Command;
+            var settings = CommandSettingsScope.Current;
             bool adds = settings?.MapClickAdds?.Value != false, boxes = settings?.MapLeftDragBox?.Value == true;
             int sideNow = (int)(settings?.MapBoxSide?.Value ?? MapBoxSide.All);
             Latch(click, adds ? 0 : 1);
@@ -340,11 +341,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return label;
         }
 
-        private static void SetClick(int i) { var e = Plugin.Settings?.Command?.MapClickAdds; if (e != null) e.Value = i == 0; }
+        private static void SetClick(int i) { var e = CommandSettingsScope.Current?.MapClickAdds; if (e != null) e.Value = i == 0; }
 
-        private static void SetDrag(int i) { var e = Plugin.Settings?.Command?.MapLeftDragBox; if (e != null) e.Value = i == 1; }
+        private static void SetDrag(int i) { var e = CommandSettingsScope.Current?.MapLeftDragBox; if (e != null) e.Value = i == 1; }
 
-        private static void SetSide(int i) { var e = Plugin.Settings?.Command?.MapBoxSide; if (e != null) e.Value = (MapBoxSide)i; }
+        private static void SetSide(int i) { var e = CommandSettingsScope.Current?.MapBoxSide; if (e != null) e.Value = (MapBoxSide)i; }
 
         /// <summary>Map closed: the viewport goes back into the cockpit's small map, so the console must not ride along (kept for the next open).</summary>
         internal static void Hide()

@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using BoscaliSummer.Modules.Command.Patches;
 using BoscaliSummer.Modules.Command.Networking;
@@ -43,6 +44,8 @@ namespace BoscaliSummer.Modules.Command
 
         public void Install(ModuleContext context)
         {
+            // First, so its teardown (clearing the static settings handle) runs last on rollback.
+            CommandSettingsScope.Bind(context);
             AvUiSound.Volume = context.Settings.Command.UiSoundVolume.Value;
             AvUiSound.Recorded = name => BoscaliSummer.Core.Fx.SfxClips.Get(name);
             AvUiSound.Route = source => { if (SoundManager.i != null) source.outputAudioMixerGroup = SoundManager.i.InterfaceMixer; };

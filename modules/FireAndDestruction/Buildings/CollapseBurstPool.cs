@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.FireAndDestruction.Configuration;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -29,7 +30,11 @@ namespace BoscaliSummer.Fire
         private Mesh gritMesh;
         private bool depthLease;
 
+        private FireAndDestructionSettings settings;
+
         internal CollapseBurstPool(int impactCapacity = 0) { this.impactCapacity = impactCapacity; }
+        /// <summary>The collapse pool (no fixed impact capacity) sizes itself from these; its owner hands them over.</summary>
+        internal void Configure(FireAndDestructionSettings fire) => settings = fire;
         internal void Warm()
         {
             if (GameManager.IsHeadless || bursts.Count != 0 || !EnsureAssets()) return;
@@ -50,7 +55,7 @@ namespace BoscaliSummer.Fire
             if (burst == null)
             {
                 int maximum = impactCapacity > 0 ? Mathf.Clamp(impactCapacity, 1, 6) :
-                    FxBudget.ScaleCount(Plugin.Settings.FireAndDestruction.MaximumCollapseBursts, FxBus.Scales.Particles);
+                    FxBudget.ScaleCount(settings.MaximumCollapseBursts, FxBus.Scales.Particles);
                 if (bursts.Count >= maximum) return;
                 burst = Create(); bursts.Add(burst);
             }
