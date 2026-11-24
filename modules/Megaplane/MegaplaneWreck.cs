@@ -15,17 +15,23 @@ namespace BoscaliSummer.Modules.Megaplane
         internal float Age => Time.time - born;
         internal bool Settled => Age >= settleTime;
         internal IReadOnlyList<Transform> Pieces => frames;
+        internal int DelayedBreaks { get; private set; }
+        internal int ReleasedBreaks => moving.Count(p => p.Mount != null && Age >= p.Release);
+        internal float LastBreakTime { get; private set; }
+        internal float PeakPodRoll { get; private set; }
+        internal float PeakHullHop { get; private set; }
+        internal float PeakPanelHop { get; private set; }
 
         // Geometrical supports indexed by GroupNames. Flaps and small captive items
         // hang on their own piece of wing or body until enough energy tears them free.
         private static readonly int[] Parents = {
             -1,0,1,0,3,0, 0,6,7,8,9, 0,11,12,13,14, 6,11,16,17,16,
-            6,7,8,9,11,12,13,14, 2,2,7,12,8,13,9,14,18,19,0,0,0,0,0,0,0
+            6,7,8,9,11,12,13,14, 2,2,7,12,8,13,9,14,18,19,0,0,0,0,0,0,0, 2,2,2,2
         };
         private static readonly float[] Split = {
             0,.54f,.69f,.48f,.39f,.64f, .54f,.71f,.36f,.64f,.39f, .54f,.71f,.36f,.64f,.39f,
             .44f,.44f,.57f,.57f,.53f, .35f,.42f,.31f,.28f,.35f,.42f,.31f,.28f,
-            .76f,.76f,.82f,.82f,.75f,.75f,.83f,.83f,.99f,.99f,2,2,.91f,.91f,2,2,2
+            .76f,.76f,.82f,.82f,.75f,.75f,.83f,.83f,.99f,.99f,2,2,.91f,.91f,2,2,2, .69f,.69f,.84f,.73f
         };
 
         private sealed class Piece
@@ -34,10 +40,13 @@ namespace BoscaliSummer.Modules.Megaplane
             internal Transform Frame;
             internal readonly List<Vector3> Skin = new List<Vector3>();
             internal readonly List<Renderer> Near = new List<Renderer>(), Far = new List<Renderer>();
-            internal Vector3 Start, Touch, Middle, End, TrackStart, TrackEnd;
-            internal Quaternion Initial, TouchRotation, Rest;
-            internal float Flight, Slide, Hop, Width, Flood;
-            internal bool DryTrack;
+            internal Piece Mount;
+            internal Bounds Bounds;
+            internal Vector3 Start, MountOffset, SpinAxis, TrackStart, TrackEnd;
+            internal Vector3[] SlidePath;
+            internal Quaternion Initial, TouchRotation, Finish;
+            internal float Release, Flight, Slide, Hop, BounceTime, Spin, Width, Flood;
+            internal bool DryTrack, WaterEntry;
         }
 
         private readonly List<Piece> moving = new List<Piece>();
@@ -127,6 +136,7 @@ namespace BoscaliSummer.Modules.Megaplane
                     source.name.StartsWith("Detail_HullPlateCatches_", StringComparison.Ordinal) || source.name == "Detail_ForwardAerials";
                 if ((!far && !paint && !service) || source.sharedMesh == null) continue;
                 string artName = far ? source.transform.parent.name : source.name;
+                if (artName.StartsWith("ForeHullProxy_", StringComparison.Ordinal)) continue;
                 // The alternate bay payload is present in the shared file, hidden on the actual template.
                 if (!source.transform.parent.gameObject.activeSelf || !source.gameObject.activeSelf) continue;
                 AeroPart owner = source.GetComponentInParent<AeroPart>(true);
@@ -156,6 +166,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 // Keep the actual ribbing, inlet/fan profiles, glazing and curved shell at
                 // close range. The compact source LOD already has the correct distant outline.
                 if (far && (artName == Names[group] || artName.StartsWith("Fan_Pod_", StringComparison.Ordinal) ||
+                    artName.StartsWith("Detail_ForeBay_", StringComparison.Ordinal) ||
                     artName.StartsWith("Int_Bulkhead_", StringComparison.Ordinal) || artName.StartsWith("Int_Spars_", StringComparison.Ordinal) ||
                     artName == "Glass_Canopy" || artName == "Detail_WindscreenFrames") &&
                     source.transform.parent.TryGetComponent(out MeshFilter detailed))
@@ -204,10 +215,22 @@ namespace BoscaliSummer.Modules.Megaplane
                     piece.Skin.Add(local + rot * Vector3.Scale(vertices[v], leaf.transform.localScale));
             }
             if (crush != null) crush.Finish();
-            foreach (Piece piece in moving) Plan(piece, severity, tangent, closing);
+            foreach (Piece piece in moving) CenterGeometry(piece);
+            // A mount's impact pose must be known before planning a section shed from it.
+            foreach (Piece piece in moving.OrderBy(p => p.Group))
+            {
+                if (severity >= .68f && !Impact.Water &&
+                    (piece.Group == 10 || piece.Group == 15 || piece.Group == 22 || piece.Group == 26))
+                {
+                    int parent = clusters[Parents[piece.Group]];
+                    if (parent >= 0 && parent != piece.Group && pieces.TryGetValue(parent,out Piece mount) && !mount.WaterEntry)
+                        piece.Mount = mount;
+                }
+                Plan(piece, severity);
+            }
             foreach (Piece p in moving.Where(p => p.DryTrack && p.Width > 4f && (p.TrackEnd - p.TrackStart).sqrMagnitude > 36f)
                 .OrderByDescending(p => p.Width * (p.TrackEnd-p.TrackStart).magnitude).Take(3))
-                MegaplaneWreckMarks.Add(transform,p.TrackStart,p.TrackEnd,p.Width,false,p.Flight,p.Slide,Impact.Age);
+                MegaplaneWreckMarks.Add(transform,p.TrackStart,p.TrackEnd,p.Width,false,p.Release+p.Flight,p.Slide,Impact.Age);
         }
 
         private void PoseGear(Transform root, Transform source, ref Vector3 position, ref Quaternion rotation)
@@ -261,68 +284,123 @@ namespace BoscaliSummer.Modules.Megaplane
             for (int i=0,stride=Mathf.Max(1,points.Length/64); i<points.Length; i+=stride) piece.Skin.Add(points[i]);
         }
 
-        private void Plan(Piece p, float severity, Vector3 tangent, float closing)
+        private void CenterGeometry(Piece p)
         {
             Bounds bounds = new Bounds(p.Skin[0], Vector3.zero);
             foreach (Vector3 point in p.Skin) bounds.Encapsulate(point);
             Vector3 pivot = bounds.center;
+            p.Bounds = bounds;
             foreach (Transform child in p.Frame) child.localPosition -= pivot;
             var levels = p.Frame.gameObject.AddComponent<LODGroup>();
             levels.SetLODs(new[] { new LOD(.20f,p.Near.ToArray()), new LOD(.0005f,p.Far.ToArray()) });
             levels.RecalculateBounds();
             levels.size = 90f;
             for (int i = 0; i < p.Skin.Count; i++) p.Skin[i] -= pivot;
+        }
+
+        private void Plan(Piece p, float severity)
+        {
             var rand = new System.Random(unchecked((int)(Impact.Spawn * 1103515245u) + p.Group * 4657));
             float R(float a,float b) => Mathf.Lerp(a,b,(float)rand.NextDouble());
             p.Initial = Impact.Rotation;
-            p.Start = Impact.Origin - Impact.Contact + p.Initial * pivot;
+            Vector3 lever = p.Initial * p.Bounds.center;
+            p.Start = Impact.Origin - Impact.Contact + lever;
+            Vector3 velocity = Impact.Velocity + Vector3.ClampMagnitude(Vector3.Cross(Impact.AngularVelocity, lever), 100f);
+            if (p.Mount != null)
+            {
+                // The wingtip/engine remains bolted on as its wing first ploughs into the surface.
+                // Inherit the velocity at this particular mount, including rotation of the wing.
+                Piece mount = p.Mount;
+                p.MountOffset = p.Bounds.center - mount.Bounds.center;
+                p.Release = mount.Release + mount.Flight + Mathf.Clamp(mount.Slide * R(.13f,.22f), .34f, 1.35f);
+                Evaluate(mount, p.Release-.04f, out Vector3 before, out Quaternion previous);
+                Evaluate(mount, p.Release, out Vector3 here, out p.Initial);
+                p.Start = here + p.Initial * p.MountOffset;
+                velocity = Vector3.ClampMagnitude((p.Start-before-previous*p.MountOffset)/.04f, velocity.magnitude);
+                DelayedBreaks++;
+                LastBreakTime = Mathf.Max(LastBreakTime, p.Release);
+            }
+            Ground(p.Start, out _, out Vector3 firstNormal);
+            Vector3 seated = Seat(p,p.Start,p.Initial,out _);
+            float closing = -Vector3.Dot(velocity, firstNormal);
+            float clearance = Mathf.Max(0f,(p.Start.y-seated.y)*firstNormal.y);
+            float gravity = 9.81f * Mathf.Max(.25f,firstNormal.y);
+            float impactSpeed = Mathf.Sqrt(closing*closing+2f*gravity*clearance);
+            p.Flight = Mathf.Clamp((impactSpeed-closing)/gravity,.045f,4.5f);
+            Vector3 tangent = Vector3.ProjectOnPlane(velocity, firstNormal);
             Vector3 axial = Vector3.ProjectOnPlane(tangent, Vector3.up).normalized;
             if (axial.sqrMagnitude < .01f) axial = Vector3.ProjectOnPlane(Impact.Rotation * Vector3.forward, Vector3.up).normalized;
             if (axial.sqrMagnitude < .01f) axial = Vector3.forward;
             Vector3 cross = Vector3.Cross(Vector3.up, axial);
-            Vector3 outwards = Vector3.ProjectOnPlane(p.Start, Vector3.up).normalized;
             bool pod = p.Group >= 21 && p.Group <= 28;
             bool wing = p.Group >= 6 && p.Group <= 15;
-            float slide = Mathf.Min(245f, (.24f * tangent.magnitude + .0095f * tangent.sqrMagnitude) *
-                (.43f + .62f * severity) * (pod ? 1.30f : wing ? .79f : 1f) * R(.66f,1.28f));
-            float spread = (4f + .59f * closing + .075f * tangent.magnitude) * (.25f+.75f*severity);
-            Vector3 travel = axial*slide + outwards*spread*R(.45f,1.16f) + cross*spread*R(-.33f,.33f);
-            // The initial rebound and the ground slide are separate trajectories. A steep
-            // impact throws panels outwards; hard cylindrical pods run on down-track.
-            Vector3 end = p.Start + travel;
-            Vector3 touch = p.Start + travel * R(.17f,.41f);
-            Vector3 middle = Vector3.Lerp(touch,end,.5f);
-            float endBed = Ground(end,out Vector3 endGround,out Vector3 normal);
-            float turn = R(-1,1)*(8f+severity*75f);
-            float roll = pod ? R(-105f,105f) : wing ? R(-11f,11f) : R(-30f,30f);
-            if (wing && severity > .55f && R(0,1) < .33f) roll += 178f;
-            float pitch = R(-5f,5f)*(1f+severity);
-            Vector3 heading = Vector3.ProjectOnPlane(Impact.Rotation*Vector3.forward,normal).normalized;
+            bool panel = wing || p.Group >= 31 && p.Group <= 38 || p.Group >= 46;
+            bool hull = p.Group >= 0 && p.Group <= 4;
+            float speed = tangent.magnitude;
+            Vector3 touch = p.Start + Vector3.ProjectOnPlane(velocity, Vector3.up)*p.Flight;
+            float touchBed = Ground(touch,out p.TrackStart,out Vector3 touchNormal);
+            p.WaterEntry = touchBed > 0f;
+            // Long hull barrels gouge the surface. Pods run on farther, whereas thin
+            // panels shed speed fast. Offset develops sideways only from the asymmetry of the strike.
+            float skid = Mathf.Min(225f,(.25f*speed+.008f*speed*speed)*R(.85f,1.12f)*
+                (pod ? 1.28f : panel ? .66f : .97f)*(p.WaterEntry ? .41f : 1f));
+            float side = Mathf.Clamp(Vector3.Dot(lever,cross)/72f,-1f,1f);
+            float deflect = side*Mathf.Min(impactSpeed,105f)*severity*(pod ? .18f : panel ? .25f : .065f);
+            Vector3 downhill = Vector3.ProjectOnPlane(Vector3.ProjectOnPlane(Vector3.down,touchNormal),Vector3.up);
+            Vector3 travel = axial*skid + cross*deflect*(p.WaterEntry ? .15f : 1f) + downhill*(pod ? 15f : 4f)*severity;
+            Vector3 end = touch+travel;
+            float endBed = Ground(end,out p.TrackEnd,out Vector3 normal);
+            Vector3 omega = Impact.AngularVelocity;
+            p.TouchRotation = omega.sqrMagnitude > .00001f && p.Mount == null ?
+                Quaternion.AngleAxis(Mathf.Min(130f,omega.magnitude*p.Flight*Mathf.Rad2Deg),omega.normalized)*p.Initial : p.Initial;
+            Vector3 heading = Vector3.ProjectOnPlane(p.TouchRotation*Vector3.forward,normal).normalized;
             if (heading.sqrMagnitude < .01f) heading = Vector3.ProjectOnPlane(axial,normal).normalized;
-            p.Rest = Quaternion.AngleAxis(turn,normal) * Quaternion.LookRotation(heading,normal) * Quaternion.Euler(pitch,0,roll);
-            p.TouchRotation = Quaternion.Slerp(p.Initial,p.Rest,.66f)*Quaternion.Euler(R(-8,8)*severity,0,R(-15,15)*severity);
-            p.Flight = R(.65f,1.25f) + .018f*Mathf.Min(90f,closing);
-            p.Slide = R(2f,3.8f) + Mathf.Min(3.2f,slide / 50f);
-            p.Hop = Mathf.Min(32f, R(1.2f,2.8f)+closing*.34f*R(.43f,1.06f))*(.4f+.6f*severity);
-            p.Width = Mathf.Clamp(Mathf.Min(bounds.size.x,bounds.size.z)*.52f, .8f, 12f);
-            p.TrackEnd = endGround;
-            float startBed = Ground(touch,out p.TrackStart,out _);
-            p.Touch = Seat(p,touch,p.TouchRotation,out float touchDepth);
-            p.Middle = Seat(p,middle,Quaternion.Slerp(p.TouchRotation,p.Rest,.68f),out float midDepth);
-            p.End = Seat(p,end,p.Rest,out float endDepth);
-            p.DryTrack = startBed == 0f && endBed == 0f && Ground(middle,out _,out _) == 0f;
-            float draft = Mathf.Max(1f,bounds.size.y*.7f);
-            p.Touch.y -= Mathf.Min(touchDepth,draft*.72f);
-            p.Middle.y -= Mathf.Min(midDepth,draft);
-            float immersion = Mathf.Min(endDepth,draft*1.15f);
-            p.End.y -= immersion;
-            if (endDepth > immersion)
+            float turn = (side*.42f+R(-.65f,.65f))*severity*(pod ? 84f : panel ? 61f : 25f);
+            if (p.WaterEntry) turn *= .18f;
+            float inverted = Vector3.Dot(p.Initial*Vector3.up,normal)<-.24f ? 180f : 0f;
+            p.Finish = Quaternion.AngleAxis(turn,normal)*Quaternion.LookRotation(heading,normal)*
+                Quaternion.Euler(R(-4f,4f),0f,inverted+R(-9f,9f)*severity);
+            // A cylindrical nacelle settles nose-down as it floods, without rolling along the sea.
+            if (p.WaterEntry && pod && endBed > 0f)
+                p.Finish *= Quaternion.AngleAxis(inverted == 0f ? 18f : -18f, Vector3.right);
+            bool dry = !Impact.Water && !p.WaterEntry && endBed == 0f;
+            float restitution = hull ? R(.055f,.085f) : pod ? R(.105f,.145f) : panel ? R(.14f,.21f) : .11f;
+            float reboundSpeed = Mathf.Min(impactSpeed,100f)*restitution;
+            if (dry) p.Hop = Mathf.Min(hull ? 3.4f : pod ? 9f : 15f,reboundSpeed*reboundSpeed / 19.62f);
+            p.BounceTime = Mathf.Sqrt(8f*p.Hop/9.81f);
+            if (hull) PeakHullHop = Mathf.Max(PeakHullHop,p.Hop);
+            if (panel) PeakPanelHop = Mathf.Max(PeakPanelHop,p.Hop);
+            p.SpinAxis = pod ? Vector3.forward : Vector3.right;
+            if (dry && pod)
             {
-                float flood = pod ? 26f : wing ? R(3.2f,9.5f) : R(11f,22f);
-                p.Flood = Mathf.Min(endDepth-immersion,flood);
+                Vector3 sideways = Vector3.Cross(p.Finish*Vector3.forward,normal).normalized;
+                float radius = Mathf.Max(1f, .5f*Mathf.Min(p.Bounds.size.x,p.Bounds.size.y));
+                p.Spin = Mathf.Clamp(Vector3.Dot(travel,sideways)/radius*Mathf.Rad2Deg*.74f,-650f,650f);
+                PeakPodRoll = Mathf.Max(PeakPodRoll,Mathf.Abs(p.Spin));
+            }
+            else if (dry && panel && severity > .5f && turn != 0f)
+                p.Spin = Mathf.Sign(turn)*Mathf.Lerp(38f,210f,severity)*R(.50f,1.15f);
+            p.Slide = Mathf.Clamp(Mathf.Max(2f*travel.magnitude/Mathf.Max(12f,speed*.74f),p.BounceTime*1.6f),1.45f,8.5f);
+            p.Width = Mathf.Clamp(Mathf.Min(p.Bounds.size.x,p.Bounds.size.z)*.52f,.8f,12f);
+            p.DryTrack = touchBed == 0f && endBed == 0f && Ground((touch+end)*.5f,out _,out _) == 0f;
+            // Sample the lower skin at each attitude, including intermediate full turns.
+            // Sliding a long panel on its centre height alone would drive its ends underground.
+            int steps = Mathf.Clamp(Mathf.Max(Mathf.CeilToInt(Mathf.Abs(p.Spin)/35f),
+                Mathf.CeilToInt(travel.magnitude/44f)),2,19);
+            p.SlidePath = new Vector3[steps+1];
+            float draft = Mathf.Max(1f,p.Bounds.size.y*.7f);
+            for (int i=0; i<=steps; i++)
+            {
+                float q = i/(float)steps;
+                Vector3 foot = Seat(p,Vector3.Lerp(touch,end,q),SlideAttitude(p,q),out float depth);
+                float immersion = Mathf.Min(depth,draft*Mathf.Lerp(.72f,1.15f,q));
+                foot.y -= immersion;
+                p.SlidePath[i] = foot;
+                if (i == steps && depth > immersion)
+                    p.Flood = Mathf.Min(depth-immersion,pod ? 26f : panel ? R(3.2f,9.5f) : R(11f,22f));
             }
             p.Skin.Clear();
-            settleTime = Mathf.Max(settleTime,p.Flight+p.Slide+(p.Flood > 0 ? 11f : 0f));
+            settleTime = Mathf.Max(settleTime,p.Release+p.Flight+p.Slide+(p.Flood > 0 ? 11f : 0f));
         }
 
         // Return the available water column over the local seabed. A carrier can span
@@ -390,23 +468,51 @@ namespace BoscaliSummer.Modules.Megaplane
             return at;
         }
 
+        private static Quaternion SlideAttitude(Piece p, float distance) =>
+            Quaternion.Slerp(p.TouchRotation,p.Finish,distance) * Quaternion.AngleAxis(p.Spin*distance,p.SpinAxis);
+
+        private static void Evaluate(Piece p, float age, out Vector3 pos, out Quaternion rotation)
+        {
+            if (p.Mount != null && age < p.Release)
+            {
+                Evaluate(p.Mount,age,out pos,out rotation);
+                pos += rotation*p.MountOffset;
+                return;
+            }
+            float airborne = age - p.Release;
+            if (airborne < p.Flight)
+            {
+                float t = Mathf.Clamp01(airborne/p.Flight);
+                pos = Vector3.Lerp(p.Start,p.SlidePath[0],t);
+                pos.y += 4.905f*p.Flight*p.Flight*t*(1f-t);
+                rotation = Quaternion.Slerp(p.Initial,p.TouchRotation,t);
+                return;
+            }
+            float grounded = airborne-p.Flight;
+            float tSlide = Mathf.Clamp01(grounded/p.Slide);
+            float remaining = 1f-tSlide;
+            float distance = 1f-remaining*remaining*(p.WaterEntry ? remaining : 1f);
+            float path = distance*(p.SlidePath.Length-1);
+            int index = Mathf.Min((int)path,p.SlidePath.Length-2);
+            pos = Vector3.Lerp(p.SlidePath[index],p.SlidePath[index+1],path-index);
+            rotation = SlideAttitude(p,distance);
+            if (p.BounceTime > .05f && grounded < p.BounceTime*1.38f)
+            {
+                float u = grounded/p.BounceTime;
+                float height = p.Hop;
+                if (u > 1f) { u = (u-1f)/.38f; height *= .38f*.38f; }
+                pos.y += 4f*height*u*(1f-u);
+            }
+            if (p.Flood > 0f)
+                pos.y -= p.Flood*Mathf.SmoothStep(0f,1f,(grounded-p.Slide)/11f);
+        }
+
         private void Pose(float age)
         {
             foreach (Piece p in moving)
             {
-                if (age < p.Flight)
-                {
-                    float t = Mathf.Clamp01(age/p.Flight);
-                    p.Frame.SetLocalPositionAndRotation(Vector3.Lerp(p.Start,p.Touch,t)+Vector3.up*(p.Hop*4f*t*(1f-t)),
-                        Quaternion.Slerp(p.Initial,p.TouchRotation,t));
-                    continue;
-                }
-                float slide = Mathf.Clamp01((age-p.Flight)/p.Slide);
-                float q = 1f-(1f-slide)*(1f-slide);
-                Vector3 pos = q < .5f ? Vector3.Lerp(p.Touch,p.Middle,q*2f) : Vector3.Lerp(p.Middle,p.End,2f*q-1f);
-                pos.y += Mathf.Sin(slide*Mathf.PI)*Mathf.Exp(-4f*slide)*Mathf.Min(p.Hop*.19f,2.5f);
-                if (p.Flood > 0) pos.y -= p.Flood*Mathf.SmoothStep(0f,1f,(age-p.Flight-p.Slide)/11f);
-                p.Frame.SetLocalPositionAndRotation(pos,Quaternion.Slerp(p.TouchRotation,p.Rest,q));
+                Evaluate(p,age,out Vector3 pos,out Quaternion rotation);
+                p.Frame.SetLocalPositionAndRotation(pos,rotation);
             }
         }
 

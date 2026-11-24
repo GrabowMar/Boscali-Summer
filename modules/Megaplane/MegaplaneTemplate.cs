@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Megaplane
         internal const string Key = "BS_Megaplane";
         // Mirage uses these only for network instantiation. Mission saves use the definition key.
         // Different native damage tables must never receive one another's byte-indexed RPCs.
-        private const int NativePartLayout = 1;
+        private const int NativePartLayout = 2;
         internal const int PrefabHashFighters = 0x42534D50 + 4 * NativePartLayout;
         internal const int PrefabHashRailgun = 0x42534D52 + 4 * NativePartLayout;
         internal static int PrefabHash => MegaplaneSettings.Railgun ? PrefabHashRailgun : PrefabHashFighters;
@@ -144,6 +144,17 @@ namespace BoscaliSummer.Modules.Megaplane
                 plate.mass = plateMass;
                 center.mass -= plateMass;
             }
+            // These four pieces come out of the flight-deck shell's original mass budget.
+            // Append root siblings so the new native hitboxes do not renumber donor parts.
+            AeroPart bridge = go.GetComponentsInChildren<AeroPart>(true).First(part => part.name == "fuselage_F");
+            float bridgeMass = bridge.mass;
+            foreach (var section in MegaplaneForebodyPanel.Sections)
+            {
+                AeroPart skin = AddIsland(go.transform, section.name, null);
+                skin.mass = bridgeMass * section.share;
+                bridge.mass -= skin.mass;
+                skin.gameObject.AddComponent<MegaplaneForebodyPanel>().SetFace(section.face);
+            }
             RefitAirframe(aircraft, model, nodes);
             foreach (string side in new[] { "L", "R" })
                 if (nodes.TryGetValue("NoseAssist_" + side, out Transform housing))
@@ -206,6 +217,8 @@ namespace BoscaliSummer.Modules.Megaplane
             { "coolant_L", "CoolantPack_L" }, { "coolant_R", "CoolantPack_R" },
             { "innerFlap_L", "Flap_Inner_L" }, { "innerFlap_R", "Flap_Inner_R" },
             { "hullPlate_L", "HullPlate_L" }, { "hullPlate_R", "HullPlate_R" },
+            { "foreCheek_L", "ForeCheek_L" }, { "foreCheek_R", "ForeCheek_R" },
+            { "bridgeCrown", "BridgeCrown" }, { "noseChin", "NoseChin" },
         };
         private static readonly Dictionary<string, string> ExtraArt = new Dictionary<string, string>();
         // Position-only islands share another island's art.
@@ -307,8 +320,11 @@ namespace BoscaliSummer.Modules.Megaplane
                 AeroPart owner = mesh.GetComponentInParent<AeroPart>(true);
                 // The centre hull encloses two open compartments. Separate convex strips preserve
                 // the upper cover opening and keep the fighter-bay volume clear beneath its deck.
-                if (mesh.name == "Fuselage_Center") continue;
-                if (mesh.name.StartsWith("ReactorHull_", StringComparison.Ordinal))
+                // The flight deck has backed cutouts under each removable cheek, crown and chin.
+                // A single convex shell here would cover the openings and steal their hits.
+                if (mesh.name == "Fuselage_Center" || mesh.name == "Fuselage_Cockpit") continue;
+                if (mesh.name.StartsWith("ReactorHull_", StringComparison.Ordinal) ||
+                    mesh.name.StartsWith("ForeHullProxy_", StringComparison.Ordinal))
                     Object.DestroyImmediate(mesh.GetComponent<MeshRenderer>());
                 // Paint, lamps and interior fittings sit on an existing hull. A convex collider over
                 // disconnected lamps or decals would invent solid surfaces between them.

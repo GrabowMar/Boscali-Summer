@@ -99,8 +99,10 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             if (aircraft == null || rb == null || !aircraft.LocalSim || rb.isKinematic) { holding = false; return; }
             if (damage == null) damage = GetComponent<MegaplaneDamage>();
-            // Native fuel burn (UnitPart.ModifyMass) writes one tank part's mass into the shared body; keep the carrier's.
-            if (rb.mass != aircraft.definition.mass) rb.mass = aircraft.definition.mass;
+            // Native fuel burn can write a single tank's mass into the shared body.
+            // Restore the mass of what is still flying, including only attached branches.
+            float airframeMass = Mathf.Max(1f, aircraft.definition.mass - (damage != null ? damage.DetachedMass : 0f));
+            if (rb.mass != airframeMass) rb.mass = airframeMass;
             float dt = Time.fixedDeltaTime;
             float wingL = damage != null ? damage.LiftL : 1f, wingR = damage != null ? damage.LiftR : 1f;
             float pitchAuth = damage != null ? damage.PitchAuthority : 1f, yawAuth = damage != null ? damage.YawAuthority : 1f;
@@ -155,12 +157,14 @@ namespace BoscaliSummer.Modules.Megaplane
             bank += rollRate * dt;
             float turn = 9.81f * Mathf.Tan(bank * Mathf.Deg2Rad) / flatSpeed * Mathf.Rad2Deg;
             turn += (input.yaw * RudderRate * yawAuth + asymThrust * 2.5f + (1f - yawAuth) * 2f * Sway(53f)) * Mathf.Clamp01(flatSpeed / 60f);
+            if (damage != null) turn += damage.ForebodyYaw * Mathf.Clamp01(flatSpeed * flatSpeed / 14400f);
             // The heading may only run as fast as the flight path can follow (v * omega within the lateral limit), or it crabs.
             float maxTurn = LateralAccel / flatSpeed * Mathf.Rad2Deg;
             turn = Mathf.Clamp(turn, -maxTurn, maxTurn);
             heading = Mathf.Repeat(heading + turn * dt, 360f);
 
             float topSpeed = MaxSpeed * (.3f + .7f * Thrust) * (.88f + .12f * yawAuth);   // fewer pods, less speed; a sideslipping hull drags
+            if (damage != null) topSpeed *= 1f - damage.ForebodyDrag;
             float speed = Mathf.Lerp(minSpeed, Mathf.Max(topSpeed, minSpeed), Mathf.Clamp01(input.throttle));
             float climb = Mathf.Clamp(climbCmd + (altitude - aircraft.GlobalPosition().y) * .1f, -maxClimb, maxClimb * Mathf.Max(climbAuthority, .05f) + noseLift * AssistClimb);
             Vector3 flat = Quaternion.Euler(0, heading, 0) * Vector3.forward;

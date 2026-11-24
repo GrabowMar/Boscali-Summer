@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Megaplane
         internal const int MaxFields = 4;
         internal const float Lifetime = 600f;
         internal uint Spawn, Unit;
-        internal Vector3 Origin, Contact, Velocity, Normal;
+        internal Vector3 Origin, Contact, Velocity, AngularVelocity, Normal;
         internal Quaternion Rotation;
         internal ulong Surviving, DamagedSkin, HeavilyDamagedSkin;
         internal bool Water;
@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             w.WriteByte(MegaplaneWire.ProtocolVersion);
             w.WritePackedUInt32(v.Spawn); w.WritePackedUInt32(v.Unit);
-            Vector(w, v.Origin); Vector(w, v.Contact); Vector(w, v.Velocity); Vector(w, v.Normal);
+            Vector(w, v.Origin); Vector(w, v.Contact); Vector(w, v.Velocity); Vector(w, v.AngularVelocity); Vector(w, v.Normal);
             w.WriteSingle(v.Rotation.x); w.WriteSingle(v.Rotation.y); w.WriteSingle(v.Rotation.z); w.WriteSingle(v.Rotation.w);
             w.WriteUInt64(v.Surviving); w.WriteUInt64(v.DamagedSkin); w.WriteUInt64(v.HeavilyDamagedSkin); w.WriteBoolean(v.Water);
             w.WriteByte(v.GearLeg); w.WriteByte(v.GearDoor); w.WriteSingle(v.Age);
@@ -47,7 +47,7 @@ namespace BoscaliSummer.Modules.Megaplane
             var v = new MegaplaneCrashRecord
             {
                 Spawn = r.ReadPackedUInt32(), Unit = r.ReadPackedUInt32(),
-                Origin = Vector(r), Contact = Vector(r), Velocity = Vector(r), Normal = Vector(r),
+                Origin = Vector(r), Contact = Vector(r), Velocity = Vector(r), AngularVelocity = Vector(r), Normal = Vector(r),
                 Rotation = new Quaternion(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle()),
                 Surviving = r.ReadUInt64(), DamagedSkin = r.ReadUInt64(), HeavilyDamagedSkin = r.ReadUInt64(), Water = r.ReadBoolean(),
                 GearLeg = r.ReadByte(), GearDoor = r.ReadByte(), Age = r.ReadSingle()
@@ -56,7 +56,8 @@ namespace BoscaliSummer.Modules.Megaplane
             float orientation = Quaternion.Dot(v.Rotation, v.Rotation);
             if ((v.DamagedSkin & ~v.Surviving) != 0 || (v.HeavilyDamagedSkin & ~v.DamagedSkin) != 0) return default;
             if (!(v.Contact.sqrMagnitude < 1e14f && (v.Origin - v.Contact).sqrMagnitude < 1e6f &&
-                  v.Velocity.sqrMagnitude < 1e8f && v.Normal.sqrMagnitude > .5f && v.Normal.sqrMagnitude < 1.5f &&
+                  v.Velocity.sqrMagnitude < 1e8f && v.AngularVelocity.sqrMagnitude <= 64.01f &&
+                  v.Normal.sqrMagnitude > .5f && v.Normal.sqrMagnitude < 1.5f &&
                   orientation > .8f && orientation < 1.2f && v.Age >= 0f && v.Age < Lifetime)) return default;
             return v;
         }

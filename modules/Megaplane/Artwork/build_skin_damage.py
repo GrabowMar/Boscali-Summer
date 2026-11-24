@@ -9,7 +9,7 @@ import numpy as np
 
 ASSETS=Path(__file__).resolve().parent.parent/"Assets"
 SIDES=("L","R")
-NAMES={"Fuselage_"+s for s in ("Center","Forward","Cockpit","Aft","TailCone","Hump")}|{"Tailplane"}
+NAMES={"Fuselage_"+s for s in ("Center","Forward","Cockpit","Aft","TailCone","Hump")}|{"Tailplane","ForeCheek_L","ForeCheek_R","BridgeCrown","NoseChin"}
 NAMES.update(stem+"_"+side for stem in ("Wing_Root","Wing_Inner","Wing_Mid","Wing_Outer","Wing_Tip",
              "Boom","Fin","NoseAssist","Flap_Inner","Flap_Outer","Aileron","Rudder","Strongback","HullPlate") for side in SIDES)
 NAMES.update("Pod_"+side+str(i) for side in SIDES for i in range(1,5))
@@ -66,7 +66,7 @@ def clip(poly,axis,limit,sign):
     return out
 
 def directions(name):
-    if name.startswith(("HullPlate","Fin_","Rudder")): return ((-1,0,0),(1,0,0))
+    if name.startswith(("HullPlate","Fin_","Rudder","ForeCheek")): return ((-1,0,0),(1,0,0))
     if name.startswith(("Fuselage","Pod_","Boom","NoseAssist","Strongback")): return ((0,1,0),(-1,0,0),(1,0,0),(0,-1,0))
     return ((0,1,0),(0,-1,0))
 

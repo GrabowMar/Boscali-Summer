@@ -45,3 +45,7 @@ hullPlate_R
 reactor
 coolant_L
 coolant_R
+noseChin
+foreCheek_L
+foreCheek_R
+bridgeCrown

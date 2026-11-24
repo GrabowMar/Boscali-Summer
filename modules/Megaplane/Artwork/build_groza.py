@@ -51,6 +51,7 @@ from planform import rebuild_planform
 from wing_structure import fit_wing_splices
 from reactor import fit_reactor
 from hull_damage import fit_hull_plates
+from fore_sections import fit_fore_sections
 from nose_assist import add_nose_assist
 from service_finish import detail_boom_services
 from pose import controls
@@ -122,6 +123,7 @@ def build():
     fit_reactor(nodes)
     fit_hull_plates(nodes)
     finish_crown_shading(nodes)
+    fit_fore_sections(nodes)
     bpy.context.view_layer.update()
     root = nodes["BS_Megaplane"]
     write_lods(nodes, ASSETS/"megaplane.lod.gz")

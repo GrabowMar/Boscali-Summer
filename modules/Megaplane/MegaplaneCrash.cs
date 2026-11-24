@@ -19,11 +19,12 @@ namespace BoscaliSummer.Modules.Megaplane
             "Pod_L1","Pod_L2","Pod_L3","Pod_L4","Pod_R1","Pod_R2","Pod_R3","Pod_R4",
             "NoseAssist_L","NoseAssist_R","Flap_Inner_L","Flap_Inner_R","Flap_Outer_L","Flap_Outer_R",
             "Aileron_L","Aileron_R","Rudder_L","Rudder_R","Strongback_L","Strongback_R","HullPlate_L","HullPlate_R",
-            "ReactorCore","CoolantPack_L","CoolantPack_R"
+            "ReactorCore","CoolantPack_L","CoolantPack_R",
+            "ForeCheek_L","ForeCheek_R","BridgeCrown","NoseChin"
         };
 
         private Aircraft aircraft;
-        private Vector3 previousOrigin, incoming;
+        private Vector3 previousOrigin, incoming, incomingSpin;
         private Quaternion previousRotation;
         private bool hasPrevious;
         private float remoteSampleTime;
@@ -33,9 +34,10 @@ namespace BoscaliSummer.Modules.Megaplane
         private bool releaseSeat, followedFromSeat, alreadyEvacuated;
         internal bool Impacted { get; private set; }
         private AeroPart[] owners;
+        private static (int group, Vector3 point)[] contactSamples;
         // Sample the exterior of the actual sections, including widely separated wing and engine extremities.
         private static readonly (int group, Vector3 point)[] Keel = {
-            (0,new Vector3(0,-11.8f,0)), (1,new Vector3(0,-11.8f,37)), (2,new Vector3(0,-5,108)),
+            (0,new Vector3(0,-11.8f,0)), (1,new Vector3(0,-11.8f,37)),
             (3,new Vector3(0,-10,-35)), (4,new Vector3(0,6,-88)),
             (10,new Vector3(-167,6,-51)), (15,new Vector3(167,6,-51)),
             (16,new Vector3(-30,10,-114)), (17,new Vector3(30,10,-114)),
@@ -60,6 +62,44 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             aircraft = GetComponent<Aircraft>();
             owners = GroupOwners(gameObject);
+            if (contactSamples == null) contactSamples = ContactSamples();
+        }
+
+        private (int group, Vector3 point)[] ContactSamples()
+        {
+            var samples = new List<(int, Vector3)>(Keel);
+            var vertices = new List<Vector3>();
+            var hitboxes = GetComponentsInChildren<MegaplaneHitbox>(true);
+            foreach (string name in new[] { "Fuselage_Cockpit", "ForeCheek_L", "ForeCheek_R", "BridgeCrown", "NoseChin" })
+            {
+                int group = Array.IndexOf(GroupNames, name);
+                Vector3 outward = name == "ForeCheek_L" ? Vector3.left : name == "ForeCheek_R" ? Vector3.right :
+                    name == "BridgeCrown" ? Vector3.up : Vector3.down;
+                var directions = new[] { outward, Vector3.forward + .25f * outward, Vector3.down - .2f * Vector3.forward };
+                var score = new[] { float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity };
+                var best = new Vector3[directions.Length];
+                foreach (MegaplaneHitbox hit in hitboxes)
+                {
+                    // The retained crew shell uses several convex shields around its open equipment bays.
+                    if (hit.Owner != owners[group] || hit.name != name && !hit.name.StartsWith("ForeHullProxy_", StringComparison.Ordinal)) continue;
+                    var frame = transform.worldToLocalMatrix * hit.transform.localToWorldMatrix;
+                    hit.GetComponent<MeshCollider>().sharedMesh.GetVertices(vertices);
+                    foreach (Vector3 vertex in vertices)
+                    {
+                        Vector3 p = frame.MultiplyPoint3x4(vertex);
+                        for (int i = 0; i < directions.Length; i++)
+                        {
+                            float distance = Vector3.Dot(p, directions[i]);
+                            if (distance <= score[i]) continue;
+                            score[i] = distance;
+                            best[i] = p;
+                        }
+                    }
+                }
+                for (int i = 0; i < best.Length; i++)
+                    if (!float.IsNegativeInfinity(score[i]) && Array.IndexOf(best, best[i]) == i) samples.Add((group, best[i]));
+            }
+            return samples.ToArray();
         }
 
         internal static ulong Mask(Aircraft aircraft)
@@ -97,6 +137,15 @@ namespace BoscaliSummer.Modules.Megaplane
             if (aircraft.LocalSim || reported.sqrMagnitude > 1f) incoming = reported;
             else if (continuous && step.sqrMagnitude > .0001f)
                 incoming = Vector3.ClampMagnitude(step / Mathf.Max(remoteSampleTime,Time.fixedDeltaTime), 350f);
+            Vector3 spin = aircraft.rb.angularVelocity;
+            if (aircraft.LocalSim || spin.sqrMagnitude > .0001f || !continuous) incomingSpin = spin;
+            else if (Quaternion.Angle(rotation, previousRotation) > .005f)
+            {
+                Quaternion delta = rotation * Quaternion.Inverse(previousRotation);
+                delta.ToAngleAxis(out float degrees, out Vector3 axis);
+                incomingSpin = axis * (Mathf.DeltaAngle(0f, degrees) * Mathf.Deg2Rad / remoteSampleTime);
+            }
+            else if (step.sqrMagnitude > .0001f || remoteSampleTime > .25f) incomingSpin = Vector3.zero;
             if (!continuous || step.sqrMagnitude > .0001f) remoteSampleTime = 0f;
             if (continuous && (origin.y < 235f || aircraft.radarAlt < 230f))
             {
@@ -105,13 +154,14 @@ namespace BoscaliSummer.Modules.Megaplane
                 bool water = false;
                 void Consider(float time, Vector3 at, Vector3 surfaceNormal, bool isWater)
                 {
-                    if (time > first || time == first && isWater || !Destructive(surfaceNormal,incoming)) return;
+                    Vector3 atPoint = incoming + Vector3.Cross(incomingSpin, at - aircraft.rb.worldCenterOfMass);
+                    if (time > first || time == first && isWater || !Destructive(surfaceNormal,atPoint)) return;
                     first = time;
                     contact = at;
                     normal = surfaceNormal;
                     water = isWater;
                 }
-                foreach (var keel in Keel)
+                foreach (var keel in contactSamples)
                 {
                     AeroPart owner = owners[keel.group];
                     if (owner == null || owner.IsDetached()) continue;
@@ -155,7 +205,8 @@ namespace BoscaliSummer.Modules.Megaplane
                 ContactPoint hit = collision.GetContact(i);
                 Vector3 velocity = incoming;
                 if (velocity.sqrMagnitude < 1f) velocity = aircraft.rb.velocity;
-                if (!Destructive(hit.normal,velocity)) continue;
+                Vector3 atPoint = velocity + Vector3.Cross(incomingSpin, hit.point - aircraft.rb.worldCenterOfMass);
+                if (!Destructive(hit.normal,atPoint)) continue;
                 Record(hit.point,hit.normal,velocity,water);
                 break;
             }
@@ -179,6 +230,7 @@ namespace BoscaliSummer.Modules.Megaplane
             var report = new MegaplaneCrashRecord {
                 Spawn = aircraft.NetId, Unit = aircraft.persistentID.Id, Origin = aircraft.rb.position - Datum.originPosition,
                 Contact = contact - Datum.originPosition, Velocity = velocity, Normal = normal,
+                AngularVelocity = Vector3.ClampMagnitude(incomingSpin, 8f),
                 Rotation = aircraft.rb.rotation, Surviving = Mask(aircraft), Water = water, Age = 0f,
                 GearLeg = (byte)Mathf.RoundToInt(255f*gear.Leg), GearDoor = (byte)Mathf.RoundToInt(255f*gear.Door)
             };

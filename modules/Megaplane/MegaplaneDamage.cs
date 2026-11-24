@@ -26,6 +26,8 @@ namespace BoscaliSummer.Modules.Megaplane
 
         private Aircraft aircraft;
         private AeroPart[] parts;
+        private AeroPart[] forebody;
+        private float[] sectionMass;
         private (string stem, string side)[] keys;   // parsed once: Update walked EndsWith/SubString per part per frame
         private readonly HashSet<Transform> scaled = new HashSet<Transform>();
         private readonly HashSet<AeroPart> dirty = new HashSet<AeroPart>();
@@ -38,6 +40,9 @@ namespace BoscaliSummer.Modules.Megaplane
         internal float LiftR { get; private set; } = 1f;
         internal float PitchAuthority { get; private set; } = 1f;
         internal float YawAuthority { get; private set; } = 1f;
+        internal float ForebodyDrag { get; private set; }
+        internal float ForebodyYaw { get; private set; }
+        internal float DetachedMass { get; private set; }
         internal IEnumerable<string> Lost => parts.Where(p => p != null && p.IsDetached()).Select(p => p.name);
 
         internal static bool Detachable(AeroPart p) => p != null && !Core.Contains(p.name) && !Critical.Contains(p.name) && p.parentUnit != null && p.gameObject != p.parentUnit.gameObject;
@@ -47,6 +52,8 @@ namespace BoscaliSummer.Modules.Megaplane
             aircraft = GetComponent<Aircraft>();
             skins = MegaplaneSkinDamage.Bind(gameObject);
             parts = GetComponentsInChildren<AeroPart>(true).Where(p => p.gameObject != gameObject).ToArray();
+            sectionMass = parts.Select(p => p.mass).ToArray();
+            forebody = MegaplaneForebodyPanel.Sections.Select(s => parts.First(p => p.name == s.name)).ToArray();
             keys = new (string, string)[parts.Length];
             for (int i = 0; i < parts.Length; i++)
             {
@@ -83,7 +90,9 @@ namespace BoscaliSummer.Modules.Megaplane
             if (part == null || part.IsDetached() || !(Detachable(part) || dying && part.parentUnit != null && part.gameObject != part.parentUnit.gameObject)) return;
             Vector3 pos = part.transform.position, out_ = pos - aircraft.rb.worldCenterOfMass;
             out_.y = 0f;
-            Vector3 v = aircraft.rb.GetPointVelocity(pos) + out_.normalized * 4f + Vector3.down * 3f;
+            Vector3 inherited = aircraft.rb.GetPointVelocity(pos);
+            Vector3 v = part.TryGetComponent(out MegaplaneForebodyPanel panel)
+                ? panel.ReleaseVelocity(inherited) : inherited + out_.normalized * 4f + Vector3.down * 3f;
             aircraft.DetachPart(part.id, v, pos - aircraft.transform.position);
         }
 
@@ -92,8 +101,11 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             if (!aircraft.IsServer) return;
             if (part.name == "fuselage_F")
+            {
+                foreach (AeroPart panel in forebody) Break(panel);
                 foreach (AeroPart mounted in parts)
                     if (mounted != null && (mounted.name == "noseAssist_L" || mounted.name == "noseAssist_R")) Break(mounted);
+            }
             if (part.name == "wing2_L" || part.name == "wing2_R")
                 Break(parts.FirstOrDefault(p => p != null && p.name == "pod4_" + part.name[part.name.Length - 1]));
             if (part.name == "gearbay_L" || part.name == "gearbay_R")
@@ -115,29 +127,41 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 Vector3 at = transform.InverseTransformPoint(part.transform.position);
                 float side = Mathf.Clamp(at.x / 120f, -1f, 1f);
-                aircraft.rb.AddRelativeTorque(new Vector3(.04f * Mathf.Sign(-at.z), .03f * side, -.16f * side), ForceMode.VelocityChange);
+                float response = part.TryGetComponent(out MegaplaneForebodyPanel _) ?
+                    .25f * Mathf.Clamp01(aircraft.rb.velocity.magnitude / 95f) : 1f;
+                aircraft.rb.AddRelativeTorque(response * new Vector3(.04f * Mathf.Sign(-at.z), .03f * side, -.16f * side), ForceMode.VelocityChange);
             }
         }
 
         private void Update()
         {
             // Servicing directly restores native health without broadcasting a damage event.
-            if (skins != null && Time.time >= nextSkinCheck)
+            if (Time.time >= nextSkinCheck)
             {
                 nextSkinCheck = Time.time + .5f;
-                foreach (var skin in skins) skin.Sync();
+                if (skins != null) foreach (var skin in skins) skin.Sync();
+                float opened = 0f, bias = 0f;
+                for (int i = 0; i < forebody.Length; i++)
+                {
+                    AeroPart panel = forebody[i];
+                    float loss = panel == null || panel.IsDetached() ? 1f : .15f * (1f - Mathf.Clamp01(panel.hitPoints * .01f));
+                    var section = MegaplaneForebodyPanel.Sections[i];
+                    opened += section.share * loss;
+                    bias += section.face.x * loss;
+                }
+                ForebodyDrag = .52f * opened;
+                ForebodyYaw = .38f * bias;
             }
-            float l = 0f, r = 0f, pitch = 1f, yawL = 1f, yawR = 1f;
+            float l = 0f, r = 0f, pitch = 1f, yawL = 1f, yawR = 1f, detachedMass = 0f;
             for (int i = 0; i < parts.Length; i++)
             {
                 AeroPart p = parts[i];
-                if (p == null) continue;
-                bool up = !p.IsDetached();
+                bool up = p != null && !p.IsDetached();
+                if (!up) detachedMass += sectionMass[i];
                 string side = keys[i].side, stem = keys[i].stem;
                 // As vanilla wingEffectiveness: a holed panel still lifts, from half at 0 hp to all of it undamaged.
                 if (side != null && Lift.TryGetValue(stem, out float w) && up) { w *= Mathf.Lerp(.5f, 1f, p.hitPoints * .01f); if (side == "L") l += w; else r += w; }
-                string n = p.name;
-                if (n == "hstab" && !up) pitch = 0f;
+                if (stem == "hstab" && !up) pitch = 0f;
                 if (stem == "vstab1" || stem == "nozzle" || stem == "rudder")
                 {
                     float local = up ? Mathf.Clamp01(p.hitPoints * .01f) : 0f;
@@ -145,9 +169,10 @@ namespace BoscaliSummer.Modules.Megaplane
                     if (side == "L") yawL = Mathf.Min(yawL, authority); else yawR = Mathf.Min(yawR, authority);
                 }
                 // Hit points lower authority a little before anything comes off.
-                if (up && n == "hstab") pitch = Mathf.Lerp(.6f, 1f, p.hitPoints * .01f);
+                if (up && stem == "hstab") pitch = Mathf.Lerp(.6f, 1f, p.hitPoints * .01f);
             }
             LiftL = l; LiftR = r; PitchAuthority = pitch; YawAuthority = (yawL + yawR) * .5f;
+            DetachedMass = detachedMass;
 
             if (!aircraft.IsServer || Time.time < nextCheck) return;
             nextCheck = Time.time + .5f;
@@ -159,12 +184,18 @@ namespace BoscaliSummer.Modules.Megaplane
             if (!aircraft.disabled) Overload();
             if (aircraft.disabled && shed < 4 && Time.time > nextBreak)
             {
-                // The dying carrier sheds what it still carries, outermost first, a piece every few seconds. The first
-                // pass only schedules that timer: no piece falls off in the same frame the carrier disables.
+                // Airflow opens already torn forebody skin first. If the bridge is sound,
+                // the longest unsupported span peels away as in the original breakup.
                 if (nextBreak > 0f)
                 {
-                    AeroPart next = parts.Where(p => p != null && p.parentUnit != null && p.gameObject != p.parentUnit.gameObject && !p.IsDetached())
-                        .OrderByDescending(p => (p.transform.position - transform.position).sqrMagnitude).FirstOrDefault();
+                    AeroPart next = null;
+                    if (aircraft.rb.velocity.sqrMagnitude > 40f * 40f)
+                        foreach (AeroPart panel in forebody)
+                            if (panel != null && !panel.IsDetached() && panel.hitPoints < 40f &&
+                                (next == null || panel.hitPoints < next.hitPoints)) next = panel;
+                    if (next == null)
+                        next = parts.Where(p => p != null && p.parentUnit != null && p.gameObject != p.parentUnit.gameObject && !p.IsDetached())
+                            .OrderByDescending(p => (p.transform.position - transform.position).sqrMagnitude).FirstOrDefault();
                     if (next != null) { Break(next, true); shed++; }
                 }
                 nextBreak = Time.time + Random.Range(BreakupMin, BreakupMax);

@@ -139,8 +139,8 @@ namespace BoscaliSummer.Modules.Megaplane
             foreach (MeshFilter skin in airframe.GetComponentsInChildren<MeshFilter>(true))
             {
                 int group = Array.IndexOf(MegaplaneCrash.GroupNames, skin.name);
-                // The last three groups are machinery inside the reactor bay.
-                if (group < 0 || group >= MegaplaneCrash.GroupNames.Length - 3) continue;
+                // Reactor machinery inside the hull has no painted exterior.
+                if (group < 0 || skin.name == "ReactorCore" || skin.name == "CoolantPack_L" || skin.name == "CoolantPack_R") continue;
                 var owner = skin.GetComponentInParent<AeroPart>(true);
                 if (owner != null) result.Add(new Live(skin.transform, owner));
             }
@@ -156,7 +156,7 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 if (!contactSites.TryGetValue(filter.name, out var sites)) continue;
                 int group = Array.IndexOf(MegaplaneCrash.GroupNames, filter.name);
-                if ((surviving & (1UL << group)) == 0) continue;
+                if (group < 0 || (surviving & (1UL << group)) == 0) continue;
                 Matrix4x4 frame = prefab.worldToLocalMatrix * filter.transform.localToWorldMatrix;
                 foreach (string site in sites)
                 {

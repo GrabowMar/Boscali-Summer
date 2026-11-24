@@ -65,6 +65,11 @@ def ownership():
     groups["reactor"] = ("ReactorCore",)
     for side in ("L","R"):
         groups["coolant_"+side] = ("CoolantPack_"+side,)
+    # The chin lies beneath the bridge crown in plan; the latter draws over it.
+    groups["noseChin"] = ("NoseChin",)
+    for side in ("L","R"):
+        groups["foreCheek_"+side] = ("ForeCheek_"+side,)
+    groups["bridgeCrown"] = ("BridgeCrown",)
     return groups
 
 
