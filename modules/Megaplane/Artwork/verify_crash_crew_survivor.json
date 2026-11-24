@@ -15,6 +15,7 @@
     {"op": "wait", "seconds": 0.10},
     {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCrashProbe.Run", "args": {"step": "crewInspect", "profile": "survivor"}, "store": "airborne"},
     {"op": "wait_until", "call": "BoscaliSummer.Modules.Megaplane.MegaplaneCrashProbe.Run", "args": {"step": "crewWreck", "profile": "survivor"}, "truthy": true, "timeout_s": 22},
+    {"op": "wait_until", "path": "GameManager._localPlayer.PilotDismounted", "truthy": true, "timeout_s": 3},
     {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCrashProbe.Run", "args": {"step": "crewInspect", "profile": "survivor"}, "store": "impact"},
     {"op": "wait", "seconds": 15},
     {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCrashProbe.Run", "args": {"step": "crewInspect", "profile": "survivor"}, "store": "after"},
