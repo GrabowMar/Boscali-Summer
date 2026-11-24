@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import bpy
 from mathutils import Vector
+from mathutils.kdtree import KDTree
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -23,6 +24,17 @@ def inspect():
     backs = [nodes[n] for n in ("Fuselage_Cockpit", "Glass_Canopy", "Detail_WindscreenFrames",
                                 "BridgeCrown", "ForeCheek_L", "ForeCheek_R")]
     shell = nodes["Fuselage_Cockpit"]
+    lining, surround = nodes["Int_BridgeLining"], nodes["Detail_WindscreenFrames"]
+    pressure_skin = KDTree(len(lining.data.vertices))
+    for v in lining.data.vertices:
+        pressure_skin.insert(lining.matrix_world @ v.co, v.index)
+    pressure_skin.balance()
+    for v in surround.data.vertices:
+        p = surround.matrix_world @ v.co
+        old = Vector((p.x*.988,p.y-.15,p.z*.986))
+        pressed = p + (old-p).normalized()*.012
+        assert pressure_skin.find(pressed)[2] < .0001, "A window post lacks its pressed inner cover"
+        assert pressure_skin.find(old)[2] > .001, "A split liner triangle stayed at its old offset and tears the header"
     bridge = [nodes["FlightDeck_Glareshield"], nodes["FlightDeck_InstrumentBridge"]]
     assert all(o.parent == shell for o in bridge)
     coaming = bridge[0]

@@ -165,11 +165,15 @@ def line_posts():
     for v in frame.data.vertices:
         p=frame.matrix_world@v.co
         old=(p.x*.988,p.y-.15,p.z*.986)
-        _,i,d=tree.find(old)
-        assert d<.002, "Windscreen surround and pressure liner have lost registration"
+        copies=tree.find_range(old,.00002)
+        assert copies, "Windscreen surround and pressure liner have lost registration"
         delta=Vector(old)-p
-        inner.data.vertices[i].co=inv@(p+delta.normalized()*.012)
-        matched.add(i)
+        pressed=inv@(p+delta.normalized()*.012)
+        # The imported pressure liner has separate vertices for adjacent triangles
+        # at shading and UV seams. All of them share this physical press line.
+        for _,i,_ in copies:
+            inner.data.vertices[i].co=pressed
+            matched.add(i)
     inner.data.materials.append(bpy.data.materials["BS_Megaplane_"+SKIN])
     slot=len(inner.data.materials)-1
     for p in inner.data.polygons:
