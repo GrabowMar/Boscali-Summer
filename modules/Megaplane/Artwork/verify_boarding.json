@@ -28,7 +28,7 @@
     {"check": "result_equals", "path": "outside.hudSections", "value": 0},
     {"check": "result_equals", "path": "outside.health", "value": 67},
     {"check": "result_equals", "path": "lost.health", "value": 0},
-    {"check": "result_equals", "path": "flankTile.hudSections", "value": 46},
+    {"check": "result_equals", "path": "flankTile.hudSections", "value": 50},
     {"check": "result_equals", "path": "flankTile.health", "value": 67},
     {"check": "result_equals", "path": "flankTile.hudBound", "value": true},
     {"check": "result_above", "path": "flankTile.hudAlpha", "min": 0.2},

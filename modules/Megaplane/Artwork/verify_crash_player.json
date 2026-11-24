@@ -163,6 +163,41 @@
       "store": "firstFrame"
     },
     {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneWreck.Fields[0].DelayedBreaks",
+      "store": "motionBreaks"
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneWreck.Fields[0].ReleasedBreaks",
+      "store": "released"
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneWreck.Fields[0].PeakPodRoll",
+      "store": "podTravel"
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneCrash.GroupNames[46]",
+      "store": "native46"
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneCrash.GroupNames[47]",
+      "store": "native47"
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneCrash.GroupNames[48]",
+      "store": "native48"
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Modules.Megaplane.MegaplaneCrash.GroupNames[49]",
+      "store": "native49"
+    },
+    {
       "op": "end"
     }
   ],
@@ -205,6 +240,41 @@
       "check": "result_equals",
       "path": "firstFrame",
       "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "native46",
+      "value": "ForeCheek_L"
+    },
+    {
+      "check": "result_equals",
+      "path": "native47",
+      "value": "ForeCheek_R"
+    },
+    {
+      "check": "result_equals",
+      "path": "native48",
+      "value": "BridgeCrown"
+    },
+    {
+      "check": "result_equals",
+      "path": "native49",
+      "value": "NoseChin"
+    },
+    {
+      "check": "result_above",
+      "path": "motionBreaks",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "released",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "podTravel",
+      "min": 15
     }
   ]
 }

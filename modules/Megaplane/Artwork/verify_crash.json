@@ -51,7 +51,7 @@
     {"check": "result_equals", "path": "rest.first.physicsBodies", "value": 0},
     {"check": "result_above", "path": "rest.first.drawMeshes", "min": 18},
     {"check": "result_above", "path": "rest.first.count", "min": 2},
-    {"check": "result_below", "path": "rest.first.count", "max": 46},
+    {"check": "result_below", "path": "rest.first.count", "max": 50},
     {"check": "result_above", "path": "rest.first.width", "min": 40},
     {"check": "result_below", "path": "rest.first.width", "max": 1400},
     {"check": "result_below", "path": "rest.first.surfaceError", "max": 5},

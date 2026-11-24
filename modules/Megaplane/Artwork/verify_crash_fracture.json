@@ -80,7 +80,7 @@
     {"check": "result_equals", "path": "settled.disabled", "value": false},
     {"check": "result_above", "path": "settled.affected", "min": 0},
     {"check": "result_below", "path": "settled.affected", "max": 1},
-    {"check": "result_equals", "path": "intact.hudSections", "value": 46},
+    {"check": "result_equals", "path": "intact.hudSections", "value": 50},
     {"check": "result_equals", "path": "intact.hudBound", "value": true},
     {"check": "result_equals", "path": "partial.hudBound", "value": true},
     {"check": "result_equals", "path": "settled.hudOpposite", "value": 0},

@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 if (profile == "touchdown" && a.GetComponent<GentleApproach>() == null)
                     a.gameObject.AddComponent<GentleApproach>().Aircraft = a;
                 if (profile != "damaged" && profile != "historical") return new { removed = false };
-                foreach (string owner in new[] { "wing2_L", "pod4_R" })
+                foreach (string owner in new[] { "wing2_L", "pod4_R", "foreCheek_L" })
                 {
                     var box = a.GetComponentsInChildren<MegaplaneHitbox>().First(h => h.Owner != null && h.Owner.name == owner);
                     box.TakeDamage(0f, 0f, 1f, 0f, 120f, PersistentID.None);
@@ -60,6 +60,8 @@ namespace BoscaliSummer.Modules.Megaplane
                 // remain visible on wreckage reconstructed by a player arriving afterward.
                 var witness = a.GetComponentsInChildren<MegaplaneHitbox>().First(h => h.Owner != null && h.Owner.name == "wingtip_R");
                 witness.TakeDamage(0f, 0f, 1f, 0f, 72f, PersistentID.None);
+                var crown = a.GetComponentsInChildren<MegaplaneHitbox>().First(h => h.Owner != null && h.Owner.name == "bridgeCrown");
+                crown.TakeDamage(0f, 0f, 1f, 0f, 63f, PersistentID.None);
                 return new { ok = true };
             }
             if (step == "gearReady")
@@ -109,6 +111,24 @@ namespace BoscaliSummer.Modules.Megaplane
                 rig.Skin = skin; rig.LocalEye = skin.InverseTransformPoint(eye); rig.LocalLook = skin.InverseTransformPoint(look); rig.Fov = 61f;
                 return new { framed = true, skin = skin.name };
             }
+            if (step == "frontClose")
+            {
+                var wreck = wrecks.Single();
+                var nose = wreck.Pieces.Select(frame => frame.Find("Fuselage_Cockpit")).First(t => t != null);
+                var body = nose.GetComponent<MeshRenderer>();
+                var center = body.bounds.center;
+                var travel = Vector3.ProjectOnPlane(wreck.Impact.Velocity, Vector3.up).normalized;
+                var view = Vector3.Cross(travel,Vector3.up) * 65f + travel * 48f + Vector3.up * 44f;
+                var camera = Camera.main;
+                var rig = camera.GetComponent<Photo>() ?? camera.gameObject.AddComponent<Photo>();
+                rig.Skin = nose;
+                rig.LocalLook = nose.InverseTransformPoint(center);
+                Vector3 eye = center + view;
+                eye.y = Mathf.Max(eye.y, Surface(eye).y + 4f);
+                rig.LocalEye = nose.InverseTransformPoint(eye);
+                rig.Fov = 52f;
+                return new { formed = true };
+            }
             if (step == "overview" || step == "close")
             {
                 var w = wrecks.OrderByDescending(field => field.Age).First();
@@ -121,6 +141,9 @@ namespace BoscaliSummer.Modules.Megaplane
                 wrecks = wrecks.Length, nativeDebris = record == null ? 0 : record.Detached.Count(t => t != null && t.gameObject.activeInHierarchy),
                 crushMatchesFlight = wrecks.Length != 0 && ValidCrease(wrecks[0], profile),
                 sceneFields = fields.Length, aircraftLive = a != null && !a.disabled,
+                motionSamples = record == null ? 0 : record.MotionSamples,
+                measuredPodDegrees = record == null ? 0f : record.PodDegrees,
+                measuredSeparation = record == null ? 0f : record.Separation,
                 actualContact = record != null && record.Contact, seaCrossing = record != null && record.CrossedSea,
                 impactSpeed = record == null ? 0f : record.Speed, closing = record == null ? 0f : record.Closing,
                 contactCollider = record == null ? "" : record.ColliderName,
@@ -225,7 +248,7 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             if (a == null || !a.IsServer) throw new InvalidOperationException("A live host aircraft is required");
             bool soft = profile == "touchdown", mild = profile == "lesser", water = profile == "water";
-            if (!mild && !water && !soft && profile != "shore" && profile != "heavy" && profile != "damaged" && profile != "historical")
+            if (!mild && !water && !soft && profile != "shore" && profile != "heavy" && profile != "forebody" && profile != "damaged" && profile != "historical")
                 throw new ArgumentException("Unknown flight case " + profile);
             Vector3 site = water ? SeaSite() : DrySite;
             if (mild) site += new Vector3(920f, 0f, 750f);
@@ -256,7 +279,8 @@ namespace BoscaliSummer.Modules.Megaplane
             }
             a.SetGear(mild);
             float azimuth = 142f;
-            Quaternion rot = Quaternion.Euler(soft ? 0f : mild ? 3f : 10f, azimuth, soft ? 0f : mild ? -2f : -7f);
+            Quaternion rot = profile == "forebody" ? Quaternion.Euler(24f, azimuth, -3f) :
+                Quaternion.Euler(soft ? 0f : mild ? 3f : 10f, azimuth, soft ? 0f : mild ? -2f : -7f);
             a.transform.SetPositionAndRotation(new GlobalPosition(site.x, 600f, site.z).ToLocalPosition(), rot);
             a.rb.position = a.transform.position;
             a.rb.rotation = rot;
@@ -341,7 +365,7 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             var crush = wreck.GetComponent<MegaplaneWreckCrush>();
             if (profile == "water") return crush == null || crush.Meshes == 0;
-            if (profile != "heavy" && profile != "damaged" && profile != "historical") return true;
+            if (profile != "heavy" && profile != "forebody" && profile != "damaged" && profile != "historical") return true;
             return crush != null && crush.Meshes > 0 && crush.MovedVertices > 0 &&
                 crush.MaxDisplacement > .02f && crush.MaxDisplacement <= 1.86f;
         }
@@ -352,6 +376,19 @@ namespace BoscaliSummer.Modules.Megaplane
             var geometry = pieces.SelectMany(p => p.GetComponentsInChildren<MeshRenderer>(true)).Where(r => r.enabled && r.gameObject.activeInHierarchy).ToArray();
             string[] names = geometry.Select(r => r.name).ToArray();
             var impact = wreck.Impact;
+            var frontNames = new[] { "Fuselage_Cockpit", "ForeCheek_L", "ForeCheek_R", "BridgeCrown", "NoseChin" };
+            var front = frontNames.ToDictionary(art => art, art =>
+            {
+                int index = Array.IndexOf(MegaplaneCrash.GroupNames, art);
+                var owner = pieces.FirstOrDefault(piece => piece.Find(art) != null);
+                var levels = owner == null ? Array.Empty<LOD>() : owner.GetComponent<LODGroup>().GetLODs();
+                return new {
+                    expected = index >= 0 && (impact.Surviving & (1UL << index)) != 0, present = owner != null,
+                    near = levels.Length > 0 && levels[0].renderers.Any(r => r != null && r.name == "Near_" + art),
+                    far = levels.Length > 1 && levels[1].renderers.Any(r => r != null && r.name == art),
+                    cluster = owner == null ? "" : owner.name,
+                };
+            });
             var crush = wreck.GetComponent<MegaplaneWreckCrush>();
             int crushedMeshes = crush == null ? 0 : crush.Meshes;
             int creasedVertices = crush == null ? 0 : crush.MovedVertices;
@@ -370,7 +407,12 @@ namespace BoscaliSummer.Modules.Megaplane
             return new
             {
                 key = impact.Spawn, unit = impact.Unit, gearLeg = (int)impact.GearLeg, gearDoor = (int)impact.GearDoor,
-                crushedMeshes, creasedVertices, maximumCrease, privateMesh,
+                crushedMeshes, creasedVertices, maximumCrease, privateMesh, front,
+                frontMatches = front.Values.All(part => part.present == part.expected && part.near == part.expected && part.far == part.expected),
+                localContact = V(Quaternion.Inverse(impact.Rotation) * (impact.Contact - impact.Origin)),
+                contactStation = (Quaternion.Inverse(impact.Rotation) * (impact.Contact - impact.Origin)).z,
+                delayedBreaks = wreck.DelayedBreaks, releasedBreaks = wreck.ReleasedBreaks, lastBreakSeconds = wreck.LastBreakTime,
+                podRollDegrees = wreck.PeakPodRoll, hullHopMeters = wreck.PeakHullHop, panelHopMeters = wreck.PeakPanelHop,
                 damageSkins = names.Where(n => n.StartsWith("GrozaSkinDamage_",StringComparison.Ordinal)).OrderBy(n => n).ToArray(),
                 gearLegAngle = legAngle, gearDoorAngle = doorAngle, gearLegMatches = Mathf.Abs(legAngle - 90f*(1f-Mathf.SmoothStep(0f,1f,impact.GearLeg/255f))) < 2f,
                 gearDoorMatches = Mathf.Abs(doorAngle - 90f*Mathf.SmoothStep(0f,1f,impact.GearDoor/255f)) < 2f, mask = impact.Surviving.ToString("X16"), water = impact.Water,
@@ -483,6 +525,33 @@ namespace BoscaliSummer.Modules.Megaplane
             internal float StartTime;
             internal bool Contact, CrossedSea, Water, Started;
             internal float Speed, Closing;
+            internal int MotionSamples;
+            internal float PodDegrees, Separation;
+            private Transform pod, support;
+            private MegaplaneWreck field;
+            private Vector3 initialRelative;
+            private Quaternion previousAngle;
+
+            // Observe the independently rendered nacelle and wing every frame. These values
+            // test what a player sees in addition to the planned ground-travel distances.
+            private void LateUpdate()
+            {
+                if (!Started || Profile != "forebody") return;
+                if (field == null) field = Object.FindObjectsOfType<MegaplaneWreck>().FirstOrDefault(f => f.Impact.Spawn == FlightId);
+                if (field == null || field.Settled) return;
+                if (pod == null || support == null)
+                {
+                    pod = field.Pieces.FirstOrDefault(p => p.name == "Pod_L2");
+                    support = field.Pieces.FirstOrDefault(p => p.name == "Wing_Inner_L");
+                    if (pod == null || support == null) return;
+                    initialRelative = support.InverseTransformPoint(pod.position);
+                    previousAngle = pod.rotation;
+                }
+                PodDegrees += Quaternion.Angle(previousAngle, pod.rotation);
+                previousAngle = pod.rotation;
+                Separation = Mathf.Max(Separation, Vector3.Distance(initialRelative, support.InverseTransformPoint(pod.position)));
+                MotionSamples++;
+            }
             internal Vector3 Point, PriorVelocity;
             internal void Begin() { Started = true; PriorVelocity = Body.velocity; }
             private void FixedUpdate()

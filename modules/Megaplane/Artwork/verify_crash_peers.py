@@ -100,6 +100,15 @@ def main():
             prior["field"] = field_for(host, "historical", prior["flight"]["id"])
             inspect_aircraft(host, spawn=True)
             wait_for("airborne wingtip", lambda: section(host), lambda s: s.get("ownsArt") and s["health"] == 100)
+            initial_cheek = section(host, "portCheek")
+            section(host, "portCheek", 25)
+            partial = wait_for("intact mass and partial cheek drag", lambda: section(host,"portCheek"),
+                               lambda s: s["health"] == 75 and s["forebodyDrag"] > 0 and s["detachedMass"] == 0)
+            section(host, "portCheek", 110)
+            single = wait_for("individual detached cheek mass", lambda: section(host,"portCheek"),
+                              lambda s: not s["attached"] and s["detachedMass"] > 0 and s["massError"] < 2 and s["forebodyDrag"] > partial["forebodyDrag"])
+            prior["mass_sequence"] = {"intact":initial_cheek, "partial":partial, "single":single}
+            section(host, "crown", 36)
             section(host, "tip", 110)
             prior["airborne"] = wait_for("two flying fracture ends", lambda: section(host),
                                          lambda s: s["stumpFace"] and s["debrisFace"] and not s["attached"])
@@ -117,6 +126,11 @@ def main():
         def match(label, left, right):
             for attr in ("key", "unit", "mask", "water", "count", "drawMeshes", "gearLeg", "gearDoor", "pod", "outer", "center"):
                 check(f"{label}: same {attr} on both peers", left[attr] == right[attr])
+            check(f"{label}: individual forward shell masks and both LOD meshes match",
+                  left["frontMatches"] and right["frontMatches"] and left["front"] == right["front"])
+            check(f"{label}: delayed breaks finish on the same attachments and the same schedule",
+                  left["releasedBreaks"] == right["releasedBreaks"] == left["delayedBreaks"] == right["delayedBreaks"] and
+                  abs(left["lastBreakSeconds"] - right["lastBreakSeconds"]) < .08)
             check(f"{label}: retained and ground-contact skin overlays match", left["damageSkins"] == right["damageSkins"])
             check(f"{label}: local damage belongs to the individual wreck",
                   left["privateMesh"] and right["privateMesh"])
@@ -132,6 +146,35 @@ def main():
                         lambda s: s.get("stumpFace") and not s["attached"])
         report["airborne_restored"] = wing
         check("late join preserves a closed wing stump and the undamaged neighboring wing", wing["support"] == 100 and wing["opposite"] == 100)
+        cheeks = [section(n, "portCheek") for n in names]
+        crown = [section(n, "crown") for n in names]
+        report["airborne_forebody"] = {"port": cheeks, "crown": crown}
+        check("a late join sees the missing port cheek and the retained structural flight deck",
+              all(not s["attached"] and not s["ownsArt"] and s["opposite"] == 100 and s["support"] == 100 for s in cheeks))
+        check("the partly damaged crown and its native art survive join in progress",
+              all(s["health"] == 64 and s["ownsArt"] and s["attached"] and not s["disabled"] for s in crown))
+        section(names[0], "chin", 28)
+        chin = wait_for("live nose chin damage", lambda: [section(n, "chin") for n in names],
+                        lambda pair: all(s.get("health") == 72 and s["support"] == 100 for s in pair))
+        report["live_chin"] = chin
+        check("only the chin lost health on the connected pair", all(s["opposite"] == 64 and not s["disabled"] for s in chin))
+        single = prior["mass_sequence"]["single"]
+        initial = prior["mass_sequence"]["intact"]
+        partial = prior["mass_sequence"]["partial"]
+        check("a partial port cheek adds asymmetric drag without removing rigidbody mass",
+              partial["forebodyYaw"] < 0 and partial["forebodyDrag"] > 0 and partial["bodyMass"] == initial["bodyMass"])
+        check("single cheek removal subtracts its own structural mass and increases drag",
+              abs(single["detachedMass"] - initial["targetMass"]) < 2 and single["massError"] < 2 and
+              single["forebodyDrag"] > partial["forebodyDrag"])
+        section(names[0], "crown", 90)
+        multiple = wait_for("cumulative forward structural loss", lambda: section(names[0], "crown"),
+                            lambda s: not s["attached"] and s["detachedMass"] > single["detachedMass"] and s["massError"] < 2)
+        report["multiple_mass"] = multiple
+        # The host had already lost its outer wingtip before the client joined.
+        additional = crown[0]["targetMass"]
+        check("two forward shells and the previously lost wingtip reduce effective rigidbody mass",
+              abs(multiple["detachedMass"] - crown[0]["detachedMass"] - additional) < 2 and
+              multiple["massError"] < 2 and not multiple["disabled"])
         before = prior["flight"]
         late = [field_for(n, "historical", before["id"]) for n in names]
         report["restored"] = late
@@ -145,6 +188,12 @@ def main():
         expected_skins = {f"GrozaSkinDamage_Wing_Tip_R_{stage}_{lod}" for stage in (1,2) for lod in ("Near","Far")}
         check("late join preserves both stages of pre-impact wear on the remaining wingtip",
               all(expected_skins <= set(f["damageSkins"]) for f in late))
+        check("historical impact excludes the lost port cheek and retains its undamaged counterpart",
+              all(not f["front"]["ForeCheek_L"]["present"] and f["front"]["ForeCheek_R"]["near"] and
+                  f["front"]["Fuselage_Cockpit"]["far"] for f in late))
+        expected_crown = {f"GrozaSkinDamage_BridgeCrown_{stage}_{lod}" for stage in (1,2) for lod in ("Near","Far")}
+        check("late join restores pre-impact crown damage at high and distant detail",
+              all(expected_crown <= set(f["damageSkins"]) for f in late))
         match("historical", *late)
         underway = begin(names[0], "lesser")
         live_fields = [field_for(n,"lesser",underway["id"],False) for n in names]

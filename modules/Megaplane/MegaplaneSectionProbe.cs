@@ -12,13 +12,13 @@ namespace BoscaliSummer.Modules.Megaplane
     {
         private sealed class Site
         {
-            internal readonly string owner, support, art;
+            internal readonly string owner, support, art, adjacent;
             internal readonly Vector3 origin, direction, eye, look;
             internal readonly float fov;
 
-            internal Site(string owner, string support, string art, Vector3 origin, Vector3 direction, Vector3 eye, Vector3 look, float fov)
+            internal Site(string owner, string support, string art, Vector3 origin, Vector3 direction, Vector3 eye, Vector3 look, float fov, string adjacent = null)
             {
-                this.owner = owner; this.support = support; this.art = art;
+                this.owner = owner; this.support = support; this.art = art; this.adjacent = adjacent;
                 this.origin = origin; this.direction = direction; this.eye = eye; this.look = look; this.fov = fov;
             }
         }
@@ -26,6 +26,14 @@ namespace BoscaliSummer.Modules.Megaplane
         // Coordinates in the aircraft's native +Z-forward space. The check fails if another skin covers a target.
         private static readonly Dictionary<string, Site> Sites = new Dictionary<string, Site>
         {
+            { "portCheek", new Site("foreCheek_L", "fuselage_F", "ForeCheek_L", new Vector3(-35f, 0f, 92f), Vector3.right,
+                new Vector3(-43f, 9f, 111f), new Vector3(-8f, 1f, 93f), 43f, "foreCheek_R") },
+            { "starboardCheek", new Site("foreCheek_R", "fuselage_F", "ForeCheek_R", new Vector3(35f, 0f, 92f), Vector3.left,
+                new Vector3(43f, 9f, 111f), new Vector3(8f, 1f, 93f), 43f, "foreCheek_L") },
+            { "crown", new Site("bridgeCrown", "fuselage_F", "BridgeCrown", new Vector3(0f, 23f, 93f), Vector3.down,
+                new Vector3(-19f, 31f, 117f), new Vector3(0f, 5f, 95f), 41f, "noseChin") },
+            { "chin", new Site("noseChin", "fuselage_F", "NoseChin", new Vector3(0f, -30f, 105f), Vector3.up,
+                new Vector3(-22f, -21f, 135f), new Vector3(0f, -2f, 106f), 44f, "bridgeCrown") },
             { "tip", new Site("wingtip_L", "wing2_L", "Wing_Tip_L", new Vector3(-166f, 30f, -48f), Vector3.down,
                 new Vector3(-184f, 54f, 3f), new Vector3(-152f, 4f, -41f), 43f) },
             { "flap", new Site("innerFlap_L", "gearbay_L", "Flap_Inner_L", new Vector3(-61f, 32f, -30f), Vector3.down,
@@ -87,18 +95,32 @@ namespace BoscaliSummer.Modules.Megaplane
                 {
                     // Exercise the unmodified game's registered-contact solver. Its own linecast, surface normal,
                     // penetration loss and armor processing choose and damage the first exterior surface.
-                    DamageEffects.ArmorPenetrate(hits[0].point - along * .03f, along * 1.25f, 1.25f, 400f, 0f, PersistentID.None);
+                    float depth = site.adjacent == null ? 1.25f : .45f;
+                    DamageEffects.ArmorPenetrate(hits[0].point - along * .03f, along * depth, depth, 400f, 0f, PersistentID.None);
                 }
                 else skin.GetComponent<IDamageable>().TakeDamage(0f, 0f, 1f, 0f, impact, PersistentID.None);
             }
             // Part IDs in this table are the native indexed references used by the game's damage and detach messages.
             var parts = a.damageables.Select(slot => slot.Damageable).OfType<AeroPart>().Where(p => p != null).ToDictionary(p => p.name);
             var target = parts.TryGetValue(site.owner, out AeroPart t) ? t : null;
-            var opposite = parts[site.owner.Substring(0, site.owner.Length - 1) + "R"];
+            var opposite = parts[site.adjacent ?? site.owner.Substring(0, site.owner.Length - 1) + "R"];
             var support = site.support == null ? a.GetComponent<AeroPart>() : parts[site.support];
             bool Attached(AeroPart p) => p != null && !p.IsDetached() && p.transform.IsChildOf(a.transform);
             float Health(AeroPart p) => Attached(p) ? Mathf.Clamp(p.hitPoints, 0f, 100f) : 0f;
             Transform art = a.GetComponentsInChildren<Transform>(true).FirstOrDefault(p => p.name == site.art);
+            var targetArt = target == null ? null : target.GetComponentsInChildren<MeshFilter>(true).FirstOrDefault(mesh => mesh.name == site.art);
+            bool airborneDebris = target != null && target.IsDetached() && targetArt != null && !targetArt.transform.IsChildOf(a.transform)
+                && targetArt.GetComponentInParent<Rigidbody>() != null;
+            float offset = 0f, turn = 0f;
+            if (airborneDebris)
+            {
+                var template = MegaplaneTemplate.Definition.unitPrefab.transform;
+                var original = template.GetComponentsInChildren<MeshFilter>(true).First(mesh => mesh.name == site.art).transform;
+                Vector3 seat = a.transform.TransformPoint(template.InverseTransformPoint(original.position));
+                Quaternion originalRotation = a.transform.rotation * Quaternion.Inverse(template.rotation) * original.rotation;
+                offset = Vector3.Distance(targetArt.transform.position, seat);
+                turn = Quaternion.Angle(targetArt.transform.rotation, originalRotation);
+            }
             var damage = a.GetComponent<MegaplaneDamage>();
             StatusDisplay hud = readHud ? UnityEngine.Object.FindObjectsOfType<StatusDisplay>().FirstOrDefault(d => d.name.StartsWith("StatusDisplay_KY44") &&
                 HarmonyLib.Traverse.Create(d).Field<Aircraft>("aircraft").Value == a) : null;
@@ -108,11 +130,13 @@ namespace BoscaliSummer.Modules.Megaplane
             return new
             {
                 id = a.NetId, authority = a.IsServer, disabled = a.disabled, target = site.owner, registered = target != null,
+                crewAlive = a.pilots.Any(p => p != null && !p.dead && !p.ejected), airborneDebris, fragmentOffset = offset, fragmentTurn = turn,
                 rayOwner = selected, hitCollider = skin == null ? "" : skin.name, pickedTarget = selected == site.owner,
                 health = Health(target), attached = Attached(target), opposite = Health(opposite), support = Health(support),
                 ownsArt = art != null && target != null && art.GetComponentInParent<AeroPart>() == target,
-                affected = parts.Values.Count(p => Health(p) < 99.9f), leftLift = damage.LiftL, rightLift = damage.LiftR,
-                thrust = a.GetComponent<MegaplaneFlight>().Thrust, removedHP = prior - (box != null && box.Owner != null ? box.Owner.hitPoints : prior),
+                affected = parts.Values.Count(p => Health(p) < 99.9f), leftLift = damage.LiftL, rightLift = damage.LiftR, forebodyDrag = damage.ForebodyDrag, forebodyYaw = damage.ForebodyYaw,
+                targetMass = target == null ? 0f : target.mass, bodyMass = a.rb.mass, detachedMass = damage.DetachedMass,
+                massError = Mathf.Abs(a.rb.mass - (a.definition.mass - damage.DetachedMass)), thrust = a.GetComponent<MegaplaneFlight>().Thrust, removedHP = prior - (box != null && box.Owner != null ? box.Owner.hitPoints : prior),
                 stumpFace = site.art == "Wing_Tip_L" && HasFace("Wing_Outer_L__Fore", a, true),
                 debrisFace = site.art == "Wing_Tip_L" && HasFace("Wing_Tip_L__Aft", a, false),
                 hudSections = tiles?.Count ?? 0, hudBound = tile != null && target != null && HarmonyLib.Traverse.Create(tile).Field<UnitPart>("unitPart").Value == target,

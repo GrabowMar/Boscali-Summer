@@ -48,7 +48,7 @@
     {"check": "result_equals", "path": "rest.first.physicsBodies", "value": 0},
     {"check": "result_above", "path": "rest.first.drawMeshes", "min": 18},
     {"check": "result_above", "path": "rest.first.count", "min": 2},
-    {"check": "result_below", "path": "rest.first.count", "max": 46},
+    {"check": "result_below", "path": "rest.first.count", "max": 50},
     {"check": "result_above", "path": "rest.first.width", "min": 40},
     {"check": "result_below", "path": "rest.first.width", "max": 1400},
     {"check": "result_below", "path": "rest.first.surfaceError", "max": 5},
@@ -57,6 +57,12 @@
     {"check": "result_equals", "path": "rest.first.gearDoorMatches", "value": true},
     {"check": "result_equals", "path": "rest.crushMatchesFlight", "value": true},
     {"check": "result_equals", "path": "rest.first.crushedMeshes", "value": 0},
-    {"check": "result_equals", "path": "rest.first.maximumCrease", "value": 0}
+    {"check": "result_equals", "path": "rest.first.maximumCrease", "value": 0},
+    {"check": "result_equals", "path": "rest.first.delayedBreaks", "value": 0},
+    {"check": "result_equals", "path": "rest.first.releasedBreaks", "value": 0},
+    {"check": "result_equals", "path": "rest.first.podRollDegrees", "value": 0},
+    {"check": "result_equals", "path": "rest.first.hullHopMeters", "value": 0},
+    {"check": "result_equals", "path": "rest.first.panelHopMeters", "value": 0},
+    {"check": "result_equals", "path": "rest.first.frontMatches", "value": true}
   ]
 }
