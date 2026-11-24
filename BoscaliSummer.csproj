@@ -47,7 +47,6 @@
   </ItemGroup>
   <!-- The shot camera is a production tool driven by nomodkit; players do not get it. -->
   <ItemGroup Condition="'$(PublicRelease)' == 'true'">
-    <Compile Remove="modules\Megaplane\**\*.cs" />
     <Compile Remove="modules\Cinematography\**\*.cs" />
   </ItemGroup>
 
@@ -162,10 +161,16 @@
       <LogicalName>BoscaliSummer.Vanguard.Textures.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
-  <ItemGroup Label="G-240 Breakwater artwork" Condition="'$(PublicRelease)' != 'true'">
+  <ItemGroup Label="KY-44 Groza artwork">
     <EmbeddedResource Include="modules\Megaplane\Assets\megaplane.mesh.gz" Condition="Exists('modules\Megaplane\Assets\megaplane.mesh.gz')">
       <LogicalName>BoscaliSummer.Megaplane.megaplane.mesh.gz</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="modules\Megaplane\Assets\megaplane.lod.gz" Condition="Exists('modules\Megaplane\Assets\megaplane.lod.gz')">
+      <LogicalName>BoscaliSummer.Megaplane.megaplane.lod.gz</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Megaplane\Assets\megaplane-status.txt" Condition="Exists('modules\Megaplane\Assets\megaplane-status.txt')" LogicalName="BoscaliSummer.Megaplane.megaplane-status.txt" />
+    <EmbeddedResource Include="modules\Megaplane\Assets\megaplane.skin.gz" LogicalName="BoscaliSummer.Megaplane.megaplane.skin.gz" />
+    <EmbeddedResource Include="modules\Megaplane\Assets\megaplane.wreck.gz" LogicalName="BoscaliSummer.Megaplane.megaplane.wreck.gz" />
     <EmbeddedResource Include="modules\Megaplane\Assets\BS_Megaplane_*.png">
       <LogicalName>BoscaliSummer.Megaplane.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>

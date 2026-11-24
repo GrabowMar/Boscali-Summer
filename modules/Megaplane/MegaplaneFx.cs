@@ -5,16 +5,11 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
-    /// <summary>Damage you can see on the G-240. Vanilla aircraft only burn through their FuelTank parts, which on the carrier
-    /// sit at the donor bomber's spots inside the hull and never reach their ignition damage, and the donor islands carry no
-    /// damage effects: so the carrier never smoked or burned. This borrows the tank's own leak, fire and fireball prefabs
-    /// (scaled to a 380 m hull) and puts them on the island's skin as it takes damage: under 75 hp it trails smoke, under 50
-    /// it burns, under 25 a second fire; every heavy hit throws debris. A burning island keeps losing hit points (host), so an
-    /// unchecked fire ends with the piece breaking off. On a break: a fireball at the root, debris, and the falling piece
-    /// burns all the way down. Every peer draws its own (damage and detach are replicated).</summary>
+    /// <summary>Localized leaks, fire, soot and fragments from native aircraft effects. Each damage island
+    /// keeps its own wound. Only the host advances the underlying fire damage.</summary>
     internal sealed class MegaplaneFx : MonoBehaviour
     {
-        private const float Scale = 4.5f, BurnPerSecond = .7f, BurnSecondFire = 1.4f;
+        private const float BurnPerSecond = .7f, BurnSecondFire = 1.4f;
         private static readonly float[] Stages = { 75f, 50f, 25f };   // smoke, fire, second fire
         private static readonly AccessTools.FieldRef<FuelTank, GameObject> Fire = AccessTools.FieldRefAccess<FuelTank, GameObject>("fireEffect");
         private static readonly AccessTools.FieldRef<FuelTank, GameObject> Leak = AccessTools.FieldRefAccess<FuelTank, GameObject>("leakEffect");
@@ -23,8 +18,11 @@ namespace BoscaliSummer.Modules.Megaplane
         private static readonly AccessTools.FieldRef<UnitPart, GameObject[]> Fragments = AccessTools.FieldRefAccess<UnitPart, GameObject[]>("disintegrationEffects");
 
         private Aircraft aircraft;
+        private MegaplaneDamage damage;
         private GameObject fire, smoke, fireball, debris;
         private readonly Dictionary<AeroPart, int> stage = new Dictionary<AeroPart, int>();
+        private readonly Dictionary<AeroPart, GameObject[]> trails = new Dictionary<AeroPart, GameObject[]>();
+        private readonly Dictionary<AeroPart, Vector3> wound = new Dictionary<AeroPart, Vector3>();
         private readonly Dictionary<AeroPart, Vector3[]> skin = new Dictionary<AeroPart, Vector3[]>();   // island-local points on its art
         private float nextBurn;
 
@@ -33,6 +31,7 @@ namespace BoscaliSummer.Modules.Megaplane
         private void Awake()
         {
             aircraft = GetComponent<Aircraft>();
+            damage = GetComponent<MegaplaneDamage>();
             foreach (FuelTank t in GetComponentsInChildren<FuelTank>(true))
             {
                 fire = fire ?? Fire(t);
@@ -56,10 +55,11 @@ namespace BoscaliSummer.Modules.Megaplane
             var points = new List<Vector3>();
             foreach (MeshFilter mf in part.GetComponentsInChildren<MeshFilter>(true))
             {
-                if (mf.GetComponentInParent<AeroPart>() != part || mf.sharedMesh == null || !mf.sharedMesh.isReadable) continue;
+                var hitbox = mf.GetComponent<MegaplaneHitbox>();
+                if (hitbox == null || hitbox.Owner != part || mf.sharedMesh == null || !mf.sharedMesh.isReadable) continue;
                 Vector3[] v = mf.sharedMesh.vertices;
                 if (v.Length == 0 || mf.sharedMesh.bounds.size.magnitude < 3f) continue;
-                for (int i = 0; i < 6; i++) points.Add(part.transform.InverseTransformPoint(mf.transform.TransformPoint(v[Random.Range(0, v.Length)])));
+                for (int i = 0; i < 6; i++) points.Add(part.transform.InverseTransformPoint(mf.transform.TransformPoint(v[i * (v.Length - 1) / 5])));
             }
             return points.Count > 0 ? points.ToArray() : new[] { Vector3.zero };
         }
@@ -68,45 +68,66 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             if (part == null || part.IsDetached()) return;
             int had = stage.TryGetValue(part, out int s) ? s : 0, now = 0;
-            while (now < Stages.Length && part.hitPoints < Stages[now]) now++;
-            for (int i = had; i < now; i++) Spawn(i == 0 ? smoke : fire, part, i == 0 ? 1f : 1.3f);
-            if (now > had) { stage[part] = now; Spawn(debris, part, 1.5f); }
-            Scorch(part);
-        }
-
-        // Vanilla skins darken through the _HitPoints shader; the carrier's own materials are tinted toward soot instead.
-        private static readonly Color Soot = new Color(.16f, .15f, .14f);
-        private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
-        private readonly Dictionary<AeroPart, Renderer[]> skins = new Dictionary<AeroPart, Renderer[]>();
-        private MaterialPropertyBlock block;
-
-        private void Scorch(AeroPart part)
-        {
-            if (!skins.TryGetValue(part, out Renderer[] rs))
-                skins[part] = rs = part.GetComponentsInChildren<Renderer>(true).Where(r => r is MeshRenderer && r.GetComponentInParent<AeroPart>() == part && !r.name.StartsWith("BS_Fx")).ToArray();
-            float k = Mathf.Clamp01(1f - part.hitPoints * .01f) * .85f;
-            block = block ?? new MaterialPropertyBlock();
-            foreach (Renderer r in rs)
+            // A cold structure sheared off in one impact never passed through the combustion stages.
+            if (part.hitPoints <= 0f && had < 2 && (MegaplaneDamage.Detachable(part) || MegaplaneDamage.Critical.Contains(part.name)))
             {
-                if (r == null || r.sharedMaterial == null || !r.sharedMaterial.HasProperty(BaseColor)) continue;
-                r.GetPropertyBlock(block);
-                block.SetColor(BaseColor, Color.Lerp(r.sharedMaterial.GetColor(BaseColor), Soot, k));
-                r.SetPropertyBlock(block);
+                return;
+            }
+            while (now < Stages.Length && part.hitPoints < Stages[now]) now++;
+            if (now != had)
+            {
+                if (!trails.TryGetValue(part, out var trail)) trails[part] = trail = new GameObject[Stages.Length];
+                Vector3[] sites = skin[part];
+                if (!wound.TryGetValue(part, out Vector3 location)) wound[part] = location = sites[(part.id * 13 + 1) % sites.Length];
+                Vector3 hit = part.transform.TransformPoint(location);
+                for (int i = had; i < now; i++) trail[i] = Spawn(i == 0 ? smoke : fire, part, i == 0 ? .80f : i == 1 ? .80f : .55f, hit);
+                for (int i = now; i < had; i++)
+                    if (trail[i] != null) Destroy(trail[i]);
+                if (now == 0) { stage.Remove(part); trails.Remove(part); wound.Remove(part); }
+                else stage[part] = now;
+                if (now > had && !damage.Restoring) Spawn(debris, part, .65f, hit);
             }
         }
 
         private void Broke(AeroPart part)
         {
+            if (damage.Restoring) return;
             Vector3 root = part.transform.position;
-            Spawn(fireball, part, 2f, root);
-            Spawn(debris, part, 2.5f, root);
-            if (!stage.TryGetValue(part, out int s) || s < 2) Spawn(fire, part, 1.6f);   // the falling piece burns all the way down
+            if (stage.TryGetValue(part, out int s) && s >= 2) Spawn(fireball, part, .90f, root);
+            Spawn(debris, part, .85f, root);
             stage.Remove(part);
+            trails.Remove(part);
+            wound.Remove(part);
         }
 
-        private void Spawn(GameObject prefab, AeroPart part, float size, Vector3? at = null)
+        internal void PlantBreach(AeroPart support, Vector3 position)
         {
-            if (prefab == null || part == null || part.transform.position.y < Datum.LocalSeaY) return;
+            if (support == null || position.y < Datum.LocalSeaY) return;
+            Spawn(fireball, support, 1.4f, position);
+            GameObject plume = Spawn(smoke, support, 1.65f, position);
+            if (plume != null)
+            {
+                plume.name = "BS_Fx_ReactorVent";
+                foreach (var ps in plume.GetComponentsInChildren<ParticleSystem>(true))
+                {
+                    var main = ps.main;
+                    main.startColor = new Color(.78f, .81f, .80f, .65f);
+                }
+                Destroy(plume, 7f);
+            }
+            var lamp = new GameObject("BS_Fx_ReactorFlash");
+            lamp.transform.SetParent(support.transform);
+            lamp.transform.position = position;
+            var light = lamp.AddComponent<Light>();
+            light.color = new Color(1f, .82f, .62f);
+            light.range = 24f;
+            light.intensity = 5f;
+            Destroy(lamp, .20f);
+        }
+
+        private GameObject Spawn(GameObject prefab, AeroPart part, float size, Vector3? at = null)
+        {
+            if (prefab == null || part == null || part.transform.position.y < Datum.LocalSeaY) return null;
             Vector3[] points = skin.TryGetValue(part, out Vector3[] p) ? p : new[] { Vector3.zero };
             GameObject fx = Instantiate(prefab, part.transform);
             fx.name = "BS_Fx_" + prefab.name;   // MegaplaneDamage.ScaleEffects must not grow it a second time
@@ -115,29 +136,40 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 ParticleSystem.MainModule main = ps.main;
                 main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+                if (prefab == fire && ps.name.IndexOf("smoke", System.StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    // In world space a fast ship draws a hundred-metre streak of flame. Anchor
+                    // the flame to the wound and let the separate smoke system trail downwind.
+                    main.simulationSpace = ParticleSystemSimulationSpace.Custom;
+                    main.customSimulationSpace = part.transform;
+                    main.startSizeMultiplier *= .78f;
+                }
             }
-            fx.transform.localScale = Vector3.one * Scale * size / Mathf.Max(part.transform.lossyScale.x, .01f);
+            foreach (Light lamp in fx.GetComponentsInChildren<Light>(true)) lamp.range = Mathf.Min(lamp.range, 9f);
+            fx.transform.localScale = Vector3.one * size / Mathf.Max(part.transform.lossyScale.x, .01f);
             if (fx.TryGetComponent(out DamageParticles dp))
             {
                 FireDamage(dp) = 0f;   // its overlap sphere would hit every hitbox of every island in reach: Update below burns instead
                 part.AddHostedParticles(dp);
             }
             else Destroy(fx, 20f);
+            return fx;
         }
 
         // Host: a fire left alone eats the island; at zero hit points MegaplaneDamage breaks it off (networked).
         private void Update()
         {
-            if (!aircraft.IsServer || Time.time < nextBurn || stage.Count == 0) return;
+            if (Time.time < nextBurn || stage.Count == 0) return;
             nextBurn = Time.time + 1f;
-            MegaplaneDamage damage = GetComponent<MegaplaneDamage>();
             foreach (KeyValuePair<AeroPart, int> s in stage.ToList())
             {
                 AeroPart part = s.Key;
+                if (part == null || part.IsDetached()) continue;
+                if (part.hitPoints >= Stages[s.Value - 1]) { Hurt(part); continue; }
                 // the core (flight deck, fuselage) burns for show only: a fire must not kill the carrier on its own
-                if (s.Value < 2 || part == null || part.IsDetached() || !MegaplaneDamage.Detachable(part) || MegaplaneDamage.Critical.Contains(part.name)) continue;
+                if (!aircraft.IsServer || s.Value < 2 || !MegaplaneDamage.Detachable(part) || MegaplaneDamage.Critical.Contains(part.name)) continue;
                 part.TakeDamage(0f, 0f, 0f, 0f, s.Value >= 3 ? BurnSecondFire : BurnPerSecond, PersistentID.None);
-                if (damage != null) damage.AfterHit(part, part.hitPoints);
+                damage.AfterHit(part);
             }
         }
     }

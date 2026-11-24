@@ -133,14 +133,14 @@ namespace BoscaliSummer.Modules.Ares.Runtime
         }
 
 #if !PUBLIC_RELEASE
-        /// <summary>FLY BREAKWATER: your aircraft swaps for the G-240 megaplane (Megaplane module, found by its encyclopedia key so
+        /// <summary>FLY GROZA: your aircraft swaps for the KY-44 megaplane (Megaplane module, found by its encyclopedia key so
         /// there is no sibling import), level on your heading at least 1.5 km above the sea, seated through the TAKE CONTROL path.</summary>
         public string FlyMegaplane()
         {
             if (!Host(out string refusal)) return Say(refusal);
             if (Encyclopedia.Lookup == null || !Encyclopedia.Lookup.TryGetValue("BS_Megaplane", out var found) || !(found is AircraftDefinition definition))
                 return Say("The Megaplane module is off.");
-            if (!LocalAircraft(out Aircraft mine)) return Say("Fly an aircraft first: the G-240 takes its place.");
+            if (!LocalAircraft(out Aircraft mine)) return Say("Fly an aircraft first: the KY-44 takes its place.");
             if (!GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player)) return Say("No local player.");
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             // ponytail: sea-referenced floor, no terrain probe; raise it if a spawn over high ground ever clips
@@ -150,7 +150,7 @@ namespace BoscaliSummer.Modules.Ares.Runtime
             FactionHQ hq = mine.NetworkHQ;
             Remove(mine);
             StartCoroutine(Seat(spawner, definition, position, rotation, rotation * Vector3.forward * CruiseSpeed(definition), hq, player, null, -1f));
-            return Say("BOARDING the G-240 BREAKWATER...");
+            return Say("BOARDING the KY-44 GROZA...");
         }
 #endif
 

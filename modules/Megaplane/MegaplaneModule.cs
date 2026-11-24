@@ -1,16 +1,20 @@
 using System;
 using System.Linq;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Modules;
+using Cysharp.Threading.Tasks;
 using HarmonyLib;
+using NuclearOption.Networking;
+using NuclearOption.SceneLoading;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
-    /// <summary>G-240 BREAKWATER flying carrier (design/megaplane). G2 slice: registered, air-started, game-logic flight.</summary>
+    /// <summary>Registers the KY-44 Groza and its aircraft systems.</summary>
     internal sealed class MegaplaneModule : IModule
     {
-        public ModuleMetadata Metadata => new ModuleMetadata("megaplane", "G-240 Breakwater");
-        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch), typeof(MegaplaneCargoStationPatch), typeof(MegaplaneHangarAvailabilityPatch), typeof(MegaplaneHangarAirStartPatch), typeof(MegaplaneBatteryFirePatch), typeof(MegaplaneSelfHitPatch) };
+        public ModuleMetadata Metadata => new ModuleMetadata("megaplane", "KY-44 Groza");
+        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneClientMapReadyPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch), typeof(MegaplaneLoadoutPatch), typeof(MegaplaneSavedLoadoutPatch), typeof(MegaplaneCargoStationPatch), typeof(MegaplaneHangarAvailabilityPatch), typeof(MegaplaneHangarAirStartPatch), typeof(MegaplaneBatteryFirePatch), typeof(MegaplaneSelfHitPatch), typeof(MegaplaneStatusInitializePatch), typeof(MegaplaneCrashCleanupPatch), typeof(MegaplaneCrashLifecyclePatch) };
         public void Install(ModuleContext context)
         {
             MegaplaneSettings.Current = context.Settings.Megaplane;
@@ -45,6 +49,34 @@ namespace BoscaliSummer.Modules.Megaplane
         }
     }
 
+    // The server immediately sends aircraft and their encyclopedia indices when a joining client finishes its map load.
+    // On a cold start Blueprinter can still be reading the bundles, leading Mirage to permanently discard the spawn.
+    [HarmonyPatch(typeof(MapLoader), nameof(MapLoader.Load))]
+    internal static class MegaplaneClientMapReadyPatch
+    {
+        private static bool Registered => Encyclopedia.Lookup != null && Encyclopedia.Lookup.ContainsKey(MegaplaneTemplate.Key);
+
+        private static void Postfix(ref UniTask<MapLoader.LoadResult> __result)
+        {
+            NetworkManagerNuclearOption manager = GameAccess.NetworkManagerOrNull;
+            if (manager?.Client?.Active == true && manager.Server?.Active != true && MegaplaneBlueprinterPatch.Available && !Registered)
+                __result = WaitForCatalogue(__result, manager);
+        }
+
+        private static async UniTask<MapLoader.LoadResult> WaitForCatalogue(UniTask<MapLoader.LoadResult> loading, NetworkManagerNuclearOption manager)
+        {
+            MapLoader.LoadResult result = await loading;
+            if (result != MapLoader.LoadResult.ChangedScene && result != MapLoader.LoadResult.ChangedWorldPrefab && result != MapLoader.LoadResult.AlreadyLoaded)
+                return result;
+            float deadline = Time.realtimeSinceStartup + 30f;
+            while (manager != null && manager.Client.Active && !Registered && Time.realtimeSinceStartup < deadline)
+                await UniTask.Yield();
+            if (manager != null && manager.Client.Active && !Registered)
+                Debug.LogWarning("[Megaplane] Groza catalogue did not register before the map-load deadline. Continuing the native connection.");
+            return result;
+        }
+    }
+
     // Donor colliders are disabled, so UnitPart cached empty bounds; native AeroJob divides by collisionSize.y. Supply real extents.
     [HarmonyPatch(typeof(AeroPart), "AeroPart_OnInitialize")]
     internal static class MegaplaneAeroInitializePatch
@@ -60,14 +92,14 @@ namespace BoscaliSummer.Modules.Megaplane
         }
     }
 
-    // One rigidbody, always: 35 jointed islands on a 240 m frame would only tear and jitter (BOTE replaces this method too).
+    // One rigidbody, always: 35 jointed islands on the carrier frame would only tear and jitter (BOTE replaces this method too).
     // The prefab is still one body when SetLocalSim asks for complex physics, so marking it simple is enough.
     [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.SetComplexPhysics))]
     internal static class MegaplanePhysicsLodPatch
     {
         private static bool Prefix(Aircraft __instance)
         {
-            if (!MegaplaneModule.Is(__instance)) return true;
+            if (!MegaplaneModule.Is(__instance)) return !MegaplaneCapture.FlyingCapture(__instance);
             Traverse.Create(__instance).Field<bool>("simplePhysics").Value = true;
             Rigidbody rb = __instance.GetComponent<Rigidbody>();
             rb.mass = __instance.definition.mass;

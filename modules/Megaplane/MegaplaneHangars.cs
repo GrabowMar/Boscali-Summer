@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
-    /// <summary>Every hangar that offers the SFB-81 Darkreach also offers the G-240 (the Skylark's hangar pattern). The carrier never
+    /// <summary>Every hangar that offers the SFB-81 Darkreach also offers the KY-44 Groza. The carrier never
     /// touches the ground, so the hangar's spawn is replaced by an air start straight above it.</summary>
     internal static class MegaplaneHangars
     {
@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             AircraftDefinition mega = MegaplaneTemplate.Definition;
             if (hangar == null || mega == null) return;
+            MegaplaneStores.CompletePreset(mega);
             var field = Traverse.Create(hangar).Field<AircraftDefinition[]>("availableAircraft");
             AircraftDefinition[] aircraft = field.Value;
             if (aircraft == null || aircraft.Contains(mega) || !aircraft.Any(IsDarkreach)) return;

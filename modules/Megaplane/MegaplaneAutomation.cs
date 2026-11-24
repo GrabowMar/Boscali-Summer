@@ -1,8 +1,10 @@
 #if !PUBLIC_RELEASE
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
+using NuclearOption.SavedMission;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Megaplane
@@ -20,7 +22,7 @@ namespace BoscaliSummer.Modules.Megaplane
             return new
             {
                 registered = true, speed = a.rb.velocity.magnitude, altitude = a.GlobalPosition().y, radarAlt = a.radarAlt,
-                climbRate = a.rb.velocity.y, heading = e.y,
+                climbRate = a.rb.velocity.y, heading = e.y, smoothFrameMs = Time.smoothDeltaTime * 1000f / Mathf.Max(Time.timeScale, .001f),
                 slip = Mathf.Abs(Mathf.DeltaAngle(e.y, Mathf.Atan2(a.rb.velocity.x, a.rb.velocity.z) * Mathf.Rad2Deg)), pitch = Mathf.DeltaAngle(0, e.x), bank = Mathf.DeltaAngle(0, e.z),
                 holdHeading = flight.Heading, holdAltitude = flight.HoldAltitude, thrust = flight.Thrust, fans = a.GetComponent<MegaplaneFans>()?.Count ?? 0, fanSpool = a.GetComponent<MegaplaneFans>()?.Spool ?? 0f,
                 mass = a.rb.mass, simple = HarmonyLib.Traverse.Create(a).Field<bool>("simplePhysics").Value,
@@ -69,6 +71,352 @@ namespace BoscaliSummer.Modules.Megaplane
         }
 
         private static float[] V(Vector3 v) => new[] { v.x, v.y, v.z };
+
+        public static object Assist(Dictionary<string, object> args)
+        {
+            if (!(args.TryGetValue("idUnit", out object value) && value is Aircraft a) || !MegaplaneModule.Is(a)) return new { ok = false };
+            if (args.ContainsKey("gearGeometry"))
+            {
+                var legs = a.GetComponentsInChildren<LandingGear>();
+                var probes = legs.Select(leg =>
+                {
+                    var donor = HarmonyLib.Traverse.Create(leg);
+                    Transform cast = donor.Field<Transform>("castPoint").Value;
+                    float travel = donor.Field<float>("suspensionTravel").Value;
+                    return V(a.transform.InverseTransformPoint(cast.position - cast.up * travel));
+                }).ToArray();
+                var tires = a.GetComponentsInChildren<MeshFilter>().Where(m => m.name.StartsWith("Gear_"))
+                    .Select(m => new { m.name, treadY = m.sharedMesh.vertices.Min(v => a.transform.InverseTransformPoint(m.transform.TransformPoint(v)).y) }).ToArray();
+                return new { probes, tires, touching = legs.Count(leg => leg.WeightOnWheel(.01f)), radarAlt = a.radarAlt };
+            }
+            if (args.TryGetValue("throttle", out object throttle) && a.LocalSim)
+            {
+                float pitch = System.Convert.ToSingle(args["pitch"]);
+                float? speed = args.TryGetValue("speed", out object supplied) ? System.Convert.ToSingle(supplied) : (float?)null;
+                SetAssistControls(a, System.Convert.ToSingle(throttle), pitch, System.Convert.ToBoolean(args["gear"]), speed);
+            }
+            return AssistSnapshot(a);
+        }
+
+        private static object AssistSnapshot(Aircraft a)
+        {
+            var flight = a.GetComponent<MegaplaneFlight>();
+            MegaplaneNoseFan left = flight.NoseFans.FirstOrDefault(f => f != null && f.name == "NoseAssist_L");
+            MegaplaneNoseFan right = flight.NoseFans.FirstOrDefault(f => f != null && f.name == "NoseAssist_R");
+            return new
+            {
+                ok = true, installed = flight.NoseFans.Length, local = a.LocalSim, disabled = a.disabled,
+                gear = a.NetworkgearDeployed, forward = flight.ForwardSpeed, climb = a.rb.velocity.y, radarAlt = a.radarAlt,
+                pitch = -Mathf.DeltaAngle(0f, a.transform.eulerAngles.x), assist = flight.NoseAssist,
+                leftPower = left != null ? left.Power : 0f, rightPower = right != null ? right.Power : 0f,
+                leftLid = left != null ? left.LidAngle : 0f, rightLid = right != null ? right.LidAngle : 0f,
+                leftOwner = left != null && left.Owner != null ? left.Owner.name : "",
+                rightOwner = right != null && right.Owner != null ? right.Owner.name : "",
+                leftAttached = left != null && left.Owner != null && !left.Owner.IsDetached(),
+                rightAttached = right != null && right.Owner != null && !right.Owner.IsDetached(),
+                leftHealth = left != null && left.Owner != null ? left.Owner.hitPoints : 0f,
+                rightHealth = right != null && right.Owner != null ? right.Owner.hitPoints : 0f,
+                throttle = a.GetInputs().throttle, stick = a.GetInputs().pitch,
+            };
+        }
+
+        private static void SetAssistControls(Aircraft a, float throttle, float pitch, bool gear, float? speed)
+        {
+            if (speed.HasValue)
+            {
+                a.rb.velocity = Quaternion.Euler(0f, a.transform.eulerAngles.y, 0f) * Vector3.forward * speed.Value;
+                // Seed the crew's matching previous velocity: a new initial condition isn't a one-tick g-load.
+                foreach (Pilot crew in a.pilots) crew.velocityPrev = a.rb.velocity;
+            }
+            a.SetGear(gear);
+            a.pilots[0].SwitchStateNew(new AssistTestPilot { Throttle = throttle, Pitch = pitch });
+        }
+
+        private sealed class AssistTestPilot : PilotBaseState
+        {
+            internal float Throttle, Pitch;
+            public override void EnterState(Pilot p)
+            {
+                pilot = p; aircraft = p.aircraft; controlInputs = aircraft.GetInputs();
+                stateDisplayName = "Groza assist flight test";
+            }
+            public override void FixedUpdateState(Pilot p)
+            {
+                controlInputs.pitch = Pitch;
+                controlInputs.throttle = Throttle;
+                controlInputs.roll = controlInputs.yaw = controlInputs.brake = 0f;
+                aircraft.FilterInputs();
+            }
+            public override void UpdateState(Pilot p) { }
+            public override void LeaveState() { }
+        }
+
+        public static string PeerAssist(string command)
+        {
+            if (string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("NOMODKIT_PEER_PORT")))
+                throw new System.InvalidOperationException("Groza peer inspection requires a nomodkit loopback sandbox.");
+            Aircraft a = PeerAircraft("Groza peer test");
+            if (command != "read" && !a.IsServer) throw new System.InvalidOperationException("Only the test host commands the aircraft.");
+            if (command == "rotate") SetAssistControls(a, .65f, -.65f, true, 48f);
+            else if (command == "hitLeft")
+            {
+                SetAssistControls(a, .65f, -.65f, true, 48f);
+                Hit(new Dictionary<string, object> { { "idUnit", a }, { "nodes", "noseAssist_L" }, { "pierce", 4000 }, { "times", 30 } });
+            }
+            return Newtonsoft.Json.JsonConvert.SerializeObject(AssistSnapshot(a));
+        }
+
+        public static object Plant(Dictionary<string, object> args)
+        {
+            if (!(args.TryGetValue("idUnit", out object unit) && unit is Aircraft a) || !MegaplaneModule.Is(a)) return new { ok = false };
+            if (args.ContainsKey("waitFlash")) return a.GetComponent<MegaplaneReactor>().State == MegaplaneReactor.Flash;
+            if (args.ContainsKey("waitHot")) return a.GetComponent<MegaplaneReactor>().Heat >= .96f;
+            if (args.ContainsKey("rays")) return new { core = RayOwner(a, "reactor"), left = RayOwner(a, "coolant_L"), right = RayOwner(a, "coolant_R"),
+                coreHits = RayPath(a, "reactor"), leftHits = RayPath(a, "coolant_L"), rightHits = RayPath(a, "coolant_R") };
+            if (args.TryGetValue("aim", out object aim) && a.IsServer)
+            {
+                MegaplaneHitbox box = PlantRay(a, (string)aim);
+                if (box == null || box.Owner.name != (string)aim)
+                    throw new System.InvalidOperationException("Access to " + aim + " is obstructed: " + string.Join(" / ", RayPath(a, (string)aim)));
+                DamageTo(box, System.Convert.ToSingle(args["health"]));
+            }
+            if (args.TryGetValue("hit", out object name) && a.IsServer)
+                DamageTo(a, (string)name, System.Convert.ToSingle(args["health"]));
+            if (args.TryGetValue("repair", out object repair) && a.IsServer)
+                a.partLookup.OfType<AeroPart>().First(p => p.name == (string)repair).Repair();
+            return PlantSnapshot(a);
+        }
+
+        // Apply a measured impact through the actual part's first native collider.
+        private static void DamageTo(Aircraft a, string name, float hp)
+        {
+            var box = a.GetComponentsInChildren<MegaplaneHitbox>(true).First(h => h.Owner != null && h.Owner.name == name);
+            DamageTo(box, hp);
+        }
+
+        private static void DamageTo(MegaplaneHitbox box, float hp)
+        {
+            box.TakeDamage(0f, 0f, 1f, 0f, Mathf.Max(0f, box.Owner.hitPoints - hp), default);
+        }
+
+        private static RaycastHit[] PlantHits(Aircraft a, string target)
+        {
+            float x = target == "coolant_L" ? -7.16f : target == "coolant_R" ? 7.16f : 0f;
+            // Query the current physics pose. The transform interpolated for rendering can lag
+            // several metres down-track at cruise between the scenario callback and a physics tick.
+            Vector3 from = a.rb.position + a.rb.rotation * new Vector3(x, 45f, x == 0f ? -6.75f : -10.4f);
+            var hits = Physics.RaycastAll(from, a.rb.rotation * Vector3.down, 90f, ~0, QueryTriggerInteraction.Ignore);
+            return hits.Where(h => h.collider.transform.IsChildOf(a.transform)).OrderBy(h => h.distance).ToArray();
+        }
+
+        private static string[] RayPath(Aircraft a, string target) => PlantHits(a, target).Select(h =>
+            h.collider.name + "@" + (Quaternion.Inverse(a.rb.rotation) * (h.point - a.rb.position)).ToString("F2")).ToArray();
+
+        private static MegaplaneHitbox PlantRay(Aircraft a, string target)
+        {
+            var first = PlantHits(a, target).FirstOrDefault();
+            return first.collider == null ? null : first.collider.GetComponent<MegaplaneHitbox>();
+        }
+
+        private static string RayOwner(Aircraft a, string target)
+        {
+            var box = PlantRay(a, target);
+            return box == null || box.Owner == null ? "" : box.Owner.name;
+        }
+
+        private static object PlantSnapshot(Aircraft a)
+        {
+            var reactor = a.GetComponent<MegaplaneReactor>();
+            var fans = a.GetComponent<MegaplaneFans>();
+            var flight = a.GetComponent<MegaplaneFlight>();
+            var parts = a.partLookup.OfType<AeroPart>().ToDictionary(p => p.name, p => p);
+            string[] engineIds = { "pod1_L", "nacelle_L", "flap_L", "pod4_L", "pod1_R", "nacelle_R", "flap_R", "pod4_R" };
+            var engine = parts["pod4_L"];
+            var neighbor = parts["flap_L"];
+            var visuals = engine.GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("BS_Fx_")).ToArray();
+            return new
+            {
+                installed = reactor.Installed, state = reactor.State, heat = reactor.Heat, flashes = reactor.Flashes,
+                plantPower = reactor.AvailablePower,
+                disabled = a.disabled, authority = a.IsServer, id = a.NetId, wing = !parts["wing2_L"].IsDetached(),
+                power = MegaplaneFlight.PodHealth(engine), neighbor = MegaplaneFlight.PodHealth(neighbor),
+                engineCount = engineIds.Count(parts.ContainsKey), thrust = flight.Thrust,
+                rotor = fans.SpeedOf(engine), neighborRotor = fans.SpeedOf(neighbor),
+                rotorRatio = fans.SpeedOf(engine) / Mathf.Max(.01f, fans.SpeedOf(neighbor)),
+                affected = engineIds.Count(n => MegaplaneFlight.PodHealth(parts[n]) < .999f),
+                burning = a.GetComponent<MegaplaneFx>().Burning, ordinaryEffects = visuals.Length,
+                largest = visuals.Length == 0 ? 0f : visuals.Max(t => t.lossyScale.x),
+                yaw = a.GetComponent<MegaplaneDamage>().YawAuthority,
+                flashLights = a.GetComponentsInChildren<Light>().Count(l => l.name == "BS_Fx_ReactorFlash"),
+                ventCloud = a.GetComponentsInChildren<Transform>().Any(t => t.name == "BS_Fx_ReactorVent"),
+            };
+        }
+
+        private static Aircraft PeerAircraft(string unique) => Object.FindObjectsOfType<Aircraft>()
+            .FirstOrDefault(a => MegaplaneModule.Is(a) && a.NetworkUniqueName == unique);
+
+        public static string PeerPlant(string command, bool historical)
+        {
+            if (string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("NOMODKIT_PEER_PORT")))
+                throw new System.InvalidOperationException("Groza peer inspection requires a nomodkit loopback sandbox.");
+            const string old = "Groza preceding reactor test";
+            Aircraft a = PeerAircraft(historical ? old : "Groza peer test");
+            if (historical && command == "spawn" && a == null)
+            {
+                if (NuclearOption.Networking.NetworkManagerNuclearOption.i?.Server?.Active != true)
+                    throw new System.InvalidOperationException("Only the test host spawns the second carrier.");
+                var definition = MegaplaneTemplate.Definition;
+                a = NetworkSceneSingleton<Spawner>.i.SpawnAircraft(null, definition.unitPrefab, definition.aircraftParameters.loadouts[0], 1f, default,
+                    new GlobalPosition(17000f, 8500f, -35000f), Quaternion.identity, Vector3.forward * 130f,
+                    null, FactionRegistry.GetSortedHQs()[0], old, .5f, .5f);
+            }
+            if (a == null) return "{}";
+            if (command == "trigger")
+            {
+                if (!a.IsServer) throw new System.InvalidOperationException("Only the test host damages the plant.");
+                DamageTo(a, "reactor", 25f);
+                DamageTo(a, "coolant_L", 15f);
+                DamageTo(a, "coolant_R", 15f);
+            }
+            var reactor = a.GetComponent<MegaplaneReactor>();
+            return Newtonsoft.Json.JsonConvert.SerializeObject(new { id = a.NetId, disabled = a.disabled, installed = reactor.Installed,
+                state = reactor.State, heat = reactor.Heat, flashes = reactor.Flashes });
+        }
+
+        /// <summary>Run a native aircraft spawn on the test host and inspect the same replica on both peers.</summary>
+        public static string PeerProbe(bool spawn)
+        {
+            if (string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("NOMODKIT_PEER_PORT")))
+                throw new System.InvalidOperationException("Groza peer inspection requires a nomodkit loopback sandbox.");
+            AircraftDefinition definition = MegaplaneTemplate.Definition;
+            if (spawn)
+            {
+                if (NuclearOption.Networking.NetworkManagerNuclearOption.i?.Server?.Active != true || definition == null)
+                    throw new System.InvalidOperationException("Groza must be registered on a running peer host.");
+                if (PeerAircraft("Groza peer test") == null)
+                    NetworkSceneSingleton<Spawner>.i.SpawnAircraft(null, definition.unitPrefab, definition.aircraftParameters.loadouts[0], 1f, default,
+                        new GlobalPosition(10000f, 2500f, -35000f), Quaternion.identity, Vector3.forward * 130f,
+                        null, FactionRegistry.GetSortedHQs()[0], "Groza peer test", .5f, .5f);
+            }
+            return Newtonsoft.Json.JsonConvert.SerializeObject(new
+            {
+                definitionIndex = definition == null ? -1 : ((INetworkDefinition)definition).LookupIndex,
+                aircraft = Object.FindObjectsOfType<Aircraft>().Where(a => MegaplaneModule.Is(a) && a.NetworkUniqueName == "Groza peer test").Select(a => new
+                {
+                    key = a.definition.jsonKey, netId = a.Identity.NetId, prefab = a.Identity.PrefabHash,
+                    width = a.definition.width, length = a.definition.length,
+                    lodIslands = a.GetComponentsInChildren<LODGroup>().Count(g => g.GetLODs().Any(l => l.renderers.Any(r => r != null && r.name.StartsWith("GrozaLOD_")))),
+                    stores = a.weaponManager.hardpointSets.Select(s => s.weaponMount == null ? "" : s.weaponMount.jsonKey),
+                }),
+            });
+        }
+
+        /// <summary>Read actual renderer visibility, control-surface pose and seating from the live aircraft.</summary>
+        public static object Inspect(Dictionary<string, object> args)
+        {
+            if (!(args.TryGetValue("idUnit", out object unit) && unit is Aircraft a) || !MegaplaneModule.Is(a)) return new { ok = false };
+            var islands = a.GetComponentsInChildren<LODGroup>().Select(g => new { island = g.name, levels = g.GetLODs() })
+                .Where(g => g.levels.Length == 2 && g.levels[1].renderers.Any(r => r != null && r.name.StartsWith("GrozaLOD_"))).ToArray();
+            Renderer display = a.GetComponentsInChildren<Renderer>(true).FirstOrDefault(r => r.name == "GrozaTacticalDisplay");
+            var systems = a.GetComponentInChildren<MegaplaneSystemsDisplay>(true);
+            var crewDisplays = a.GetComponentInChildren<MegaplaneCrewDisplays>(true);
+            StatusDisplay schematic = Object.FindObjectsOfType<StatusDisplay>().FirstOrDefault(s => s.name.StartsWith("StatusDisplay_KY44"));
+            var sections = schematic != null ? HarmonyLib.Traverse.Create(schematic).Field<List<PartStatusDisplay>>("statusDisplays").Value : null;
+            return new
+            {
+                ok = true, width = a.definition.width, length = a.definition.length, height = a.definition.height, lodBias = QualitySettings.lodBias,
+                groups = islands.Length, near = islands.Sum(g => g.levels[0].renderers.Length), far = islands.Sum(g => g.levels[1].renderers.Length),
+                nearVisible = islands.Sum(g => g.levels[0].renderers.Count(r => r != null && r.isVisible)),
+                farVisible = islands.Sum(g => g.levels[1].renderers.Count(r => r != null && r.isVisible)),
+                flap = a.GetComponent<MegaplaneSurfaces>().InnerFlapAngle, display = display != null && display.enabled,
+                liveTexture = display != null && display.sharedMaterial.GetTexturePropertyNames().Any(k => display.sharedMaterial.GetTexture(k) is RenderTexture),
+                systems = systems == null ? null : systems.Inspect(),
+                crewRoom = crewDisplays == null ? null : crewDisplays.Inspect(),
+                tacticalInView = InCockpitFrame(display), systemsInView = systems != null && InCockpitFrame(systems.GetComponent<Renderer>()),
+                schematic = a.definition.aircraftParameters.StatusDisplay.name, sections = sections?.Count ?? 0,
+                damagedSections = sections == null ? new string[0] : sections.Where(s => s.partImage.color.a > .02f).Select(s => s.partImage.name).ToArray(),
+                eyeDistance = Camera.main == null ? -1f : Vector3.Distance(Camera.main.transform.position, a.cockpitViewPoint.position),
+                eye = V(a.transform.InverseTransformPoint(a.cockpitViewPoint.position)),
+                camera = Camera.main == null ? null : V(a.transform.InverseTransformPoint(Camera.main.transform.position)),
+            };
+        }
+
+        private static bool InCockpitFrame(Renderer face)
+        {
+            Camera camera = Camera.main;
+            if (camera == null || face == null || !face.enabled || !face.TryGetComponent(out MeshFilter filter) || filter.sharedMesh == null) return false;
+            Bounds bounds = filter.sharedMesh.bounds;
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 corner = face.transform.TransformPoint(new Vector3(i % 2 == 0 ? bounds.min.x : bounds.max.x,
+                    i < 2 ? bounds.min.y : bounds.max.y, bounds.center.z));
+                Vector3 frame = camera.WorldToViewportPoint(corner);
+                if (frame.z <= camera.nearClipPlane || frame.x < 0f || frame.x > 1f || frame.y < 0f || frame.y > 1f) return false;
+            }
+            return true;
+        }
+
+        public static object SavedFit(Dictionary<string, object> args)
+        {
+            if (!(args.TryGetValue("idUnit", out object unit) && unit is Aircraft a) || !MegaplaneModule.Is(a)) return new { valid = false };
+            // A legacy save with an intentionally empty outboard beam must not silently receive the default escort.
+            var saved = new SavedLoadout();
+            foreach (WeaponMount mount in a.loadout.weapons.Take(4))
+                saved.Selected.Add(new SavedLoadout.SelectedMount { Key = saved.Selected.Count == 1 || mount == null ? "" : mount.jsonKey });
+            Loadout loaded = saved.CreateLoadout(a.definition.unitPrefab);
+            string[] oldKeys = saved.Selected.Select(s => s.Key).ToArray();
+            string[] newKeys = loaded.weapons.Select(w => w != null ? w.jsonKey : "").ToArray();
+            var hangars = Object.FindObjectsOfType<Hangar>().Where(h => h.attachedUnit != null && !h.attachedUnit.disabled)
+                .Select(h => h.GetAvailableAircraft()).Where(choices => choices != null && choices.Any(d => d != null && d.jsonKey == "Darkreach")).ToArray();
+            int offered = hangars.Count(choices => choices.Contains(a.definition));
+            return new { valid = newKeys.Length == 5 && newKeys.Take(4).SequenceEqual(oldKeys) && newKeys[4] == "", oldKeys, newKeys,
+                darkreachHangars = hangars.Length, grozaHangars = offered, allHangars = offered == hangars.Length && offered > 0 };
+        }
+
+        /// <summary>Exercise the occupied carrier's native station and report the actual ammunition consumed.</summary>
+        public static object Fire(Dictionary<string, object> args)
+        {
+            if (!(args.TryGetValue("idUnit", out object unit) && unit is Aircraft a) || !MegaplaneModule.Is(a) ||
+                !(args.TryGetValue("weapon", out object weapon) && weapon is string name)) return new { fired = false };
+            WeaponStation station = a.weaponStations.FirstOrDefault(s => s.Ammo > 0 && s.HasTurret() && (name == "@missile"
+                ? s.Weapons.Any(w => w is MissileLauncher)
+                : s.WeaponInfo != null && s.WeaponInfo.weaponName.IndexOf(name, System.StringComparison.OrdinalIgnoreCase) >= 0));
+            if (station == null) return new { fired = false };
+            WeaponStation previous = a.weaponManager.currentWeaponStation;
+            int before = station.GetAmmoTotal();
+            VolleySample sample = a.GetComponent<VolleySample>() ?? a.gameObject.AddComponent<VolleySample>();
+            int previousVolleyRounds = sample.Station == station ? sample.Rounds : 0;
+            try
+            {
+                a.SetActiveStation(station.Number);
+                if (station.Ready())
+                {
+                    station.Fire(a, null);
+                    sample.StartCoroutine(sample.ReadNextPhysicsTick(station, before));
+                }
+            }
+            finally
+            {
+                if (previous != null && previous != station) a.SetActiveStation(previous.Number);
+            }
+            int after = station.GetAmmoTotal();
+            // A missile leaves immediately. A Gun consumes its queued rounds in the next FixedUpdate.
+            return new { fired = after < before || previousVolleyRounds > 0, before, after, previousVolleyRounds, weapon = station.WeaponInfo.weaponName };
+        }
+
+        private sealed class VolleySample : MonoBehaviour
+        {
+            internal WeaponStation Station;
+            internal int Rounds;
+
+            internal IEnumerator ReadNextPhysicsTick(WeaponStation station, int before)
+            {
+                Station = station;
+                Rounds = 0;
+                yield return new WaitForFixedUpdate();
+                Rounds = before - station.GetAmmoTotal();
+            }
+        }
 
         /// <summary>Hardpoint stores: "fire" = text in a station's weapon name or mount key (e.g. "REMORA", "Paratroop", "UGV"),
         /// launched once through the station's own LaunchMount (target: the "idTarget" unit, else none). Reads every station,
@@ -170,6 +518,8 @@ namespace BoscaliSummer.Modules.Megaplane
                 List<MegaplaneHitbox> boxes = names.Select(nm => all.FirstOrDefault(h => h.Owner != null && h.Owner.name == nm)).Where(h => h != null).ToList();
                 if (boxes.Count == 0) boxes = all.Where(h => names.Any(nm => h.transform.name == nm || h.transform.parent != null && h.transform.parent.name == nm)).ToList();
                 if (boxes.Count == 0) return new { state = DamageState(a, d), boxes = all.Take(40).Select(h => h.name + ">" + (h.Owner != null ? h.Owner.name : "-")).ToArray(), before = -1f, after = -1f, armor = (float[])null };
+                if (args.TryGetValue("heal", out object heal) && System.Convert.ToBoolean(heal))
+                    foreach (MegaplaneHitbox h in boxes) h.Owner.Repair();
                 ArmorProperties armor = boxes.Count > 0 ? boxes[0].Owner.GetArmorProperties() : null;
                 float before = boxes.Count > 0 ? boxes[0].Owner.hitPoints : -1f;
                 foreach (MegaplaneHitbox h in boxes)
@@ -202,10 +552,10 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 ok = true, started, recalled, door = bay.Door, stowed = bay.State.Count(x => x == 0),
                 capturePhase = bay.Released.Select(f => f != null && f.GetComponent<MegaplaneCapture>() is MegaplaneCapture cap ? cap.Phase : -1).ToArray(),
-                releasedAlive = bay.Released.Count(r => r != null && !r.disabled), releasedFriendly = bay.Released.Count(r => r != null && r.NetworkHQ == a.NetworkHQ), arm = bay.Arm, state = bay.State, fighter = bay.FighterKey,
+                releasedAlive = bay.Released.Count(r => r != null && !r.disabled), releasedFriendly = bay.Released.Count(r => r != null && r.NetworkHQ == a.NetworkHQ), arm = bay.Arm.ToArray(), state = bay.State.ToArray(), fighter = bay.FighterKey,
                 visuals = a.GetComponentsInChildren<Transform>(true).Count(t => t.name.StartsWith("BayFighter_") && t.gameObject.activeSelf),
-                released = bay.Released.Select(r => r == null ? null : new { r.unitName, alive = !r.disabled, speed = r.rb != null ? r.rb.velocity.magnitude : 0f,
-                    below = a.transform.InverseTransformPoint(r.transform.position).y, sameSide = r.NetworkHQ == a.NetworkHQ }).ToArray(),
+                released = bay.Released.Select((r, i) => r == null ? null : new { r.unitName, alive = !r.disabled, speed = r.rb != null ? r.rb.velocity.magnitude : 0f,
+                    below = a.transform.InverseTransformPoint(r.transform.position).y, hookRange = Vector3.Distance(r.transform.position, bay.HookPoint(i)), sameSide = r.NetworkHQ == a.NetworkHQ }).ToArray(),
             };
         }
 
@@ -214,6 +564,12 @@ namespace BoscaliSummer.Modules.Megaplane
         public static object View(Dictionary<string, object> args)
         {
             if (!(args.TryGetValue("idUnit", out object value) && value is Aircraft a) || Camera.main == null) return new { ok = false };
+            if (args.TryGetValue("release", out object release) && System.Convert.ToBoolean(release))
+            {
+                ShotCam previous = Camera.main.GetComponent<ShotCam>();
+                if (previous != null) { previous.enabled = false; Object.Destroy(previous); }
+                return new { ok = true };
+            }
             float F(string k) => System.Convert.ToSingle(args[k]);
             ShotCam shot = Camera.main.GetComponent<ShotCam>() ?? Camera.main.gameObject.AddComponent<ShotCam>();
             shot.target = a.transform;

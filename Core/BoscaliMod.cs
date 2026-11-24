@@ -195,10 +195,8 @@ namespace BoscaliSummer.Core
 #endif
             if (BoscaliSummer.Modules.Vanguard.VanguardModule.Available) modules.Add(new BoscaliSummer.Modules.Vanguard.VanguardModule());
             modules.Add(new BoscaliSummer.Modules.Skylark.SkylarkModule());
-#if !PUBLIC_RELEASE
             // Registers on every peer (network prefab), like the Skylark.
             modules.Add(new BoscaliSummer.Modules.Megaplane.MegaplaneModule());
-#endif
             return modules.ToArray();
         }
 

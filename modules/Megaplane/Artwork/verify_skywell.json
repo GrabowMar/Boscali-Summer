@@ -1,0 +1,31 @@
+{
+  "name": "ky44-skywell",
+  "description": "Deploys the SKYWELL tender through the player-operated cargo station, checks the host Tow state, then stows it.",
+  "mission": "Free Flight",
+  "mods": ["boscalisummer"],
+  "timeout_s": 140,
+  "environment": {"config": {"boscalisummer": {"Trenches": {"Enabled": false}, "TheaterOps": {"Enabled": false}, "Events": {"Enabled": false}, "Garrisons": {"Enabled": false}, "DynamicOperations": {"Enabled": false}, "Support": {"Enabled": false}, "Megaplane": {"BayPayload": "Fighters"}}}},
+  "ops": [
+    {"op": "seat", "id": "carrier", "aircraft": "KY-44 Groza", "near": [-24500, -17400], "altitude": 1800, "speed": 130, "heading": 150, "view": "orbit", "timeout": 60},
+    {"ids": ["carrier"], "hz": 2, "op": "record"},
+    {"seconds": 4, "op": "wait"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.Stores", "args": {"id": "carrier", "reset": true}, "store": "s0"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.Stores", "args": {"id": "carrier", "fire": "Skywell"}, "store": "k0"},
+    {"seconds": 14, "op": "wait"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.View", "args": {"id": "carrier", "x": -110, "y": -12, "z": -250, "lx": 0, "ly": -20, "lz": -95, "fov": 40}, "store": "v3"},
+    {"seconds": 1, "op": "wait"},
+    {"op": "capture", "name": "mp-skywell-tow", "hide_ui": true},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.Stores", "args": {"id": "carrier"}, "store": "k1"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.Stores", "store": "stowRequest", "args": {"id": "carrier", "fire": "Skywell"}},
+    {"seconds": 14, "op": "wait"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.Stores", "store": "end", "args": {"id": "carrier"}},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"ids": ["carrier"], "check": "alive"},
+    {"value": true, "check": "result_equals", "path": "s0.hasTender"},
+    {"value": "Tow", "check": "result_equals", "path": "k1.tender"},
+    {"value": "Stowed", "check": "result_equals", "path": "end.tender"}
+  ]
+}

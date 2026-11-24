@@ -7,16 +7,18 @@ using UnityEngine.Rendering;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
-    /// <summary>Loads the Blender-built node tree (assets/Megaplane/Source/build_megaplane.py --runtime). Same idea as the SA-74N mesh:
-    /// no Unity bundle step while the art is a blockout. Unity frame, metres, nose +Z.</summary>
+    /// <summary>Loads the Blender-built KY-44 assembly in Unity coordinates, metres, nose +Z. The exporter lives in Artwork/.</summary>
     internal static class MegaplaneArt
     {
         private const string Resource = "BoscaliSummer.Megaplane.megaplane.mesh.gz";
 
-        internal static Transform Build(Transform parent)
+        internal static Transform Build(Transform parent) => Load(parent, Resource);
+        internal static Transform BuildWreck(Transform parent) => Load(parent, "BoscaliSummer.Megaplane.megaplane.wreck.gz");
+
+        private static Transform Load(Transform parent, string resource)
         {
-            byte[] bytes = EmbeddedResources.ReadAll(typeof(MegaplaneArt).Assembly, Resource, 32 * 1024 * 1024);
-            if (bytes == null) throw new InvalidDataException("Megaplane artwork is missing.");
+            byte[] bytes = EmbeddedResources.ReadAll(typeof(MegaplaneArt).Assembly, resource, 32 * 1024 * 1024);
+            if (bytes == null) throw new InvalidDataException("Missing aircraft artwork " + resource);
             using (var input = new BinaryReader(new GZipStream(new MemoryStream(bytes), CompressionMode.Decompress)))
             {
                 if (input.ReadInt32() != 0x504D5342 || input.ReadInt32() != 2) throw new InvalidDataException("Invalid Megaplane mesh.");
@@ -68,9 +70,12 @@ namespace BoscaliSummer.Modules.Megaplane
 
         private static Texture2D albedo, normal, mask;
         private static bool maskMissing;
+        private static readonly Dictionary<string, Material> palette = new Dictionary<string, Material>();
 
         private static Material Material(string name, Color color, float metallic, float smoothness, float alpha, bool textured)
         {
+            if (palette.TryGetValue(name, out Material existing) && existing != null) return existing;
+            if (name == "BS_Megaplane_CrewCRT_Emit") return DisplayMaterial(name, name + "_Tex");
             Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
             var material = new Material(shader) { name = name, hideFlags = HideFlags.DontUnloadUnusedAsset };
             if (textured)
@@ -92,6 +97,8 @@ namespace BoscaliSummer.Modules.Megaplane
             {   // a material with its own painted map (break faces: assets/.../damage_textures.py, 4 m UVs from breaks.py)
                 if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", own);
                 if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", own);
+                if (name.EndsWith("_Emit") && material.HasProperty("_EmissionMap"))
+                    material.SetTexture("_EmissionMap", own);
                 color = new Color(1f, 1f, 1f, color.a);   // the map carries the colour
             }
             else if (material.HasProperty("_Cull")) material.SetFloat("_Cull", 0f);   // fans, bores, glass: seen from both sides
@@ -115,10 +122,45 @@ namespace BoscaliSummer.Modules.Megaplane
             if (material.HasProperty("_Color")) material.SetColor("_Color", color);
             if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", metallic);
             if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", smoothness);
+            palette[name] = material;
             return material;
         }
 
-        private static Texture2D Texture(string name, bool linear, bool optional = false)
+        internal static Material DamageMarks()
+        {
+            const string name = "BS_Megaplane_DamageMarks";
+            var mat = Material(name, Color.white, .10f, .28f, .999f, false);
+            Texture2D atlas = Texture(name, false);
+            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", atlas);
+            if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", atlas);
+            if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", (float)CullMode.Back);
+            return mat;
+        }
+
+        internal static Material SystemsDisplay() => DisplayMaterial("BS_Megaplane_Systems", "BS_Megaplane_Systems");
+
+        private static Material DisplayMaterial(string name, string textureName)
+        {
+            if (palette.TryGetValue(name, out Material cached) && cached != null) return cached;
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null) shader = Shader.Find("Unlit/Texture");
+            if (shader == null) shader = Shader.Find("Universal Render Pipeline/Lit");
+            var screen = new Material(shader) { name = name, hideFlags = HideFlags.DontUnloadUnusedAsset };
+            Texture2D atlas = Texture(textureName, false, compress: false);
+            atlas.wrapMode = TextureWrapMode.Clamp;
+            if (screen.HasProperty("_BaseMap")) screen.SetTexture("_BaseMap", atlas);
+            if (screen.HasProperty("_MainTex")) screen.SetTexture("_MainTex", atlas);
+            if (screen.HasProperty("_EmissionMap"))
+            {
+                screen.SetTexture("_EmissionMap", atlas);
+                screen.SetColor("_EmissionColor", Color.white);
+                screen.EnableKeyword("_EMISSION");
+            }
+            palette[name] = screen;
+            return screen;
+        }
+
+        private static Texture2D Texture(string name, bool linear, bool optional = false, bool compress = true)
         {
             byte[] bytes = EmbeddedResources.ReadAll(typeof(MegaplaneArt).Assembly, "BoscaliSummer.Megaplane." + name + ".png", 32 * 1024 * 1024);
             if (bytes == null && optional) return null;
@@ -130,7 +172,7 @@ namespace BoscaliSummer.Modules.Megaplane
             };
             if (!ImageConversion.LoadImage(texture, bytes, false)) throw new InvalidDataException("Invalid Megaplane texture " + name + ".");
             // Normal maps stay uncompressed: URP reads RGB normals from RGBA32 (alpha 1), DXT5 would need the AG layout.
-            if (!linear && SystemInfo.SupportsTextureFormat(TextureFormat.DXT5)) texture.Compress(true);
+            if (compress && !linear && SystemInfo.SupportsTextureFormat(TextureFormat.DXT5)) texture.Compress(true);
             texture.Apply(true, true);
             return texture;
         }

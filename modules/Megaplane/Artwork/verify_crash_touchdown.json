@@ -1,0 +1,40 @@
+{
+  "name": "ky44-touchdown",
+  "description": "Gear-down low-speed contact must leave the carrier available.",
+  "mission": "Free Flight",
+  "mods": ["boscalisummer"],
+  "environment": {"config": {"boscalisummer": {"Trenches": {"Enabled": false}, "TheaterOps": {"Enabled": false}, "Events": {"Enabled": false}, "Garrisons": {"Enabled": false}, "DynamicOperations": {"Enabled": false}, "Support": {"Enabled": false}, "Weather": {"Enabled": false}}}},
+  "timeout_s": 85,
+  "matrix": {"profile": ["touchdown"]},
+  "ops": [
+    {"op": "atmosphere", "time_of_day": 14, "conditions": 0.025, "cloud_height": 5400},
+    {"op": "seat", "id": "carrier", "aircraft": "KY-44 Groza", "near": [-23140, -16040], "altitude": 68, "speed": 24, "heading": 142, "view": "orbit", "timeout": 60},
+    {"op": "record", "ids": ["carrier"], "hz": 7},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCrashProbe.Run", "args": {"step": "inspect", "profile": "${profile}", "id": "carrier"}, "store": "scene"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCrashProbe.Run", "args": {"step": "predamage", "profile": "${profile}", "id": "carrier"}, "store": "prep"},
+    {"op": "wait_until", "call": "BoscaliSummer.Modules.Megaplane.MegaplaneCrashProbe.Run", "args": {"step": "gearReady", "id": "carrier", "profile": "${profile}"}, "truthy": true, "timeout_s": 24},
+    {"op": "wait", "seconds": 1},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCrashProbe.Run", "args": {"step": "release", "profile": "${profile}", "id": "carrier"}, "store": "started"},
+    {"op": "wait_until", "call": "BoscaliSummer.Modules.Megaplane.MegaplaneCrashProbe.Run", "args": {"step": "contact", "profile": "${profile}"}, "truthy": true, "timeout_s": 45},
+    {"op": "wait", "seconds": 0.4},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCrashProbe.Run", "args": {"step": "inspect", "profile": "${profile}", "id": "carrier"}, "store": "touched"},
+    {"op": "wait", "seconds": 8},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCrashProbe.Run", "args": {"step": "inspect", "profile": "${profile}", "id": "carrier"}, "store": "normal"},
+    {"op": "capture", "name": "ky44-crash-${profile}-after-contact", "hide_ui": true},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "log_clean", "sources": ["Boscali Summer"]},
+    {"check": "result_equals", "path": "scene.wrecks", "value": 0},
+    {"check": "result_equals", "path": "touched.actualContact", "value": true},
+    {"check": "result_equals", "path": "touched.wrecks", "value": 0},
+    {"check": "result_equals", "path": "normal.wrecks", "value": 0},
+    {"check": "result_equals", "path": "normal.aircraftLive", "value": true},
+    {"check": "result_below", "path": "touched.closing", "max": 10},
+    {"check": "result_above", "path": "started.speed", "min": 5},
+    {"check": "result_below", "path": "started.speed", "max": 20},
+    {"check": "result_above", "path": "started.gearLeg", "min": 0.98},
+    {"check": "result_above", "path": "started.gearDoor", "min": 0.98}
+  ]
+}
