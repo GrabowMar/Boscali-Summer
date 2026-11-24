@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Megaplane
     internal sealed class MegaplaneRailgun : MonoBehaviour
     {
         private const float DoorOpen = 100f, DoorRate = 35f, LowerSeconds = 6f, HomeSeconds = 4f, Drop = 10.8f;
-        [SerializeField] private Transform elevator, yaw, pitch, traverse, elevation;
+        [SerializeField] private Transform elevator, yaw, pitch, elevation;
         [SerializeField] private Turret turret;
         [SerializeField] private Vector3 restLocal, deployedLocal;
         private Quaternion yawRest, pitchRest;
@@ -23,7 +23,9 @@ namespace BoscaliSummer.Modules.Megaplane
 
         internal float Door { get; private set; }
         internal float Lower { get; private set; }   // 0 stowed in the bay .. 1 down and firing
-        internal bool? Command;                       // automation: force down (true) or up (false); null = automatic
+#if !PUBLIC_RELEASE
+        internal bool? Command;                       // sandbox override, null follows the native station
+#endif
         internal bool Live => turret != null && Lower >= 1f;
         internal Turret Turret => turret;
         internal Vector3 ArtAim => pitch != null ? transform.InverseTransformDirection(pitch.forward) : Vector3.zero;        // carrier frame
@@ -33,7 +35,6 @@ namespace BoscaliSummer.Modules.Megaplane
         internal void Bind(Dictionary<string, Transform> nodes, Turret t, Transform elev)
         {
             turret = t;
-            traverse = t.transform;
             elevation = elev;
             elevator = nodes["Railgun_Elevator"];
             yaw = nodes["Railgun_Yaw"];
@@ -73,7 +74,11 @@ namespace BoscaliSummer.Modules.Megaplane
             if (aircraft.IsServer)
             {
                 // host: the station selection and the turret's target only resolve here; tell every peer the verdict
-                want = !aircraft.disabled && (Command ?? (selected || turret.GetTarget() != null)) && (station == null || station.Ammo > 0 || selected);
+                bool deploy = selected || turret.GetTarget() != null;
+#if !PUBLIC_RELEASE
+                deploy = Command ?? deploy;
+#endif
+                want = !aircraft.disabled && deploy && (station == null || station.Ammo > 0 || selected);
                 if (want != lastWant)
                 {
                     lastWant = want;
