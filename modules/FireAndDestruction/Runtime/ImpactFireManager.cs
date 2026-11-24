@@ -123,17 +123,21 @@ namespace BoscaliSummer.Fire
         private float nextTreeClearFlush;
         private readonly FireVisualPool.Visual[] litVisuals = new FireVisualPool.Visual[3];
 
-        // Set by FireAndDestructionModule.Install.
-        private FireAndDestructionSettings Fire { get; set; }
-        private DiagnosticSettings Diagnostics { get; set; }
+        // Set by FireAndDestructionModule.Install. The Plugin.Settings fallback (archmap R3 baseline) is only for a
+        // manager that was never configured: nomodkit's ForestManagerUnityCheck adds this component to a bare
+        // GameObject against the built DLL and hands it settings through Plugin.Settings alone.
+        private FireAndDestructionSettings injectedFire;
+        private DiagnosticSettings injectedDiagnostics;
+        private FireAndDestructionSettings Fire => injectedFire ?? Plugin.Settings.FireAndDestruction;
+        private DiagnosticSettings Diagnostics => injectedDiagnostics ?? Plugin.Settings.Diagnostics;
 
         private void Awake() => Instance = this;
 
         internal void Configure(ServiceRegistry serviceRegistry, FireAndDestructionSettings fire, DiagnosticSettings diagnostics)
         {
             services = serviceRegistry;
-            Fire = fire;
-            Diagnostics = diagnostics;
+            injectedFire = fire;
+            injectedDiagnostics = diagnostics;
         }
 
         private void OnDestroy()

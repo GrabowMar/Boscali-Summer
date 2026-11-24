@@ -8,7 +8,7 @@
     "Core": 34,
     "DynamicOperations": 11,
     "Events": 10,
-    "FireAndDestruction": 17,
+    "FireAndDestruction": 19,
     "HighCommand": 4,
     "Hud": 3,
     "Immersion": 13,
@@ -55,12 +55,14 @@
   "r3_plugin_settings_reads": {
     "modules/Command/Presentation/MapUi/MapSymbology.cs": 1,
     "modules/Command/Presentation/MapUi/MfdMapInteractions.cs": 3,
-    "modules/Command/Presentation/MapUi/MfdTerrainRelief.cs": 12
+    "modules/Command/Presentation/MapUi/MfdTerrainRelief.cs": 12,
+    "modules/FireAndDestruction/Runtime/ImpactFireManager.cs": 2
   },
   "r3_reasons": {
     "modules/Command/Presentation/MapUi/MapSymbology.cs": "nomodkit Run-ReliefUnityCheck.ps1 compiles this file by path against ReliefUnityStubs.cs, whose stub Plugin.Settings.Command (TestCommandSettings) is the only settings type it offers; injecting CommandSettings needs a nomodkit stub change first.",
     "modules/Command/Presentation/MapUi/MfdMapInteractions.cs": "nomodkit Run-ReliefUnityCheck.ps1 compiles this file by path against ReliefUnityStubs.cs, whose stub Plugin.Settings.Command (TestCommandSettings) is the only settings type it offers; injecting CommandSettings needs a nomodkit stub change first.",
-    "modules/Command/Presentation/MapUi/MfdTerrainRelief.cs": "nomodkit Run-ReliefUnityCheck.ps1 compiles this file by path against ReliefUnityStubs.cs, whose stub Plugin.Settings.Command (TestCommandSettings) is the only settings type it offers; injecting CommandSettings needs a nomodkit stub change first."
+    "modules/Command/Presentation/MapUi/MfdTerrainRelief.cs": "nomodkit Run-ReliefUnityCheck.ps1 compiles this file by path against ReliefUnityStubs.cs, whose stub Plugin.Settings.Command (TestCommandSettings) is the only settings type it offers; injecting CommandSettings needs a nomodkit stub change first.",
+    "modules/FireAndDestruction/Runtime/ImpactFireManager.cs": "Fallback only for a manager that was never configured: nomodkit ForestManagerUnityCheck adds ImpactFireManager to a bare GameObject against the built DLL and supplies settings only through Plugin.Settings; production always goes through Configure. Drop it once that check calls Configure."
   },
   "shared_harmony_targets": {
     "AirSurvival": 1,

@@ -71,7 +71,8 @@ found structurally while literals are read from the original text. Detected form
    and strings are masked) more often than `r3_plugin_settings_reads` in the baseline allows. Modules take settings
    from `ModuleContext.Settings` in `Install` and hand them over. Every baselined file must also have a hand-written
    entry in `r3_reasons` (why it cannot take injected settings yet), or `--check` fails. Today: three Command map files
-   that nomodkit's Relief Unity check compiles against a stub `Plugin`.
+   that nomodkit's Relief Unity check compiles against a stub `Plugin`, and `ImpactFireManager`'s fallback for an
+   unconfigured manager (nomodkit's Forest manager Unity check sets only `Plugin.Settings`).
 5. **Ratchets** that fail only when a number grows: per-owner `Plugin.Settings` / `Plugin.Logger` reads (global
    state; new code takes `ModuleContext.Settings` / `Logger`), the number of `.cs` files over 1500 lines, per-owner
    namespace declarations outside the owner's prefix (`BoscaliSummer.Modules.<Owner>`, `BoscaliSummer.Core` for Core,

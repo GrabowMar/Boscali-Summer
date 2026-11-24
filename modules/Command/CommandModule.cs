@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Command
 
         public void Install(ModuleContext context)
         {
-            // First, so its teardown (clearing the static settings handle) runs last on rollback.
+            // First, so its teardown (clearing the static settings handle) is the last teardown action on rollback.
             CommandSettingsScope.Bind(context);
             AvUiSound.Volume = context.Settings.Command.UiSoundVolume.Value;
             AvUiSound.Recorded = name => BoscaliSummer.Core.Fx.SfxClips.Get(name);
