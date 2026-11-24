@@ -47,6 +47,7 @@ from finish import finish_surface
 from build_lods import write_lods
 from flightdeck import frame_displays
 from bridge_instruments import fit_bridge
+from crew_room import fit_crew_room
 from hold_interior import outfit_hold
 from planform import rebuild_planform
 from wing_structure import fit_wing_splices
@@ -126,6 +127,7 @@ def build():
     finish_crown_shading(nodes)
     fit_fore_sections(nodes)
     fit_bridge(nodes)
+    fit_crew_room(nodes)
     bpy.context.view_layer.update()
     root = nodes["BS_Megaplane"]
     write_lods(nodes, ASSETS/"megaplane.lod.gz")

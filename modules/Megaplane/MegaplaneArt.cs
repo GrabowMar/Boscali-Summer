@@ -75,6 +75,7 @@ namespace BoscaliSummer.Modules.Megaplane
         private static Material Material(string name, Color color, float metallic, float smoothness, float alpha, bool textured)
         {
             if (palette.TryGetValue(name, out Material existing) && existing != null) return existing;
+            if (name == "BS_Megaplane_CrewCRT_Emit") return DisplayMaterial(name, name + "_Tex");
             Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
             var material = new Material(shader) { name = name, hideFlags = HideFlags.DontUnloadUnusedAsset };
             if (textured)
@@ -136,15 +137,16 @@ namespace BoscaliSummer.Modules.Megaplane
             return mat;
         }
 
-        internal static Material SystemsDisplay()
+        internal static Material SystemsDisplay() => DisplayMaterial("BS_Megaplane_Systems", "BS_Megaplane_Systems");
+
+        private static Material DisplayMaterial(string name, string textureName)
         {
-            const string name = "BS_Megaplane_Systems";
             if (palette.TryGetValue(name, out Material cached) && cached != null) return cached;
             Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
             if (shader == null) shader = Shader.Find("Unlit/Texture");
             if (shader == null) shader = Shader.Find("Universal Render Pipeline/Lit");
             var screen = new Material(shader) { name = name, hideFlags = HideFlags.DontUnloadUnusedAsset };
-            Texture2D atlas = Texture(name, false, compress: false);
+            Texture2D atlas = Texture(textureName, false, compress: false);
             atlas.wrapMode = TextureWrapMode.Clamp;
             if (screen.HasProperty("_BaseMap")) screen.SetTexture("_BaseMap", atlas);
             if (screen.HasProperty("_MainTex")) screen.SetTexture("_MainTex", atlas);

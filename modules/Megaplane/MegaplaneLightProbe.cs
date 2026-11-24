@@ -13,6 +13,13 @@ namespace BoscaliSummer.Modules.Megaplane
         private MeshRenderer port, starboard, strobe;
         private bool sampledOn, sampledOff, visibleThroughout;
 
+        public static object Cabin(Dictionary<string, object> args)
+        {
+            var carrier = (Aircraft)args["idUnit"];
+            var lamps = carrier.GetComponentsInChildren<Light>(true).Where(l => l.name == "Cabin downlight").ToArray();
+            return new { installed = lamps.Length, illuminated = lamps.Count(l => l.isActiveAndEnabled) };
+        }
+
         public static object Read(Dictionary<string, object> args)
         {
             var carrier = (Aircraft)args["idUnit"];

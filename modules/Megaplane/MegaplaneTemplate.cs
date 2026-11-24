@@ -169,6 +169,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 lamp.spotAngle = 120f;
                 lamp.shadows = LightShadows.None;
             }
+            MegaplaneCabinLights.Install(aircraft, bridge, nodes);
             FitCockpit(aircraft, nodes);
             MegaplaneLod.Install(nodes);
             bool railgun = MegaplaneSettings.Railgun && nodes.ContainsKey("Railgun_Pitch");
@@ -241,6 +242,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 displays.Add(MegaplaneSystemsDisplay.Install(aircraft, systems, nodes, donor != null ? donor.gameObject.layer : systems.gameObject.layer));
             if (donor != null && donor.sharedMaterial != null) displays.Add(BuildTacticalDisplay(donor, pilot, nodes));
             Set(aircraft, "cockpitRenderers", displays.ToArray());
+            MegaplaneCrewDisplays.Install(aircraft, nodes);
         }
 
         private static Renderer BuildTacticalDisplay(Renderer donor, Transform pilot, Dictionary<string, Transform> nodes)
@@ -300,15 +302,23 @@ namespace BoscaliSummer.Modules.Megaplane
             foreach (Collider c in root.GetComponentsInChildren<Collider>(true)) c.enabled = false;
             int Depth(Transform t) { int d = 0; for (; t != root; t = t.parent) d++; return d; }
             AeroPart[] ordered = parts.Where(p => p.gameObject != aircraft.gameObject).OrderBy(p => Depth(p.transform)).ToArray();
-            Transform pilot = root.GetComponentsInChildren<Pilot>(true).Select(x => x.transform).FirstOrDefault();
+            // Darkreach's hierarchy lists the WSO first. The native pilot, camera and first-person
+            // rig all belong to pilots[0]. Move the cockpit and its controls with that crew member.
+            Transform captain = aircraft.pilots[0].transform;
+            if (!nodes.TryGetValue("FlightDeck_SeatMount_Pilot", out Transform captainSeat)) captainSeat = nodes["pilot"];
             Transform cockpit = parts.First(p => p.name == "cockpit").transform;
             for (int pass = 0; pass < 2; pass++)   // pass 2 re-seats the crew on the art's pilot anchor
                 foreach (AeroPart part in ordered)
                 {
                     part.transform.rotation = root.rotation;
                     if (Mapping.TryGetValue(part.name, out string node)) part.transform.position = nodes[node].position;
-                    else if (part.transform == cockpit && pilot != null) part.transform.position = nodes["pilot"].position - (pilot.position - cockpit.position);
+                    else if (part.transform == cockpit) cockpit.position += captainSeat.position - captain.position;
                 }
+            // The Groza's aisle is wider than Darkreach's. Keep the donor skeleton, ejection seat
+            // and damage registration together on the original cockpit parent.
+            if (aircraft.pilots.Length > 1 && aircraft.pilots[1] != null &&
+                nodes.TryGetValue("FlightDeck_SeatMount_Copilot", out Transform copilotSeat))
+                aircraft.pilots[1].transform.position = copilotSeat.position;
             foreach (AeroPart part in parts)
             {
                 if (Mapping.TryGetValue(part.name, out string node) && !NoArt.Contains(part.name)) nodes[node].SetParent(part.transform, true);

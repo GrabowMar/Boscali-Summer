@@ -60,10 +60,11 @@ namespace BoscaliSummer.Modules.Megaplane
             int gearState = carrier.NetworkgearDeployed ? (gear.Leg >= .999f ? 2 : 1) : (gear.Door <= .001f && gear.Leg <= .001f ? 0 : 1);
             changed |= Indicate(Gear, gearState);
             changed |= Indicate(Assist, flight.NoseAssist > .05f ? 1 : 0);
-            byte band = reactor.State;
-            changed |= Indicate(Plant, band >= MegaplaneReactor.Flash ? 3 : band >= 7 ? 2 : band >= 2 ? 1 : 0);
+            changed |= Indicate(Plant, PlantPage(reactor.State));
             if (changed) mesh.uv = uv;
         }
+
+        internal static int PlantPage(byte band) => band >= MegaplaneReactor.Flash ? 3 : band >= 7 ? 2 : band >= 2 ? 1 : 0;
 
         private void Initialize()
         {

@@ -319,6 +319,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 .Where(g => g.levels.Length == 2 && g.levels[1].renderers.Any(r => r != null && r.name.StartsWith("GrozaLOD_"))).ToArray();
             Renderer display = a.GetComponentsInChildren<Renderer>(true).FirstOrDefault(r => r.name == "GrozaTacticalDisplay");
             var systems = a.GetComponentInChildren<MegaplaneSystemsDisplay>(true);
+            var crewDisplays = a.GetComponentInChildren<MegaplaneCrewDisplays>(true);
             StatusDisplay schematic = Object.FindObjectsOfType<StatusDisplay>().FirstOrDefault(s => s.name.StartsWith("StatusDisplay_KY44"));
             var sections = schematic != null ? HarmonyLib.Traverse.Create(schematic).Field<List<PartStatusDisplay>>("statusDisplays").Value : null;
             return new
@@ -330,6 +331,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 flap = a.GetComponent<MegaplaneSurfaces>().InnerFlapAngle, display = display != null && display.enabled,
                 liveTexture = display != null && display.sharedMaterial.GetTexturePropertyNames().Any(k => display.sharedMaterial.GetTexture(k) is RenderTexture),
                 systems = systems == null ? null : systems.Inspect(),
+                crewRoom = crewDisplays == null ? null : crewDisplays.Inspect(),
                 tacticalInView = InCockpitFrame(display), systemsInView = systems != null && InCockpitFrame(systems.GetComponent<Renderer>()),
                 schematic = a.definition.aircraftParameters.StatusDisplay.name, sections = sections?.Count ?? 0,
                 damagedSections = sections == null ? new string[0] : sections.Where(s => s.partImage.color.a > .02f).Select(s => s.partImage.name).ToArray(),
