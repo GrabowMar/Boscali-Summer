@@ -14,7 +14,7 @@
     {"op": "capture", "name": "ky44-native-cockpit-hud", "hide_ui": false},
     {"op": "capture", "name": "ky44-native-cockpit", "hide_ui": true},
     {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.SavedFit", "args": {"id": "carrier"}, "store": "legacy"},
-    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.View", "args": {"id": "carrier", "x": -1.15, "y": 5.434, "z": 100.691, "lx": -1.15, "ly": 4.794, "lz": 101.611, "fov": 57}, "store": "mfdCam"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.View", "args": {"id": "carrier", "x": -1.15, "y": 5.434, "z": 100.691, "lx": -1.15, "ly": 5.08, "lz": 102.18, "fov": 43}, "store": "mfdCam"},
     {"op": "wait", "seconds": 2},
     {"op": "capture", "name": "ky44-live-tactical-display", "hide_ui": false},
     {"op": "seat", "id": "carrier", "view": "orbit"},

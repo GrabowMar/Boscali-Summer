@@ -318,6 +318,7 @@ namespace BoscaliSummer.Modules.Megaplane
             var islands = a.GetComponentsInChildren<LODGroup>().Select(g => new { island = g.name, levels = g.GetLODs() })
                 .Where(g => g.levels.Length == 2 && g.levels[1].renderers.Any(r => r != null && r.name.StartsWith("GrozaLOD_"))).ToArray();
             Renderer display = a.GetComponentsInChildren<Renderer>(true).FirstOrDefault(r => r.name == "GrozaTacticalDisplay");
+            var systems = a.GetComponentInChildren<MegaplaneSystemsDisplay>(true);
             StatusDisplay schematic = Object.FindObjectsOfType<StatusDisplay>().FirstOrDefault(s => s.name.StartsWith("StatusDisplay_KY44"));
             var sections = schematic != null ? HarmonyLib.Traverse.Create(schematic).Field<List<PartStatusDisplay>>("statusDisplays").Value : null;
             return new
@@ -328,12 +329,29 @@ namespace BoscaliSummer.Modules.Megaplane
                 farVisible = islands.Sum(g => g.levels[1].renderers.Count(r => r != null && r.isVisible)),
                 flap = a.GetComponent<MegaplaneSurfaces>().InnerFlapAngle, display = display != null && display.enabled,
                 liveTexture = display != null && display.sharedMaterial.GetTexturePropertyNames().Any(k => display.sharedMaterial.GetTexture(k) is RenderTexture),
+                systems = systems == null ? null : systems.Inspect(),
+                tacticalInView = InCockpitFrame(display), systemsInView = systems != null && InCockpitFrame(systems.GetComponent<Renderer>()),
                 schematic = a.definition.aircraftParameters.StatusDisplay.name, sections = sections?.Count ?? 0,
                 damagedSections = sections == null ? new string[0] : sections.Where(s => s.partImage.color.a > .02f).Select(s => s.partImage.name).ToArray(),
                 eyeDistance = Camera.main == null ? -1f : Vector3.Distance(Camera.main.transform.position, a.cockpitViewPoint.position),
                 eye = V(a.transform.InverseTransformPoint(a.cockpitViewPoint.position)),
                 camera = Camera.main == null ? null : V(a.transform.InverseTransformPoint(Camera.main.transform.position)),
             };
+        }
+
+        private static bool InCockpitFrame(Renderer face)
+        {
+            Camera camera = Camera.main;
+            if (camera == null || face == null || !face.enabled || !face.TryGetComponent(out MeshFilter filter) || filter.sharedMesh == null) return false;
+            Bounds bounds = filter.sharedMesh.bounds;
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 corner = face.transform.TransformPoint(new Vector3(i % 2 == 0 ? bounds.min.x : bounds.max.x,
+                    i < 2 ? bounds.min.y : bounds.max.y, bounds.center.z));
+                Vector3 frame = camera.WorldToViewportPoint(corner);
+                if (frame.z <= camera.nearClipPlane || frame.x < 0f || frame.x > 1f || frame.y < 0f || frame.y > 1f) return false;
+            }
+            return true;
         }
 
         public static object SavedFit(Dictionary<string, object> args)

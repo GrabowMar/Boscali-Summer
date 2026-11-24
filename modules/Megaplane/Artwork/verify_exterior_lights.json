@@ -1,0 +1,39 @@
+{
+  "name": "ky44-exterior-lights",
+  "description": "Observe the Groza's port strobe housing across a flash cycle and each wingtip's power after the port tip separates.",
+  "mission": "Free Flight",
+  "mods": ["boscalisummer"],
+  "timeout_s": 120,
+  "ops": [
+    {"op":"atmosphere","time_of_day":22,"conditions":0.025,"cloud_height":5300},
+    {"op":"seat","id":"carrier","aircraft":"KY-44 Groza","near":[10000,-35000],"altitude":3100,"speed":145,"heading":90,"view":"orbit","timeout":60},
+    {"op":"record","ids":["carrier"],"hz":2},
+    {"op":"wait","seconds":1},
+    {"op":"call","method":"BoscaliSummer.Modules.Megaplane.MegaplaneLightProbe.Read","args":{"id":"carrier","sample":true}},
+    {"op":"wait","seconds":3.1},
+    {"op":"call","method":"BoscaliSummer.Modules.Megaplane.MegaplaneLightProbe.Read","args":{"id":"carrier"},"store":"before"},
+    {"op":"call","method":"BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.Detach","args":{"id":"carrier","nodes":"Wing_Tip_L"},"store":"detach"},
+    {"op":"wait","seconds":0.3},
+    {"op":"call","method":"BoscaliSummer.Modules.Megaplane.MegaplaneLightProbe.Read","args":{"id":"carrier","sample":true}},
+    {"op":"wait","seconds":3.1},
+    {"op":"call","method":"BoscaliSummer.Modules.Megaplane.MegaplaneLightProbe.Read","args":{"id":"carrier"},"store":"after"},
+    {"op":"end"}
+  ],
+  "checks": [
+    {"check":"status_ok"},
+    {"check":"log_clean","sources":["Boscali Summer"]},
+    {"check":"alive","ids":["carrier"]},
+    {"check":"result_equals","path":"before.sampledOn","value":true},
+    {"check":"result_equals","path":"before.sampledOff","value":true},
+    {"check":"result_equals","path":"before.visibleThroughout","value":true},
+    {"check":"result_equals","path":"before.portOn","value":true},
+    {"check":"result_equals","path":"before.starboardOn","value":true},
+    {"check":"result_equals","path":"detach.ok","value":true},
+    {"check":"result_equals","path":"after.portSeparated","value":true},
+    {"check":"result_equals","path":"after.starboardSeparated","value":false},
+    {"check":"result_equals","path":"after.portOn","value":false},
+    {"check":"result_equals","path":"after.starboardOn","value":true},
+    {"check":"result_equals","path":"after.sampledOn","value":false},
+    {"check":"result_equals","path":"after.visibleThroughout","value":true}
+  ]
+}
