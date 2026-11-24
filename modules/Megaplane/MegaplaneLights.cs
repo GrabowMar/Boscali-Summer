@@ -1,58 +1,94 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
-    /// <summary>The G-240's exterior lighting rhythm (art: details/detail_lights.py, one object per host and blink
-    /// class). Nav red/green and the formation strips burn steady; the white tail/wingtip strobes double-flash like
-    /// a transport's; the centreline anti-collision beacons pulse out of phase with them. Deterministic from
-    /// Time.time, so every peer blinks the same without a byte on the wire; lamps that rode a shot-off island keep
-    /// blinking with it. The strobes are off while the carrier is disabled: a dead ship goes dark.</summary>
+    /// <summary>Exterior lamps keep their glass and mount visible through each flash and after loss of power.</summary>
     internal sealed class MegaplaneLights : MonoBehaviour
     {
-        private const float StrobePeriod = 1.4f;   // double-flash every 1.4 s (transport practice is 1-1.5)
-        private const float BeaconPeriod = 0.9f;   // anti-collision pulse
+        private const float StrobePeriod = 1.4f, BeaconPeriod = .9f;
+        private static readonly int Emission = Shader.PropertyToID("_EmissionColor");
+        private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+
+        private enum Pattern { Steady, Strobe, Beacon }
+
+        private sealed class Lamp
+        {
+            internal Renderer Fixture;
+            internal AeroPart Owner;
+            internal Pattern Rhythm;
+            internal int Slot;
+            internal MaterialPropertyBlock Unlit;
+            internal bool Lit = true;
+        }
+
         private Aircraft aircraft;
-        private readonly List<Renderer> strobes = new List<Renderer>(), beacons = new List<Renderer>();
+        private MegaplaneReactor reactor;
+        private readonly List<Lamp> lamps = new List<Lamp>();
+
+        internal static bool IsFixture(string name) => name.StartsWith("Det_lights_", StringComparison.Ordinal) ||
+            name.StartsWith("TipLamp_", StringComparison.Ordinal);
 
         private void Awake()
         {
             aircraft = GetComponent<Aircraft>();
-            foreach (Transform t in GetComponentsInChildren<Transform>(true))
+            reactor = GetComponent<MegaplaneReactor>();
+            foreach (MeshRenderer fixture in GetComponentsInChildren<MeshRenderer>(true))
             {
-                if (!t.name.StartsWith("Det_lights_")) continue;
-                if (t.name.EndsWith("_strobe")) Add(strobes, t);
-                else if (t.name.EndsWith("_beacon")) Add(beacons, t);
+                string name = fixture.name;
+                if (!IsFixture(name)) continue;
+                Pattern rhythm = name.EndsWith("_strobe", StringComparison.Ordinal) ? Pattern.Strobe :
+                    name.EndsWith("_beacon", StringComparison.Ordinal) ? Pattern.Beacon : Pattern.Steady;
+                AeroPart owner = fixture.GetComponentInParent<AeroPart>(true);
+                Material[] materials = fixture.sharedMaterials;
+                for (int slot = 0; slot < materials.Length; slot++)
+                {
+                    Material material = materials[slot];
+                    if (material == null || !material.IsKeywordEnabled("_EMISSION")) continue;
+                    var unlit = new MaterialPropertyBlock();
+                    unlit.SetColor(Emission, Color.black);
+                    // An unpowered lens still catches sunlight and retains its tint.
+                    int baseId = material.HasProperty(BaseColor) ? BaseColor : ColorId;
+                    if (material.HasProperty(baseId))
+                    {
+                        Color tint = material.GetColor(baseId);
+                        Color dim = tint * .18f;
+                        dim.a = tint.a;
+                        unlit.SetColor(baseId, dim);
+                    }
+                    lamps.Add(new Lamp { Fixture = fixture, Owner = owner, Slot = slot, Rhythm = rhythm, Unlit = unlit });
+                }
             }
-        }
-
-        private static void Add(List<Renderer> list, Transform t)
-        {
-            Renderer r = t.GetComponent<Renderer>();
-            if (r != null) list.Add(r);
         }
 
         private void Update()
         {
-            if (aircraft == null) return;
-            bool dark = aircraft.disabled;
-            float t = Time.time;
-            // double-flash: two 60 ms blinks 150 ms apart, then a long dark
-            bool strobe = !dark && (t % StrobePeriod < .06f || t % StrobePeriod > .15f && t % StrobePeriod < .21f);
-            // anti-collision: a 120 ms pulse, offset a third period so the two rhythms never lock
-            bool beacon = !dark && (t + BeaconPeriod / 3f) % BeaconPeriod < .12f;
-            Set(strobes, strobe);
-            Set(beacons, beacon);
+            bool power = aircraft != null && !aircraft.disabled && (reactor == null || reactor.AvailablePower > 0f);
+            float now = Time.time;
+            float phase = now % StrobePeriod;
+            bool strobe = phase < .06f || phase >= .15f && phase < .21f;
+            bool beacon = (now + BeaconPeriod / 3f) % BeaconPeriod < .12f;
+            foreach (Lamp lamp in lamps)
+            {
+                bool attached = lamp.Owner != null && !lamp.Owner.IsDetached();
+                Set(lamp, power && attached && (lamp.Rhythm == Pattern.Steady ||
+                    (lamp.Rhythm == Pattern.Strobe ? strobe : beacon)));
+            }
         }
 
-        private static void Set(List<Renderer> list, bool on)
+        private void OnDisable()
         {
-            for (int i = 0; i < list.Count; i++)
-            {
-                Renderer r = list[i];
-                if (r == null) continue;   // its island left with the piece
-                if (r.enabled != on) r.enabled = on;
-            }
+            // Detached fixtures can outlive the unit which supplied their power.
+            foreach (Lamp lamp in lamps) Set(lamp, false);
+        }
+
+        private static void Set(Lamp lamp, bool on)
+        {
+            if (lamp.Lit == on || lamp.Fixture == null) return;
+            lamp.Lit = on;
+            lamp.Fixture.SetPropertyBlock(on ? null : lamp.Unlit, lamp.Slot);
         }
     }
 }

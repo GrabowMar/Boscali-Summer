@@ -76,7 +76,6 @@ namespace BoscaliSummer.Modules.Megaplane
             definition.jsonKey = Key;
             definition.code = "KY-44";
             definition.unitName = "KY-44 Groza";
-            definition.description = "A fission-powered flying carrier with a 342 m wingspan, eight engine pods and an internal cargo hold. It launches airborne. At low forward speed, lower the gear, add throttle and pull back to open the nose fans and assist the climb. Center the stick to hold altitude.";
             definition.value = 400f;
             definition.radarSize = 3f;
             definition.manpower = 12;
@@ -173,6 +172,10 @@ namespace BoscaliSummer.Modules.Megaplane
             FitCockpit(aircraft, nodes);
             MegaplaneLod.Install(nodes);
             bool railgun = MegaplaneSettings.Railgun && nodes.ContainsKey("Railgun_Pitch");
+            definition.description = $"A fission-powered flying carrier with a {definition.width:0} m span, eight engine pods and an internal cargo hold. " +
+                (railgun ? "Its ventral bay carries a retractable RG-240 Trident. " :
+                    "Its ventral bay can launch and recover two fighters. Hold course and speed during recovery. ") +
+                "The Groza starts airborne. At low speed, lower the gear, add throttle and pull back for nose lift. Center the stick to hold altitude.";
             MegaplaneGuns.Graft(encyclopedia, aircraft, nodes, railgun);
             // The bay holds one payload: the other's art is switched off (its hitboxes go with it).
             foreach (KeyValuePair<string, Transform> n in nodes)
@@ -232,9 +235,16 @@ namespace BoscaliSummer.Modules.Megaplane
             // The native camera normally re-enables the donor hull or interior when switching views.
             // Keep only the Groza glazing and cockpit in both views. Its live display is for the seated pilot.
             Set(aircraft, "exteriorRenderers", new Renderer[0]);
-            Set(aircraft, "cockpitRenderers", new Renderer[0]);
+            var displays = new List<Renderer>(2);
             Renderer donor = aircraft.cockpit.GetComponentsInChildren<Renderer>(true).FirstOrDefault(r => r.name == "tacScreen");
-            if (donor == null || donor.sharedMaterial == null) return;
+            if (nodes.TryGetValue("SystemsScreen", out Transform systems))
+                displays.Add(MegaplaneSystemsDisplay.Install(aircraft, systems, nodes, donor != null ? donor.gameObject.layer : systems.gameObject.layer));
+            if (donor != null && donor.sharedMaterial != null) displays.Add(BuildTacticalDisplay(donor, pilot, nodes));
+            Set(aircraft, "cockpitRenderers", displays.ToArray());
+        }
+
+        private static Renderer BuildTacticalDisplay(Renderer donor, Transform pilot, Dictionary<string, Transform> nodes)
+        {
             var face = new GameObject("GrozaTacticalDisplay");
             face.layer = donor.gameObject.layer;
             bool hasLocator = nodes.TryGetValue("TacticalScreen", out Transform locator);
@@ -254,7 +264,9 @@ namespace BoscaliSummer.Modules.Megaplane
             Renderer display = face.AddComponent<MeshRenderer>();
             display.sharedMaterial = donor.sharedMaterial;
             display.enabled = false;
-            Set(aircraft, "cockpitRenderers", new[] { display });
+            display.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            display.receiveShadows = false;
+            return display;
         }
 
         /// <summary>A new damage island: a copy of the donor's "tail" island stripped to its AeroPart, under `parent`

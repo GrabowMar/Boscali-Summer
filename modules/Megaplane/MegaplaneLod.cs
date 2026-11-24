@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 if (!node.Value.TryGetComponent(out MeshRenderer renderer)) continue;
                 foreach (Material material in renderer.sharedMaterials) materials[material.name] = material;
                 // Strobes and nav lights remain visible when viewed from outside the formation.
-                if (node.Key.StartsWith("Det_lights_") || node.Key.StartsWith("LiftGlow_")) continue;
+                if (MegaplaneLights.IsFixture(node.Key) || node.Key.StartsWith("LiftGlow_")) continue;
                 AeroPart owner = node.Value.GetComponentInParent<AeroPart>(true);
                 if (owner == null) continue;
                 if (!islands.TryGetValue(owner, out Levels levels)) islands.Add(owner, levels = new Levels());

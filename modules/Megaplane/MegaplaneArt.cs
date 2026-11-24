@@ -136,7 +136,29 @@ namespace BoscaliSummer.Modules.Megaplane
             return mat;
         }
 
-        private static Texture2D Texture(string name, bool linear, bool optional = false)
+        internal static Material SystemsDisplay()
+        {
+            const string name = "BS_Megaplane_Systems";
+            if (palette.TryGetValue(name, out Material cached) && cached != null) return cached;
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null) shader = Shader.Find("Unlit/Texture");
+            if (shader == null) shader = Shader.Find("Universal Render Pipeline/Lit");
+            var screen = new Material(shader) { name = name, hideFlags = HideFlags.DontUnloadUnusedAsset };
+            Texture2D atlas = Texture(name, false, compress: false);
+            atlas.wrapMode = TextureWrapMode.Clamp;
+            if (screen.HasProperty("_BaseMap")) screen.SetTexture("_BaseMap", atlas);
+            if (screen.HasProperty("_MainTex")) screen.SetTexture("_MainTex", atlas);
+            if (screen.HasProperty("_EmissionMap"))
+            {
+                screen.SetTexture("_EmissionMap", atlas);
+                screen.SetColor("_EmissionColor", Color.white);
+                screen.EnableKeyword("_EMISSION");
+            }
+            palette[name] = screen;
+            return screen;
+        }
+
+        private static Texture2D Texture(string name, bool linear, bool optional = false, bool compress = true)
         {
             byte[] bytes = EmbeddedResources.ReadAll(typeof(MegaplaneArt).Assembly, "BoscaliSummer.Megaplane." + name + ".png", 32 * 1024 * 1024);
             if (bytes == null && optional) return null;
@@ -148,7 +170,7 @@ namespace BoscaliSummer.Modules.Megaplane
             };
             if (!ImageConversion.LoadImage(texture, bytes, false)) throw new InvalidDataException("Invalid Megaplane texture " + name + ".");
             // Normal maps stay uncompressed: URP reads RGB normals from RGBA32 (alpha 1), DXT5 would need the AG layout.
-            if (!linear && SystemInfo.SupportsTextureFormat(TextureFormat.DXT5)) texture.Compress(true);
+            if (compress && !linear && SystemInfo.SupportsTextureFormat(TextureFormat.DXT5)) texture.Compress(true);
             texture.Apply(true, true);
             return texture;
         }
