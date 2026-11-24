@@ -97,6 +97,16 @@ def verify(nodes):
                     nearest=min(nearest,projected_radius(clipped))
         clearance=nearest-radius
         assert clearance>.04,(side,"rotor edge",clearance)
+        # The forward outboard deck sector lies between the octagonal coaming
+        # and a transverse skin fold. Check rays across its entire tapered width.
+        for along in np.linspace(.02,.98,33):
+            y=center.y+1.7766+along*.9639
+            inboard=.7565+along*.4102
+            outboard=.8064+along*.4375
+            for x in np.linspace(inboard+.002,outboard-.002,7):
+                sample=Vector((center.x+sign*x,y,top+1))
+                hit,normal,_,_=s.ray_cast(sample,(0,0,-1))
+                assert hit is not None and abs(hit.z-top)<.002 and normal.z>.99,(side,"unsealed intake deck",sample)
 
         # The closed lid blocks every sampled sightline into the fan. At full open
         # the same rays all pass the doors; several must see the physical blades.

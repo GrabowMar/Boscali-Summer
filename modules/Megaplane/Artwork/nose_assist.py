@@ -213,8 +213,18 @@ def add_nose_assist(nodes):
                 for low,high in ((CY-20,creases[0]),creases,(creases[1],CY+20)):
                     piece=clipped(clipped(sector,low,1),high,-1)
                     if len(piece)>2:
-                        face(case,[(p.x,p.y,elevation(tip_height((p.y-CY)/MACHINERY_SCALE,height)))
-                                   for p in piece],material,(0,0,up))
+                        flat=[Vector((p.x,p.y,elevation(tip_height((p.y-CY)/MACHINERY_SCALE,height))))
+                              for p in piece]
+                        # The clip can put several consecutive points on a
+                        # straight edge. Select the best-conditioned corner so
+                        # Surface.face can determine the winding of the sector.
+                        count=len(case.faces)
+                        face(case,flat,material,(0,0,up))
+                        if len(case.faces)==count:
+                            corner=max(range(len(flat)),key=lambda k:
+                                       (flat[k]-flat[k-1]).cross(flat[(k+1)%len(flat)]-flat[k]).length_squared)
+                            start=(corner-1)%len(flat)
+                            face(case,flat[start:]+flat[:start],material,(0,0,up))
         deck(walls[0],top,TOP,"Skin",1)
         sections=[[point(x,y,tip_height(y,z)) for x,y in shape] for shape,z in outlines]
         for n,mat in enumerate(("Skin","Skin","Skin","ChineLower")):
