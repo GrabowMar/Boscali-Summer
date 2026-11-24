@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Megaplane
         private const float SurfaceRate = 40f;   // deg/s commanded deflection
         private const float FlapSeconds = 9f;   // a 60 m flap set takes its time
         private Aircraft aircraft;
+        private readonly Dictionary<Transform, AeroPart> actuatorOwners = new Dictionary<Transform, AeroPart>();
         private float flap;   // 0 up .. 1 approach config (gear/lift flag, as the lift jets do)
         private readonly List<(Transform t, Quaternion rest, Vector3 axis, float sign)> ailerons = new List<(Transform, Quaternion, Vector3, float)>();
         private readonly List<(Transform t, Quaternion rest, Vector3 axis, float sign)> spoilers = new List<(Transform, Quaternion, Vector3, float)>();
@@ -41,6 +42,8 @@ namespace BoscaliSummer.Modules.Megaplane
                 else if (n.StartsWith("Flap_Inner_")) flapsInner.Add((t, t.localRotation, Hinge(t)));
                 else if (n.StartsWith("Flap_Outer_")) flapsOuter.Add((t, t.localRotation, Hinge(t)));
                 else if (n == "Elevator") elevators.Add((t, t.localRotation, 1f));
+                else continue;
+                actuatorOwners.Add(t, t.GetComponentInParent<AeroPart>(true));
             }
         }
 
@@ -73,8 +76,18 @@ namespace BoscaliSummer.Modules.Megaplane
 
         private void Deflect(Transform t, Quaternion rest, Vector3 axis, float degrees, float step)
         {
-            if (t != null && t.IsChildOf(transform))
-                t.localRotation = Quaternion.RotateTowards(t.localRotation, rest * Quaternion.AngleAxis(degrees, axis), step);
+            if (t == null || !t.IsChildOf(transform)) return;
+            AeroPart owner = actuatorOwners[t];
+            if (owner != null)
+            {
+                // A pierced actuator still moves, but loses travel and responds slowly.
+                // A broken-off surface keeps its last deflection on the debris.
+                if (owner.IsDetached() || owner.hitPoints <= 0f) return;
+                float response = Mathf.InverseLerp(0f, 85f, owner.hitPoints);
+                degrees *= Mathf.Lerp(.25f, 1f, response);
+                step *= Mathf.Lerp(.12f, 1f, response);
+            }
+            t.localRotation = Quaternion.RotateTowards(t.localRotation, rest * Quaternion.AngleAxis(degrees, axis), step);
         }
     }
 }

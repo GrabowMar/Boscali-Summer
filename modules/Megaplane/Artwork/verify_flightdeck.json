@@ -71,7 +71,7 @@
     {"check": "result_above", "path": "distant.farVisible", "min": 1},
     {"check": "result_equals", "path": "cockpit.liveTexture", "value": true},
     {"check": "result_equals", "path": "legacy.valid", "value": true},
-    {"check": "result_equals", "path": "hudsnap.sections", "value": 35},
+    {"check": "result_equals", "path": "hudsnap.sections", "value": 42},
     {"check": "result_equals", "path": "hudsnap.damagedSections", "value": ["wing1a_R"]},
     {"check": "result_above", "path": "legacy.darkreachHangars", "min": 1},
     {"check": "result_equals", "path": "legacy.allHangars", "value": true}

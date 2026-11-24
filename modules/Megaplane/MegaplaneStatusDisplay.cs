@@ -36,6 +36,8 @@ namespace BoscaliSummer.Modules.Megaplane
             Image backdrop = status.Field<Image>("aircraftBackground").Value;
             var parts = status.Field<List<PartStatusDisplay>>("statusDisplays").Value;
             var thresholds = parts.GroupBy(p => p.partImage.name).ToDictionary(g => g.Key, g => g.First().redStatusThreshold);
+            thresholds["reactor"] = 35f;
+            thresholds["coolant_L"] = thresholds["coolant_R"] = 50f;
             foreach (PartStatusDisplay part in parts) part.partImage.enabled = false;
             parts.Clear();
             for (int i = 0; i < names.Length; i++)

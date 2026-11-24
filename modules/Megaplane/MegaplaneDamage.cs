@@ -20,9 +20,9 @@ namespace BoscaliSummer.Modules.Megaplane
         private static readonly Dictionary<string, float> Lift = new Dictionary<string, float>
         { { "engine", .30f }, { "gearbay", .25f }, { "wing1b", .17f }, { "wing2", .12f }, { "wingtip", .04f },
           { "wing1a", .06f }, { "aileron", .04f }, { "flap", .02f } };
-        private static readonly HashSet<string> Core = new HashSet<string> { "cockpit", "fuselage_F", "fuselage_R", "nose", "intake_L", "intake_R" };
+        private static readonly HashSet<string> Core = new HashSet<string> { "cockpit", "fuselage_F", "fuselage_R", "nose", "intake_L", "intake_R", "reactor" };
         internal static readonly HashSet<string> Critical = new HashSet<string> { "cockpit", "fuselage_F", "fuselage_R", "body_F" };
-        private const float DeadSide = .3f, BreakupMin = 3f, BreakupMax = 7f, EffectScale = 6f;
+        private const float DeadSide = .3f, BreakupMin = 3f, BreakupMax = 7f, EffectScale = .80f;
 
         private Aircraft aircraft;
         private AeroPart[] parts;
@@ -51,6 +51,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 keys[i] = (n.EndsWith("_L") || n.EndsWith("_R") ? n.Substring(0, n.Length - 2) : n,
                            n.EndsWith("_L") ? "L" : n.EndsWith("_R") ? "R" : null);
                 part.onPartDetached += Separate;
+                if (n == "fuselage_F" || n == "wing2_L" || n == "wing2_R") part.onParentDetached += LoseMount;
                 part.onApplyDamage += e => dirty.Add(part);
             }
         }
@@ -75,6 +76,17 @@ namespace BoscaliSummer.Modules.Megaplane
             out_.y = 0f;
             Vector3 v = aircraft.rb.GetPointVelocity(pos) + out_.normalized * 4f + Vector3.down * 3f;
             aircraft.DetachPart(part.id, v, pos - aircraft.transform.position);
+        }
+
+        // Also called when a parent wing departs with its child panels still attached.
+        private void LoseMount(UnitPart part)
+        {
+            if (!aircraft.IsServer) return;
+            if (part.name == "fuselage_F")
+                foreach (AeroPart mounted in parts)
+                    if (mounted != null && (mounted.name == "noseAssist_L" || mounted.name == "noseAssist_R")) Break(mounted);
+            if (part.name == "wing2_L" || part.name == "wing2_R")
+                Break(parts.FirstOrDefault(p => p != null && p.name == "pod4_" + part.name[part.name.Length - 1]));
         }
 
         // Every peer: a piece leaving overlaps the hull it came from; without this the two convex sets shove each other apart.
@@ -108,8 +120,12 @@ namespace BoscaliSummer.Modules.Megaplane
                 if (side != null && Lift.TryGetValue(stem, out float w) && up) { w *= Mathf.Lerp(.5f, 1f, p.hitPoints * .01f); if (side == "L") l += w; else r += w; }
                 string n = p.name;
                 if (n == "hstab" && !up) pitch = 0f;
-                if ((stem == "vstab1" || stem == "nozzle") && !up) { if (side == "L") yawL = 0f; else yawR = 0f; }
-                else if (stem == "rudder" && !up) { if (side == "L") yawL = Mathf.Min(yawL, .4f); else yawR = Mathf.Min(yawR, .4f); }
+                if (stem == "vstab1" || stem == "nozzle" || stem == "rudder")
+                {
+                    float local = up ? Mathf.Clamp01(p.hitPoints * .01f) : 0f;
+                    float authority = stem == "rudder" ? Mathf.Lerp(.4f, 1f, local) : local;
+                    if (side == "L") yawL = Mathf.Min(yawL, authority); else yawR = Mathf.Min(yawR, authority);
+                }
                 // Hit points lower authority a little before anything comes off.
                 if (up && n == "hstab") pitch = Mathf.Lerp(.6f, 1f, p.hitPoints * .01f);
             }
@@ -152,7 +168,7 @@ namespace BoscaliSummer.Modules.Megaplane
             }
         }
 
-        // Donor fires and smoke are sized for a 33 m bomber: grow the ones the islands spawn.
+        // Resize native particle instances on this carrier only. A child airframe island must retain its scale.
         private void LateUpdate()
         {
             if (dirty.Count == 0) return;
@@ -164,7 +180,7 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             foreach (Transform child in island)
             {
-                if (scaled.Contains(child) || child.name.StartsWith("BS_Fx") || child.GetComponent<ParticleSystem>() == null && child.GetComponentInChildren<DamageParticles>(true) == null) continue;
+                if (scaled.Contains(child) || child.name.StartsWith("BS_Fx") || child.GetComponent<ParticleSystem>() == null && child.GetComponent<DamageParticles>() == null) continue;
                 scaled.Add(child);
                 foreach (ParticleSystem ps in child.GetComponentsInChildren<ParticleSystem>(true))
                 {

@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Megaplane
             definition.jsonKey = Key;
             definition.code = "KY-44";
             definition.unitName = "KY-44 Groza";
-            definition.description = "A fission-powered flying carrier with a 342 m wingspan, eight engine pods and an internal cargo hold. It launches airborne. Center the stick to hold altitude and use the throttle to set speed.";
+            definition.description = "A fission-powered flying carrier with a 342 m wingspan, eight engine pods and an internal cargo hold. It launches airborne. At low forward speed, lower the gear, add throttle and pull back to open the nose fans and assist the climb. Center the stick to hold altitude.";
             definition.value = 400f;
             definition.radarSize = 3f;
             definition.manpower = 12;
@@ -122,7 +122,16 @@ namespace BoscaliSummer.Modules.Megaplane
             definition.height = envelope.size.y;
             definition.length = envelope.size.z;
             Dictionary<string, Transform> nodes = model.GetComponentsInChildren<Transform>(true).GroupBy(t => t.name).ToDictionary(g => g.Key, g => g.First());
+            // Append the two optional native parts after the old hierarchy to preserve earlier part indices.
+            foreach (string side in new[] { "L", "R" })
+                if (nodes.ContainsKey("NoseAssist_" + side)) AddIsland(go.transform, "noseAssist_" + side, null);
+            // New root siblings keep the network IDs of all previously shipped parts stable.
+            foreach (string island in new[] { "pod4_L", "pod4_R", "reactor", "coolant_L", "coolant_R" })
+                AddIsland(go.transform, island, null);
             RefitAirframe(aircraft, model, nodes);
+            foreach (string side in new[] { "L", "R" })
+                if (nodes.TryGetValue("NoseAssist_" + side, out Transform housing))
+                    housing.gameObject.AddComponent<MegaplaneNoseFan>().Bind(nodes, side);
             foreach (var marker in nodes.Where(n => n.Key.StartsWith("Detail_Bay_WorkLight_")))
             {
                 marker.Value.localRotation = Quaternion.Euler(90f, 0f, 0f);
@@ -148,6 +157,7 @@ namespace BoscaliSummer.Modules.Megaplane
             go.GetComponent<Rigidbody>().mass = Mass;
             go.AddComponent<MegaplaneDamage>();
             go.AddComponent<MegaplaneFx>();
+            go.AddComponent<MegaplaneReactor>();
             go.AddComponent<MegaplaneFlight>();
             go.AddComponent<MegaplaneGear>();
             go.AddComponent<MegaplaneFans>();
@@ -172,6 +182,9 @@ namespace BoscaliSummer.Modules.Megaplane
             { "vstab1_L", "Fin_L" }, { "vstab1_R", "Fin_R" }, { "vstab2_L", "Rudder_L" }, { "vstab2_R", "Rudder_R" },
             { "rudder_L", "Rudder_L" }, { "rudder_R", "Rudder_R" },
             { "body_F", "Fuselage_Forward" }, { "hump", "Fuselage_Hump" }, { "pod1_L", "Pod_L1" }, { "pod1_R", "Pod_R1" },
+            { "noseAssist_L", "NoseAssist_L" }, { "noseAssist_R", "NoseAssist_R" },
+            { "pod4_L", "Pod_L4" }, { "pod4_R", "Pod_R4" }, { "reactor", "ReactorCore" },
+            { "coolant_L", "CoolantPack_L" }, { "coolant_R", "CoolantPack_R" },
         };
         private static readonly Dictionary<string, string> ExtraArt = new Dictionary<string, string>();
         // Position-only islands share another island's art.
@@ -270,9 +283,15 @@ namespace BoscaliSummer.Modules.Megaplane
             foreach (MeshFilter mesh in art)
             {
                 AeroPart owner = mesh.GetComponentInParent<AeroPart>(true);
+                // The centre hull encloses two open compartments. Separate convex strips preserve
+                // the upper cover opening and keep the fighter-bay volume clear beneath its deck.
+                if (mesh.name == "Fuselage_Center") continue;
+                if (mesh.name.StartsWith("ReactorHull_", StringComparison.Ordinal))
+                    Object.DestroyImmediate(mesh.GetComponent<MeshRenderer>());
                 // Paint, lamps and interior fittings sit on an existing hull. A convex collider over
                 // disconnected lamps or decals would invent solid surfaces between them.
-                if (owner == null || mesh.name.Contains("Canopy") || mesh.name.StartsWith("Int_") || mesh.name.StartsWith("FlightDeck_") ||
+                if (owner == null || mesh.name == "Antennas" || mesh.name == "Dorsal_ServiceTrunks" ||
+                    mesh.name.Contains("Canopy") || mesh.name.StartsWith("Int_") || mesh.name.StartsWith("FlightDeck_") ||
                     mesh.name.StartsWith("Detail_") || mesh.name.StartsWith("Det_lights_")) continue;
                 var collider = mesh.gameObject.AddComponent<MeshCollider>();
                 collider.sharedMesh = mesh.sharedMesh;

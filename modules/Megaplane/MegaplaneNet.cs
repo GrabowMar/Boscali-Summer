@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Megaplane
     {
         public byte Protocol;
         public uint Unit;
-        public byte Index;   // 0/1 bay slot F/A, 2 railgun
+        public byte Index;   // 0/1 bay slot F/A, 2 railgun, 3 plant state
         public byte Value;
     }
 
@@ -34,9 +34,9 @@ namespace BoscaliSummer.Modules.Megaplane
     internal static class MegaplaneWire
     {
         /// <summary>Bump on any change to either message's layout.</summary>
-        public const byte ProtocolVersion = 1;
+        public const byte ProtocolVersion = 2;
 
-        internal const byte DropVerb = 0, RecallVerb = 1, RailgunIndex = 2;
+        internal const byte DropVerb = 0, RecallVerb = 1, RailgunIndex = 2, ReactorIndex = 3;
 
         public static void WriteState(NetworkWriter w, MegaplaneStateMessage v)
         {
@@ -53,7 +53,8 @@ namespace BoscaliSummer.Modules.Megaplane
             m.Unit = r.ReadPackedUInt32();
             m.Index = r.ReadByte();
             m.Value = r.ReadByte();
-            if (m.Index > RailgunIndex || m.Value > 4) m.Protocol = 0;
+            int max = m.Index == ReactorIndex ? MegaplaneReactor.Spent : m.Index == RailgunIndex ? 1 : 4;
+            if (m.Index > ReactorIndex || m.Value > max) m.Protocol = 0;
             return m;
         }
 
@@ -88,6 +89,7 @@ namespace BoscaliSummer.Modules.Megaplane
         internal static MegaplaneNet Instance { get; private set; }
         private static readonly List<MegaplaneBay> bays = new List<MegaplaneBay>();
         private static readonly List<MegaplaneRailgun> railguns = new List<MegaplaneRailgun>();
+        private static readonly List<MegaplaneReactor> reactors = new List<MegaplaneReactor>();
 
         private HandlerSlot serverSlot, clientSlot;
         private float nextPoll, nextRefresh;
@@ -115,6 +117,9 @@ namespace BoscaliSummer.Modules.Megaplane
         }
 
         internal static void UnregisterRailgun(MegaplaneRailgun railgun) => railguns.Remove(railgun);
+
+        internal static void Register(MegaplaneReactor reactor) => reactors.Add(reactor);
+        internal static void Unregister(MegaplaneReactor reactor) => reactors.Remove(reactor);
 
         private void Awake() => Instance = this;
 
@@ -145,6 +150,11 @@ namespace BoscaliSummer.Modules.Megaplane
             if (!unit.TryGetUnit(out Unit u) || !(u is Aircraft carrier)) return;
             if (message.Index <= 1) carrier.GetComponent<MegaplaneBay>()?.RemoteState(message.Index, message.Value);
             else if (message.Index == MegaplaneWire.RailgunIndex) carrier.GetComponent<MegaplaneRailgun>()?.RemoteWant(message.Value != 0);
+            else if (message.Index == MegaplaneWire.ReactorIndex)
+            {
+                var reactor = carrier.GetComponent<MegaplaneReactor>();
+                if (reactor != null) reactor.RemoteState(message.Value);
+            }
         }
 
         // ---- Host side ---------------------------------------------------------------------
@@ -219,6 +229,9 @@ namespace BoscaliSummer.Modules.Megaplane
                     if (rail == null || !rail.Wanted) continue;
                     Broadcast(rail.UnitId, MegaplaneWire.RailgunIndex, 1);
                 }
+                foreach (MegaplaneReactor reactor in reactors)
+                    if (reactor != null && reactor.State != 0)
+                        Broadcast(reactor.UnitId, MegaplaneWire.ReactorIndex, reactor.State);
             }
         }
     }

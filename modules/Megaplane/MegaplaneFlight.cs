@@ -28,25 +28,37 @@ namespace BoscaliSummer.Modules.Megaplane
 
         private Aircraft aircraft;
         private Rigidbody rb;
-        private Transform[] pods;
+        private AeroPart[] podOwners;
+        private bool[] portPod;
+        private MegaplaneNoseFan[] noseFans;
         private Transform[] liftDoors, liftVanes, liftGlows;
         private Quaternion[] doorRest, vaneRest;
         private MegaplaneDamage damage;
+        private MegaplaneReactor reactor;
         private bool holding;
         private float heading, altitude, bank, rollRate, climbCmd, crash;
 
         internal float Heading => heading;
         internal float HoldAltitude => altitude;
         internal float Thrust { get; private set; } = 1f;
+        internal static float PodHealth(AeroPart owner) => owner == null || owner.IsDetached() ? 0f : Mathf.Clamp01(owner.hitPoints * .01f);
         internal float Lift { get; private set; }   // lift jets 0 off .. 1 full
         internal int LiftBanks => liftGlows?.Length ?? 0;
+        internal float NoseAssist { get; private set; }
+        internal float ForwardSpeed { get; private set; }
+        private const float AssistPitch = 3f, AssistClimb = 3f;
+        internal MegaplaneNoseFan[] NoseFans => noseFans;
 
         private void Awake()
         {
             aircraft = GetComponent<Aircraft>();
             rb = GetComponent<Rigidbody>();
+            reactor = GetComponent<MegaplaneReactor>();
+            noseFans = GetComponentsInChildren<MegaplaneNoseFan>(true);
             Transform[] all = GetComponentsInChildren<Transform>(true);
-            pods = all.Where(t => t.name.StartsWith("Pod_") && !t.name.EndsWith("_Nozzle")).ToArray();
+            var pods = all.Where(t => t.name.StartsWith("Pod_") && !t.name.EndsWith("_Nozzle")).ToArray();
+            podOwners = pods.Select(p => p.GetComponentInParent<AeroPart>(true)).ToArray();
+            portPod = pods.Select(p => p.name.StartsWith("Pod_L")).ToArray();
             liftDoors = all.Where(t => t.name.StartsWith("LiftDoor_")).ToArray();
             liftVanes = all.Where(t => t.name.StartsWith("LiftVane_")).ToArray();
             liftGlows = all.Where(t => t.name.StartsWith("LiftGlow_")).ToArray();
@@ -65,6 +77,22 @@ namespace BoscaliSummer.Modules.Megaplane
             for (int i = 0; i < liftVanes.Length; i++) if (liftVanes[i] != null) liftVanes[i].localRotation = vaneRest[i] * Quaternion.AngleAxis(VaneOpen * open, Vector3.right);
             bool glow = Lift > .5f;
             foreach (Transform g in liftGlows) if (g != null && g.gameObject.activeSelf != glow) g.gameObject.SetActive(glow);
+            // The native aircraft synchronizes gear, pilot axes, velocity and part damage to observers.
+            // Horizontal forward travel keeps the fans off while parked, reversing, or falling vertically.
+            Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
+            ForwardSpeed = Vector3.Dot(rb.velocity, forward);
+            ControlInputs input = aircraft.GetInputs();
+            float speedWindow = Mathf.InverseLerp(30f, 45f, ForwardSpeed) * Mathf.InverseLerp(107f, 78f, ForwardSpeed);
+            float demand = !aircraft.disabled && aircraft.NetworkgearDeployed
+                ? speedWindow * Mathf.InverseLerp(.16f, .57f, input.throttle) * Mathf.InverseLerp(.08f, .55f, -input.pitch)
+                : 0f;
+            NoseAssist = 0f;
+            foreach (MegaplaneNoseFan fan in noseFans)
+            {
+                if (fan == null) continue;
+                fan.Step(demand, Time.deltaTime);
+                NoseAssist += .5f * fan.Power;
+            }
         }
 
         private void FixedUpdate()
@@ -87,18 +115,16 @@ namespace BoscaliSummer.Modules.Megaplane
                 bank = Mathf.DeltaAngle(0f, -transform.eulerAngles.z);
                 holding = true;
             }
-            // A pod that left with its damage island no longer pushes.
-            int alive = 0, left = 0, right = 0, podsL = 0, podsR = 0;
-            foreach (Transform p in pods)
+            float left = 0f, right = 0f;
+            int podsL = 0, podsR = 0;
+            for (int i = 0; i < podOwners.Length; i++)
             {
-                bool isL = p != null && p.name.StartsWith("Pod_L");
-                if (isL) podsL++; else podsR++;
-                if (p == null || !p.IsChildOf(transform)) continue;
-                alive++;
-                if (isL) left++; else right++;
+                if (portPod[i]) { podsL++; left += PodHealth(podOwners[i]); }
+                else { podsR++; right += PodHealth(podOwners[i]); }
             }
-            Thrust = pods.Length == 0 ? 1f : (float)alive / pods.Length;
-            float asymThrust = (podsL > 0 ? (float)left / podsL : 1f) - (podsR > 0 ? (float)right / podsR : 1f);
+            Thrust = podOwners.Length == 0 ? 1f : (left + right) / podOwners.Length;
+            if (reactor != null) Thrust *= reactor.AvailablePower;
+            float asymThrust = (podsL > 0 ? left / podsL : 1f) - (podsR > 0 ? right / podsR : 1f);
 
             ControlInputs input = aircraft.GetInputs();
             float wing = (wingL + wingR) * .5f;
@@ -110,7 +136,9 @@ namespace BoscaliSummer.Modules.Megaplane
             if (wing < .98f) altitude -= (.98f - wing) * 45f * dt;     // every lost panel costs lift: it sinks until the pilot trades speed
 
             // Pitch: the stick sets a climb rate, reached in a few seconds. A lost tailplane makes the stick vague.
+            float noseLift = NoseAssist * climbAuthority;
             float climbTarget = Mathf.Abs(input.pitch) > .05f ? -input.pitch * maxClimb * climbAuthority : 0f;
+            if (input.pitch < -.05f) climbTarget += noseLift * AssistClimb;
             climbCmd = Mathf.MoveTowards(climbCmd, climbTarget, ClimbRamp * dt);
             altitude += climbCmd * dt;
 
@@ -134,7 +162,7 @@ namespace BoscaliSummer.Modules.Megaplane
 
             float topSpeed = MaxSpeed * (.3f + .7f * Thrust) * (.88f + .12f * yawAuth);   // fewer pods, less speed; a sideslipping hull drags
             float speed = Mathf.Lerp(minSpeed, Mathf.Max(topSpeed, minSpeed), Mathf.Clamp01(input.throttle));
-            float climb = Mathf.Clamp(climbCmd + (altitude - aircraft.GlobalPosition().y) * .1f, -maxClimb, maxClimb * Mathf.Max(climbAuthority, .05f));
+            float climb = Mathf.Clamp(climbCmd + (altitude - aircraft.GlobalPosition().y) * .1f, -maxClimb, maxClimb * Mathf.Max(climbAuthority, .05f) + noseLift * AssistClimb);
             Vector3 flat = Quaternion.Euler(0, heading, 0) * Vector3.forward;
             Vector3 error = flat * speed + Vector3.up * climb - v;
             // Separate limits along the path (thrust spools, drag bleeds), up/down and sideways: momentum you can feel.
@@ -149,7 +177,7 @@ namespace BoscaliSummer.Modules.Megaplane
             float porpoise = (1f - pitchAuth) * 7f * Mathf.Sin(Time.time * 2f * Mathf.PI * .07f);
             float slip = (1f - yawAuth) * 9f * Sway(71f) + asymThrust * 4f;   // nose off the path: fishtail without fins, crab on asymmetric thrust
             float pitch = -Mathf.Asin(Mathf.Clamp(v.y / Mathf.Max(v.magnitude, 1f), -1f, 1f)) * Mathf.Rad2Deg - Mathf.Lerp(1f, 5f, slow) + porpoise;
-            Steer(pitch + Sway(0f) * .3f, heading + slip, bank + Sway(7f) * .6f, AttitudeKp, AttitudeKd);
+            Steer(pitch - noseLift * AssistPitch + Sway(0f) * .3f, heading + slip, bank + Sway(7f) * .6f, AttitudeKp, AttitudeKd);
         }
 
         /// <summary>Disabled: lift fades over half a minute, the nose drops and the weak wing goes down; pieces come off
