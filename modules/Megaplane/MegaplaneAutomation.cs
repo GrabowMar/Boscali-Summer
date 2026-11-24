@@ -321,10 +321,10 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 ok = true, started, recalled, door = bay.Door, stowed = bay.State.Count(x => x == 0),
                 capturePhase = bay.Released.Select(f => f != null && f.GetComponent<MegaplaneCapture>() is MegaplaneCapture cap ? cap.Phase : -1).ToArray(),
-                releasedAlive = bay.Released.Count(r => r != null && !r.disabled), releasedFriendly = bay.Released.Count(r => r != null && r.NetworkHQ == a.NetworkHQ), arm = bay.Arm, state = bay.State, fighter = bay.FighterKey,
+                releasedAlive = bay.Released.Count(r => r != null && !r.disabled), releasedFriendly = bay.Released.Count(r => r != null && r.NetworkHQ == a.NetworkHQ), arm = bay.Arm.ToArray(), state = bay.State.ToArray(), fighter = bay.FighterKey,
                 visuals = a.GetComponentsInChildren<Transform>(true).Count(t => t.name.StartsWith("BayFighter_") && t.gameObject.activeSelf),
-                released = bay.Released.Select(r => r == null ? null : new { r.unitName, alive = !r.disabled, speed = r.rb != null ? r.rb.velocity.magnitude : 0f,
-                    below = a.transform.InverseTransformPoint(r.transform.position).y, sameSide = r.NetworkHQ == a.NetworkHQ }).ToArray(),
+                released = bay.Released.Select((r, i) => r == null ? null : new { r.unitName, alive = !r.disabled, speed = r.rb != null ? r.rb.velocity.magnitude : 0f,
+                    below = a.transform.InverseTransformPoint(r.transform.position).y, hookRange = Vector3.Distance(r.transform.position, bay.HookPoint(i)), sameSide = r.NetworkHQ == a.NetworkHQ }).ToArray(),
             };
         }
 

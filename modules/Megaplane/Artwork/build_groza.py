@@ -12,6 +12,10 @@ to assets/KY44Groza. Its root object has sliders for flaps, hold, gear and fans.
 Panel textures live alongside the embedded mesh. To regenerate the textures,
 run build_panels.py in Blender before rebuilding the model.
 
+The verify_*.json files beside this builder are nomodkit game scenarios. Run
+them from this checkout in a BepInEx sandbox. Fighter and railgun loadouts
+use different prefabs, so each payload setting takes effect on a fresh launch.
+
 By default the versioned Breakwater source comes from Git. KY44_BASE_MESH can
 instead point at a local copy of that original compressed BSMP v2 file.
 """

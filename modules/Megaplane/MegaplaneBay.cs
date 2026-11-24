@@ -108,6 +108,7 @@ namespace BoscaliSummer.Modules.Megaplane
         private const float DoorOpen = 100f;   // degrees: the door leaves swing down and outboard
         private const float DoorRate = 35f, ArmRate = 22f;   // deg/s: the doors lead, the arms follow
         private Aircraft carrier;
+        private int arrivingSlot = -1;
         private readonly List<(Transform t, Quaternion rest, float sign)> doors = new List<(Transform, Quaternion, float)>();
         private readonly Transform[] arms = new Transform[2], yokes = new Transform[2], visuals = new Transform[2];
         private readonly float[] armL = new float[2];   // authored arm length, read from the art: the ×1.246 build scale moved it past any constant
@@ -190,6 +191,19 @@ namespace BoscaliSummer.Modules.Megaplane
         /// <summary>Where the caught fighter's root sits: the hidden stowed copy rides the yoke.</summary>
         internal Vector3 HookPoint(int slot) => visuals[slot].position;
 
+        // The first fighter at its own gate gets the final approach. The other holds outboard.
+        internal bool CanEnter(int slot)
+        {
+            if (Arm[slot] < 89.5f) return false;
+            if (arrivingSlot < 0 || State[arrivingSlot] != 3) arrivingSlot = slot;
+            return arrivingSlot == slot;
+        }
+
+        internal void CancelCapture(int slot)
+        {
+            if (carrier != null && carrier.IsServer && State[slot] == 3) SetSlot(slot, 2);
+        }
+
         internal void Latch(int slot, Aircraft fighter)
         {
             if (State[slot] != 3) return;
@@ -254,34 +268,70 @@ namespace BoscaliSummer.Modules.Megaplane
     /// <summary>Datalink capture of one recalled bay fighter (host). The carrier flies it, as automated aerial refuelling
     /// and DARPA Gremlins recovery do: to a gate behind and below the bay at up to 90 m/s over the carrier's speed, to a
     /// point 25 m straight under the lowered hook, then up at walking pace onto the hook, where the bay latches it.</summary>
+    [DefaultExecutionOrder(200)]
     internal sealed class MegaplaneCapture : MonoBehaviour
     {
         internal MegaplaneBay Bay;
         internal int Slot;
         internal int Phase;   // 0 to the gate, 1 under the hook, 2 rising onto it
         private Aircraft self;
+        private bool guiding, mergedForCapture;
+        private Vector3 localPosition, localVelocity;
         private const float GateBack = 260f, GateBelow = 70f, Under = 25f;
 
         private void Awake() => self = GetComponent<Aircraft>();
 
+        internal static bool FlyingCapture(Aircraft fighter) =>
+            fighter.TryGetComponent(out MegaplaneCapture capture) && capture.guiding;
+
         private void FixedUpdate()
         {
-            if (Bay == null || self == null || self.disabled || Bay.State[Slot] != 3) { Destroy(this); return; }
+            if (Bay == null || Bay.Carrier == null || Bay.Carrier.disabled || self == null || self.disabled ||
+                self.Player != null || !self.IsServer || !self.LocalSim || Bay.State[Slot] != 3)
+            {
+                bool stowed = Bay != null && Bay.State[Slot] == 4;
+                if (Bay != null) Bay.CancelCapture(Slot);
+                guiding = false;
+                if (mergedForCapture && !stowed && self != null && !self.disabled && self.LocalSim && self.simplePhysics)
+                    self.SetComplexPhysics();
+                Destroy(this);
+                return;
+            }
+            Rigidbody rb = self.rb, carrier = Bay.Carrier.rb;
             Transform c = Bay.transform;
-            Vector3 hook = Bay.HookPoint(Slot), p = self.transform.position, cv = Bay.Carrier.rb.velocity;
-            Vector3 aim = Phase == 0 ? hook - c.forward * GateBack - c.up * GateBelow : Phase == 1 ? hook - c.up * Under : hook;
-            Vector3 err = aim - p;
-            if (Phase == 0 && err.magnitude < 40f) Phase = 1;
-            else if (Phase == 1 && err.magnitude < 3f) Phase = 2;
-            float gain = Phase == 0 ? .08f : Phase == 1 ? .3f : .5f, most = Phase == 0 ? 90f : Phase == 1 ? 15f : 3f;
-            Vector3 want = cv + Vector3.ClampMagnitude(err * gain, most);
-            Rigidbody rb = self.rb;
+            if (!guiding)
+            {
+                // A close-range fighter has a chain of independently simulated aero bodies.
+                // Merge only its still-attached parts with the native LOD API for the approach.
+                guiding = true;
+                mergedForCapture = !self.simplePhysics;
+                if (mergedForCapture) self.SetSimplePhysics();
+                localPosition = c.InverseTransformPoint(rb.position);
+                localVelocity = c.InverseTransformDirection(rb.velocity - carrier.GetPointVelocity(rb.position));
+            }
+            // Keep the datalink path in deck coordinates. Accumulating a world-space position
+            // would put a recalled fighter at the old datum when the game shifts the map origin.
+            Vector3 hook = c.InverseTransformPoint(Bay.HookPoint(Slot));
+            Vector3 aim = Phase == 0 ? hook + new Vector3(Slot == 0 ? -42f : 42f, -GateBelow, -GateBack)
+                : Phase == 1 ? hook - Vector3.up * Under : hook;
+            Vector3 err = aim - localPosition;
+            float gain = Phase == 0 ? .12f : Phase == 1 ? .35f : .8f;
+            float speed = Phase == 0 ? 90f : Phase == 1 ? 20f : 3.5f;
             float dt = Time.fixedDeltaTime;
-            rb.velocity = Vector3.MoveTowards(rb.velocity, want, (Phase == 0 ? 30f : 12f) * dt);
+            localVelocity = Vector3.MoveTowards(localVelocity, Vector3.ClampMagnitude(err * gain, speed), 26f * dt);
+            localPosition += localVelocity * dt;
+            Vector3 next = c.TransformPoint(localPosition);
+            Vector3 deckVelocity = carrier.GetPointVelocity(next);
+            Vector3 velocity = deckVelocity + c.TransformDirection(localVelocity);
+            rb.MovePosition(next + deckVelocity * dt);
+            rb.velocity = velocity;
             rb.angularVelocity = Vector3.zero;
-            Quaternion look = Phase == 0 && want.sqrMagnitude > 1f ? Quaternion.LookRotation(want, c.up) : c.rotation;
+            Quaternion look = Phase == 0 && velocity.sqrMagnitude > 1f ? Quaternion.LookRotation(velocity, c.up) : c.rotation;
             rb.MoveRotation(Quaternion.RotateTowards(rb.rotation, look, (Phase == 0 ? 25f : 10f) * dt));
-            if (Phase == 2 && err.magnitude < 1.5f && (rb.velocity - cv).magnitude < 4f) Bay.Latch(Slot, self);
+            if (Phase == 0 && err.magnitude < 12f && Bay.CanEnter(Slot)) Phase = 1;
+            else if (Phase == 1 && err.magnitude < 2f) Phase = 2;
+            else if (Phase == 2 && err.magnitude < 1.5f && localVelocity.magnitude < 4f &&
+                Vector3.Distance(c.InverseTransformPoint(rb.position), hook) < 4f) Bay.Latch(Slot, self);
         }
     }
 }

@@ -97,7 +97,7 @@ namespace BoscaliSummer.Modules.Megaplane
     {
         private static bool Prefix(Aircraft __instance)
         {
-            if (!MegaplaneModule.Is(__instance)) return true;
+            if (!MegaplaneModule.Is(__instance)) return !MegaplaneCapture.FlyingCapture(__instance);
             Traverse.Create(__instance).Field<bool>("simplePhysics").Value = true;
             Rigidbody rb = __instance.GetComponent<Rigidbody>();
             rb.mass = __instance.definition.mass;

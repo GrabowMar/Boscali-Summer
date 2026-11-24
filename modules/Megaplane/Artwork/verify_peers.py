@@ -16,7 +16,7 @@ def inspect_aircraft(name, spawn=False):
     return json.loads(response["value"])
 
 
-def exercise(original, names, pids, timeout, report):
+def exercise(original, names, pids, timeout, report, before_client):
     original(names, pids, timeout, report)
     report["ok"] = False
     report["evidence"]["scope"] = "Groza spawn, damage-island LODs, dimensions and selected loadout on identical loopback game peers"
@@ -46,6 +46,10 @@ def exercise(original, names, pids, timeout, report):
         "groza_final_dimensions_and_lods": h["width"] > 342 and h["length"] > 230 and h["lodIslands"] == 35,
         "five_replicated_store_selections": len(h["stores"]) == 5 and len(set(h["stores"])) == 5,
     }
+    if before_client is not None:
+        report["host_before_client_launch"] = before_client
+        existing = before_client.get("aircraft", [])
+        checks["late_join_received_the_existing_aircraft"] = len(existing) == 1 and existing[0]["netId"] == c["netId"]
     report["checks"].extend({"check": name, "ok": ok} for name, ok in checks.items())
     report["ok"] = all(c["ok"] for c in report["checks"])
     report["evidence"]["custom_mod_replication"] = "passed" if report["ok"] else "failed"
@@ -60,17 +64,19 @@ def main():
     root = Path(__file__).resolve().parents[3]
     original = peers._exercise
     original_wait = peers._wait
+    before_client = None
     if args.late_join:
         def wait_then_spawn(instance, pid, timeout, predicate):
+            nonlocal before_client
             snapshot = original_wait(instance, pid, timeout, predicate)
-            if instance.endswith("-peer-host") and snapshot.get("ready") and not snapshot.get("remote_players"):
+            if before_client is None and instance.endswith("-peer-host") and snapshot.get("ready") and not snapshot.get("remote_players"):
                 until = time.monotonic() + min(45, timeout)
                 while inspect_aircraft(instance)["definitionIndex"] < 0 and time.monotonic() < until:
                     time.sleep(.5)
-                inspect_aircraft(instance, spawn=True)
+                before_client = inspect_aircraft(instance, spawn=True)
             return snapshot
         peers._wait = wait_then_spawn
-    peers._exercise = lambda *a: exercise(original, *a)
+    peers._exercise = lambda *a: exercise(original, *a, before_client)
     try:
         report = peers.cmd_peers(SimpleNamespace(inst=args.inst, mod="boscalisummer", mod_root=str(root), mission="Free Flight", timeout=args.timeout))
     finally:
