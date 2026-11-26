@@ -3,17 +3,25 @@ from math import cos, pi, sin
 
 from mathutils import Vector
 from bridge_instruments import (AFT, DARK, RUBBER, SKIN, TRIM, WITNESS, bolt,
-                                finished_quad, install_finished, join_rings, rectangle)
+                                finished_quad, install_finished, join_rings, rectangle,
+                                rounded_rectangle)
 from forebody import Surface, child_mesh
 
 
-def profile_box(surface, left, right, profile, skin=SKIN):
-    port = [Vector((left, y, z)) for y, z in profile]
-    starboard = [Vector((right, y, z)) for y, z in profile]
-    centre = sum((*port, *starboard), Vector()) / (2 * len(profile))
-    join_rings(surface, port, starboard, skin, centre)
-    surface.face(port, skin, (-1, 0, 0))
-    surface.face(starboard, skin, (1, 0, 0))
+def profile_box(surface, left, right, profile, skin=SKIN, bevel=0):
+    middle = (left + right) / 2
+    centre = sum((Vector((middle,y,z)) for y,z in profile), Vector()) / len(profile)
+    if bevel:
+        shrink = min(.16, bevel / max((Vector((middle,y,z)) - centre).length for y,z in profile))
+        rings = [(left, shrink), (left+bevel, 0), (right-bevel, 0), (right, shrink)]
+    else:
+        rings = [(left, 0), (right, 0)]
+    profiles = [[Vector((x, y+(centre.y-y)*shrink, z+(centre.z-z)*shrink)) for y,z in profile]
+                for x,shrink in rings]
+    for first,second in zip(profiles, profiles[1:]):
+        join_rings(surface, first, second, skin, centre)
+    surface.face(profiles[0], skin, (-1, 0, 0))
+    surface.face(profiles[-1], skin, (1, 0, 0))
 
 
 def telltale(surface, x, y, z):
@@ -23,39 +31,49 @@ def telltale(surface, x, y, z):
 
 def flight_yokes(nodes):
     """Short steering columns with swept padded handles and cast hub covers."""
-    controls, finish = Surface(), []
+    controls, finish, smooth_faces = Surface(), [], []
     for x in (-1.15, .92):
         profile_box(controls, x-.062, x+.062, ((101.31, 4.12), (101.27, 4.44), (101.067, 4.64),
                    (101.085, 4.70), (101.374, 4.51), (101.414, 4.12)))
-        hub_front = rectangle(x, 100.97, 4.661, .16, .16, .019)
-        hub_back = rectangle(x, 101.067, 4.661, .186, .182, .024)
-        join_rings(controls, hub_front, hub_back, SKIN, Vector((x, 101.021, 4.661)))
+        hub_front = rounded_rectangle(x, 100.97, 4.661, .158, .158, .022)
+        hub_lip = rounded_rectangle(x, 100.985, 4.661, .176, .169, .024)
+        hub_back = rounded_rectangle(x, 101.067, 4.661, .186, .182, .026)
+        centre = Vector((x, 101.021, 4.661))
+        join_rings(controls, hub_front, hub_lip, TRIM, centre)
+        join_rings(controls, hub_lip, hub_back, SKIN, centre)
         controls.face(hub_front, TRIM, AFT)
         controls.face(hub_back, SKIN, (0, 1, 0))
         finished_quad(controls,finish,"charcoal",[(x+u,100.968,4.661+v) for u,v in
                      ((-.064,-.060),(.064,-.060),(.064,.060),(-.064,.060))],AFT)
         for side in (-1, 1):
-            path = [Vector((x+side*dx, y, z)) for dx, y, z in
-                    ((.068, 101.015, 4.632), (.141, 101.010, 4.644), (.186, 100.998, 4.686),
-                     (.205, 100.994, 4.737), (.211, 100.99, 4.818))]
+            shape = ((.068,101.015,4.632,.021), (.182,101.002,4.676,.019),
+                     (.201,100.995,4.710,.023),
+                     (.207,100.984,4.744,.029), (.201,100.981,4.776,.026),
+                     (.203,100.982,4.808,.030), (.204,100.987,4.823,.023))
+            path = [Vector((x+side*dx, y, z)) for dx,y,z,_ in shape]
             rings = []
             for i, point in enumerate(path):
                 tangent = (path[min(i+1, len(path)-1)] - path[max(i-1, 0)]).normalized()
-                forw = Vector((0, 1, 0))
-                across = tangent.cross(forw).normalized()
-                forw = across.cross(tangent).normalized()
-                rings.append([point + (.022 + .009*(i >= 3)) * (forw*cos(k*pi/4) + across*sin(k*pi/4))
+                across = tangent.cross(Vector((0, 1, 0))).normalized()
+                forward = across.cross(tangent).normalized()
+                radius = shape[i][3]
+                rings.append([point + radius * (forward*cos(k*pi/4) + across*sin(k*pi/4)*.86)
                               for k in range(8)])
+            first_face = len(controls.faces)
             for i, (a,b) in enumerate(zip(rings, rings[1:])):
                 join_rings(controls, a, b, RUBBER if i >= 2 else TRIM, (path[i]+path[i+1])*.5)
+            smooth_faces.extend(range(first_face, len(controls.faces)))
             controls.face(rings[-1], RUBBER, (0, 0, 1))
             for z in (4.61, 4.711):
                 bolt(controls, x+side*.052, 100.967, z, .0055)
-            button_y, button_z = 100.961, 4.780
-            controls.face(rectangle(x+side*.211,button_y,button_z,.024,.023,.005),DARK,AFT)
-            controls.face(rectangle(x+side*.211,button_y-.002,button_z,.013,.013,.003),
+            cx, button_y, button_z = x+side*.201, 100.949, 4.785
+            seat = rectangle(cx,button_y+.006,button_z,.027,.026,.007)
+            collar = rectangle(cx,button_y,button_z,.023,.022,.006)
+            join_rings(controls, seat, collar, DARK, Vector((cx,button_y+.004,button_z)))
+            controls.face(collar,DARK,AFT)
+            controls.face(rectangle(cx,button_y-.002,button_z,.014,.013,.003),
                           WITNESS if side == -1 else SKIN,AFT)
-    install_finished(controls, nodes["FlightDeck_Yokes"], finish)
+    install_finished(controls, nodes["FlightDeck_Yokes"], finish, smooth_faces)
 
 
 def deck_quad(x, y, z, width, depth, rake):
@@ -75,12 +93,24 @@ def switch_module(surface, finish, x, y, z, width, depth, rake, tile, count):
         for row in (-1, 1):
             cy = y+row*depth*.22
             cz = z+(cy-y)*rake
-            bed = deck_quad(cx,cy,cz+.002,pitch*.66,depth*.26,rake)
-            cap = deck_quad(cx,cy-.006,cz+.019,pitch*.47,depth*.21,rake-.2*row)
+            live = row == 1 and i%3 == 0
+            bed = deck_quad(cx,cy,cz+.002,pitch*.61,depth*.24,rake)
+            cap = deck_quad(cx,cy-.003,cz+.015,pitch*.41,depth*.16,rake-.31*row)
             base = Vector((cx,cy,cz-.003))
             surface.face(bed,DARK,normal)
             join_rings(surface, bed, cap, RUBBER, base)
-            surface.face(cap,WITNESS if row == 1 and i%3 == 0 else TRIM,normal)
+            surface.face(cap,SKIN if live else TRIM,normal)
+            if live:
+                mark = deck_quad(cx,cy-.003,cz+.0156,pitch*.30,depth*.039,rake-.31*row)
+                surface.face(mark,WITNESS,normal)
+            if tile == "breakers" and count == 3 and row == -1 and i == 0:
+                for side in (-1, 1):
+                    guard_x = cx + side*pitch*.42
+                    profile_box(surface,guard_x-.0036,guard_x+.0036,
+                                ((cy-depth*.135,cz+.002-depth*.135*rake),
+                                 (cy-depth*.075,cz+.026-depth*.075*rake),
+                                 (cy+depth*.075,cz+.026+depth*.075*rake),
+                                 (cy+depth*.135,cz+.002+depth*.135*rake)), TRIM)
 
 
 def pedestal(nodes):
@@ -101,7 +131,7 @@ def pedestal(nodes):
         profile_box(surface,cx-.011,cx+.011,((100.843,4.690),(100.766,4.766),(100.744,4.768),
                     (100.756,4.790),(100.786,4.784),(100.878,4.697)),TRIM)
         profile_box(surface,cx-.028,cx+.028,((100.737,4.771),(100.728,4.793),(100.747,4.810),
-                    (100.790,4.805),(100.802,4.786),(100.782,4.767)),RUBBER)
+                    (100.790,4.805),(100.802,4.786),(100.782,4.767)),RUBBER,bevel=.005)
         surface.face(deck_quad(cx,100.759,4.811,.039,.010,0),TRIM,(0,0,1))
     install_finished(surface,nodes["FlightDeck_Pedestal"],finish)
 
@@ -143,9 +173,9 @@ def sculpt_flightdeck(nodes):
     fascia, finish = Surface(), []
     for x in new_x:
         centre = Vector((x, 101.412, face_z))
-        lip = rectangle(x, face_y + .006, face_z, .408, .433, .017)
-        shoulder = rectangle(x, face_y + .031, face_z, .419, .444, .020)
-        back = rectangle(x, 101.51, face_z - .016, .386, .411, .017)
+        lip = rounded_rectangle(x, face_y + .006, face_z, .408, .433, .022)
+        shoulder = rounded_rectangle(x, face_y + .031, face_z, .419, .444, .028)
+        back = rounded_rectangle(x, 101.51, face_z - .016, .386, .411, .026)
         fascia.face(lip, DARK, AFT)
         join_rings(fascia, lip, shoulder, TRIM, centre)
         join_rings(fascia, shoulder, back, SKIN, centre)

@@ -38,9 +38,16 @@ def material():
 
 def assign_finish(obj, face_index, tile, corners):
     """Apply a panel finish to a quad. Vertex indices run BL, BR, TR, TL."""
+    assert len(corners) == 4
+    projected = dict(zip(corners, ((0, 0), (1, 0), (1, 1), (0, 1))))
+    assign_projected_finish(obj, face_index, tile, projected)
+
+
+def assign_projected_finish(obj, face_index, tile, projected):
+    """Apply a tile using normalized, face-local UVs on a shaped cap."""
     mesh = obj.data
     face = mesh.polygons[face_index]
-    assert len(corners) == 4 and set(corners) == set(face.vertices), (obj.name, face_index, tile)
+    assert projected.keys() == set(face.vertices), (obj.name, face_index, tile)
     paint = material()
     if paint.name not in mesh.materials:
         mesh.materials.append(paint)
@@ -48,8 +55,8 @@ def assign_finish(obj, face_index, tile, corners):
     x, y, width, height = TILES[tile]
     left, right = (x + GUTTER) / SIZE, (x + width - GUTTER) / SIZE
     bottom, top = 1 - (y + height - GUTTER) / SIZE, 1 - (y + GUTTER) / SIZE
-    coordinates = dict(zip(corners, ((left, bottom), (right, bottom), (right, top), (left, top))))
     uv = mesh.uv_layers.active or mesh.uv_layers.new()
     values = uv.uv
     for loop in face.loop_indices:
-        values[loop].vector = coordinates[mesh.loops[loop].vertex_index]
+        u, v = projected[mesh.loops[loop].vertex_index]
+        values[loop].vector = left + (right-left)*u, bottom + (top-bottom)*v

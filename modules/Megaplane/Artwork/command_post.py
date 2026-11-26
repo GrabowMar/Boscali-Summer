@@ -2,6 +2,8 @@
 
 from math import cos, hypot, pi, sin
 
+from mathutils import Vector
+
 from finish import new_paint
 
 
@@ -12,6 +14,17 @@ OLIVE, AMBER, TRACE = "CrewInsulation", "CrewOchre", "CommandPlotInk_Emit"
 def octagon(w, d, c):
     return ((-w+c,-d), (w-c,-d), (w,-d+c), (w,d-c),
             (w-c,d), (-w+c,d), (-w,d-c), (-w,-d+c))
+
+
+def rounded_outline(width, depth, radius):
+    corners = ((width-radius, -depth+radius), (width-radius, depth-radius),
+               (-width+radius, depth-radius), (-width+radius, -depth+radius))
+    points = []
+    for index, (x, y) in enumerate(corners):
+        for step in range(3):
+            angle = (index-1)*pi/2 + step*pi/4
+            points.append((x + radius*cos(angle), y + radius*sin(angle)))
+    return points
 
 
 def deck(x, y, lift=0):
@@ -30,7 +43,16 @@ def chart_line(frame, points, material, width=.004, lift=.011):
 
 def chart(frame):
     # The plotting surface is a dark insert with a fixed range scale and route card.
-    frame.face([deck(x,y,.008) for x,y in octagon(.514,.303,.029)], CHARCOAL, (0,-.35,1))
+    edge = rounded_outline(.514, .303, .033)
+    gasket = rounded_outline(.534, .323, .040)
+    shoulder = rounded_outline(.552, .341, .047)
+    rings = [[deck(x, y, z) for x, y in outline]
+             for outline, z in ((edge, .008), (gasket, .013), (shoulder, .006))]
+    frame.face(rings[0], CHARCOAL, (0, -.35, 1))
+    for inner, outer, material in ((rings[0], rings[1], CHARCOAL), (rings[1], rings[2], OLIVE)):
+        for i in range(len(inner)):
+            j = (i+1) % len(inner)
+            frame.face((inner[i], outer[i], outer[j], inner[j]), material, (0, -.35, 1))
     for radius in (.072, .140, .211):
         circle = [(cos(i*pi/10)*radius, sin(i*pi/10)*radius) for i in range(21)]
         chart_line(frame, circle, TRACE)
@@ -66,6 +88,40 @@ def chart(frame):
     chart_line(frame, ((-.4035,.285),(-.4035,.258)), AMBER, .003)
 
 
+def crash_grip(frame):
+    # A continuous bent tube sits below the controls with clearance for a gloved hand.
+    path = [Vector(p) for p in ((-.327,-.221,.862), (-.327,-.263,.781), (-.307,-.292,.768),
+                              (-.273,-.304,.764), (.273,-.304,.764), (.307,-.292,.768),
+                              (.327,-.263,.781), (.327,-.221,.862))]
+    rings, axes = [], []
+    for i, center in enumerate(path):
+        axis = (path[min(i+1,len(path)-1)] - path[max(i-1,0)]).normalized()
+        across = axis.cross(Vector((0,0,1))).normalized()
+        up = across.cross(axis).normalized()
+        rings.append([center + .020*(across*cos(j*pi/3) + up*sin(j*pi/3)) for j in range(6)])
+        axes.append(axis)
+    for i, (a, b) in enumerate(zip(rings, rings[1:])):
+        center = (path[i]+path[i+1])*.5
+        for j in range(6):
+            k = (j+1) % 6
+            points = (a[j], a[k], b[k], b[j])
+            normal = sum(points, Vector())*.25 - center
+            frame.face(points, CHARCOAL, normal)
+    frame.face(rings[0], LINER, -axes[0])
+    frame.face(rings[-1], LINER, axes[-1])
+
+
+def interphone(frame):
+    frame.panel(0, .251, 1.253, .665, .288, .096, CHARCOAL, .035)
+    frame.panel(0, .214, 1.253, .644, .268, .042, PANEL, .033)
+    frame.finish_face(((-.303,.191,1.131),(.303,.191,1.131),(.303,.191,1.373),(-.303,.191,1.373)),
+                      "comms_strip", (0,-1,0))
+    # Register the keys and telltales over the atlas's channel legends.
+    for index, x in enumerate((-.171, -.059, .056, .166)):
+        frame.rod((x,.191,1.252),(x,.184,1.252),.015,AMBER if index in (0,3) else OLIVE,5)
+        frame.rod((x,.191,1.214),(x,.160,1.228 if index == 1 else 1.218),.014,LINER,6)
+
+
 def build_command_post(frame_factory, owner, floor):
     """Build the aft-wall plot shelf and its recessed interphone panel."""
     ink = (.118, .209, .075)
@@ -73,20 +129,25 @@ def build_command_post(frame_factory, owner, floor):
     shader.inputs["Emission Color"].default_value = (*ink, 1.)
     shader.inputs["Emission Strength"].default_value = .58
     frame = frame_factory((-1.14, 96.02, floor), (-1, 0, 0), (0, -1, 0))
-    frame.slab(0, .185, .459, .854, .177, .833, PANEL, .057)
+    frame.rings([[(x,y+.196,z) for x,y in octagon(width,depth,.046)]
+                 for width, depth, z in ((.393,.085,.043), (.427,.103,.109), (.421,.103,.862))], PANEL)
     frame.panel(0, .070, .442, .762, .634, .073, CHARCOAL, .032)
     frame.finish_face(((-.348, .030, .153), (.348, .030, .153),
                        (.348, .030, .716), (-.348, .030, .716)), "vent", (0,-1,0))
-    frame.rings([[deck(x,y,offset) for x,y in octagon(.602,.387,.056)]
-                 for offset in (-.095, 0)], LINER)
-    for x in (-.332, .332):
-        frame.rod((x,-.217,.834), (x,-.261,.807), .024, OLIVE, 8)
+    for pixel in range(65,191,17):
+        z = .716 - (pixel-4)*.563/248
+        frame.face(((-.186,.029,z),(.186,.029,z),(.177,.015,z-.010),(-.177,.015,z-.010)),
+                   LINER, (0,-1,1))
+        frame.face(((-.177,.015,z-.010),(.177,.015,z-.010),(.186,.029,z-.022),(-.186,.029,z-.022)),
+                   CHARCOAL, (0,-1,-1))
+    frame.rings([[deck(x,y,offset) for x,y in rounded_outline(width, depth, radius)]
+                 for width, depth, radius, offset in ((.517,.350,.056,-.095),
+                    (.602,.387,.062,-.028), (.590,.375,.060,0))], LINER)
+    crash_grip(frame)
     frame.panel(0,-.258,.869,.716,.083,.048,PANEL,.020)
     for i in range(5):
         x = -.243+i*.121
         frame.rod((x,-.276,.869),(x,-.295,.869),.022,AMBER if i==1 else CHARCOAL,8)
-    frame.panel(0,.223,1.253,.659,.283,.060,PANEL,.027)
-    frame.finish_face(((-.303,.191,1.131),(.303,.191,1.131),(.303,.191,1.373),(-.303,.191,1.373)),
-                      "comms_strip", (0,-1,0))
+    interphone(frame)
     chart(frame)
     return frame.finish("FlightDeck_CommandPost", owner)

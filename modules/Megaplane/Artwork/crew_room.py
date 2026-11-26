@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 
 from bridge_instruments import locator
-from cabin_finish import assign_finish
+from cabin_finish import assign_finish, assign_projected_finish
 from command_post import build_command_post
 from crew_graphics import ROLES, assign_print, assign_screen
 from finish import new_paint
@@ -51,6 +51,14 @@ def profile(width, depth, corner):
             (x-c, y), (-x+c, y), (-x, y-c), (-x, -y+c))
 
 
+def rounded_profile(width, depth, radius):
+    x, y = width / 2, depth / 2
+    r = min(radius, x*.94, y*.94)
+    return [(sx*(x-r) + r*cos(a), sy*(y-r) + r*sin(a))
+            for j, (sx, sy) in enumerate(((1, -1), (1, 1), (-1, 1), (-1, -1)))
+            for a in ((j-1)*pi/2, (j-.5)*pi/2, j*pi/2)]
+
+
 class Frame:
     """Batch a module's shapes and UVs in its own right/forward axes."""
 
@@ -59,9 +67,11 @@ class Frame:
         if batch is None:
             self.surface = Surface()
             self.prints, self.finishes = [], []
+            self.curves, self.projected = [], []
         else:
             self.surface = batch.surface
             self.prints, self.finishes = batch.prints, batch.finishes
+            self.curves, self.projected = batch.curves, batch.projected
 
     def point(self, xyz):
         x, y, z = xyz
@@ -70,19 +80,43 @@ class Frame:
     def face(self, points, material, normal):
         self.surface.face([self.point(p) for p in points], material, self.point(normal) - self.origin)
 
-    def rings(self, rings, material):
+    def rings(self, rings, material, smooth_sides=False):
         center = sum((Vector(p) for r in rings for p in r), Vector()) / sum(map(len, rings))
 
         def outward(points):
             return sum((Vector(p) for p in points), Vector()) / len(points) - center
 
+        first = len(self.surface.faces)
         for a, b in zip(rings, rings[1:]):
             for i in range(len(a)):
                 j = (i + 1) % len(a)
                 points = (a[i], a[j], b[j], b[i])
                 self.face(points, material, outward(points))
+        if smooth_sides:
+            self.curves.extend(range(first, len(self.surface.faces)))
+        caps = []
         for ring in (rings[0], rings[-1]):
+            caps.append(len(self.surface.faces))
             self.face(ring, material, outward(ring))
+        return caps
+
+    def cushion(self, center, width, span, depth, radius, on_back=False):
+        """Loft tapered foam edges around the textured load-bearing face."""
+        x, y, z = center
+        sections = ((-.5, .84), (.06, 1), (.5, .84))
+        contours = [rounded_profile(width*s, span*s, radius*s) for _, s in sections]
+        if on_back:
+            rows = [[(x+u, y+k*depth, z+v) for u, v in points]
+                    for (k, _), points in zip(sections, contours)]
+        else:
+            rows = [[(x+u, y+v, z+k*depth) for u, v in points]
+                    for (k, _), points in zip(sections, contours)]
+        caps = self.rings(rows, CLOTH, smooth_sides=True)
+        plane = contours[-1]
+        u_max = max(abs(u) for u, _ in plane) * 2
+        v_max = max(abs(v) for _, v in plane) * 2
+        uv = {i: (u/u_max + .5, v/v_max + .5) for i, (u, v) in zip(self.corners(rows[-1]), plane)}
+        self.projected.append((caps[-1], "fabric", uv))
 
     def slab(self, x, y, z, w, d, h, material, corner=.025):
         self.rings([[(x+u, y+v, k) for u, v in profile(w, d, corner)]
@@ -120,6 +154,10 @@ class Frame:
             assign_print(obj, tile, index, corners)
         for index, tile, corners in self.finishes:
             assign_finish(obj, index, tile, corners=corners)
+        for index, tile, projected in self.projected:
+            assign_projected_finish(obj, index, tile, projected)
+        for index in self.curves:
+            obj.data.polygons[index].use_smooth = True
         return obj
 
 
@@ -199,40 +237,83 @@ def chair(f, pilot):
     width = .544 if pilot else .434
     pan_height = .395 if pilot else .491
     back_height = 1.11 if pilot else .90
-    for sign in (-1, 1):
-        f.slab(sign*(width*.39), -.048, .018, .068, .588, .036, DARK, .013)
-        f.rod((sign*.151, -.124, .19), (sign*.181, -.092, pan_height+.012), .031, EDGE, 8)
-        f.slab(sign*width*.50, .013, pan_height+.017, .037, .464, .096, PANEL, .018)
-    f.slab(0, -.015, .166, width*.65, .302, .218, PANEL, .036)
-    f.slab(0, .035, pan_height-.035, width, .432, .076, LINER, .035)
-    f.slab(0, .029, pan_height+.038, width-.066, .398, .088, CLOTH, .041)
     hw = width*.39
-    f.finish_face(((-hw, -.141, pan_height+.083), (hw, -.141, pan_height+.083),
-                   (hw, .202, pan_height+.083), (-hw, .202, pan_height+.083)), "fabric", (0, 0, 1))
     for sign in (-1, 1):
-        f.rod((sign*hw, -.152, pan_height-.016), (sign*hw, -.247, back_height-.070), .028, LINER, 8)
-        f.rod((sign*.169, -.14, pan_height-.03), (sign*.217, -.14, pan_height-.03), .044, DARK, 8)
-    f.panel(0, -.204, (pan_height+back_height)/2, width-.044, back_height-pan_height, .107, PANEL, .070)
-    f.panel(0, -.147, (pan_height+back_height)/2, width-.089, back_height-pan_height-.079, .072, CLOTH, .054)
-    f.finish_face(((-hw+.024, -.110, pan_height+.092), (hw-.024, -.110, pan_height+.092),
-                   (hw-.024, -.110, back_height-.104), (-hw+.024, -.110, back_height-.104)), "fabric", (0, 1, 0))
-    f.slab(0, -.208, back_height-.036, width*.58, .123, .10, CLOTH, .031)
-    vertical_finish(f, 0, -.259, (pan_height+back_height)/2, width-.130, back_height-pan_height-.136, "charcoal")
+        x = sign*hw
+        f.slab(x, -.039, .018, .058, .569, .036, DARK, .026)
+        f.face(((x-.018,-.249,.038), (x+.018,-.249,.038),
+                (x+.018,.183,.038), (x-.018,.183,.038)), EDGE, (0,0,1))
+        f.rod((sign*hw, -.135, .052), (sign*hw*.87, -.104, pan_height-.062), .032, LINER, 8)
+        if pilot:
+            f.rod((sign*hw, .128, .050), (sign*hw*.87, .022, pan_height-.057), .022, EDGE, 6)
+    if not pilot:
+        # One gusset spans the rails under each watch seat's hinge housing.
+        f.rings([[(x, y, z) for x, y in profile(w, d, .021)]
+                 for z, w, d in ((.041,.288,.210), (pan_height-.078,.185,.132))], PANEL)
+    # The pressed seat pan rolls down at the lip instead of ending in a box.
+    f.rings([[(x, y+.037, z) for x, y in profile(width*s, .430*s, .063*s)]
+             for z, s in ((pan_height-.077, .77), (pan_height-.026, 1), (pan_height+.008, .94))], PANEL)
+    f.cushion((0, .024, pan_height+.037), width-.066, .409, .092, .073)
+
+    # The reclined back shell narrows at the shoulders. Hinge pins terminate in
+    # the lumbar shell and each armrest has its own curved pad and pivot.
+    for sign in (-1, 1):
+        f.rod((sign*hw, -.132, pan_height-.022), (sign*hw*.88, -.221, back_height-.135), .022, LINER, 8)
+        f.rod((sign*(hw-.019), -.122, pan_height-.015), (sign*(hw+.025), -.122, pan_height-.015), .038, DARK, 6)
+        f.rod((sign*hw, -.099, pan_height+.019),
+              (sign*(width*.50), -.132, pan_height+.151), .019, EDGE, 8)
+        f.rings([[(sign*width*.50+u, -.013+v, pan_height+k) for u, v in profile(w, d, .032)]
+                 for w, d, k in ((.043, .257, .143), (.062, .305, .163), (.050, .281, .187))],
+                CLOTH, smooth_sides=True)
+    lower, upper = pan_height+.04, back_height-.017
+    f.rings([[(x, y+v, z) for x, v in profile(width*s, depth, .036)]
+             for z, y, depth, s in ((lower, -.176, .102, .79), (lower+.079, -.174, .119, .94),
+                                    (upper, -.238, .078, .68))], PANEL)
+    f.cushion((0, -.145, (lower+upper)/2), width-.086, upper-lower-.043, .089, .066, on_back=True)
+    f.panel(0, -.257, (lower+upper)/2, width-.144, upper-lower-.14, .061, DARK, .043)
+    vertical_finish(f, 0, -.289, (lower+upper)/2, width-.181, upper-lower-.182, "charcoal")
     if pilot:
-        f.panel(0, -.231, 1.140, .344, .181, .161, PANEL, .046)
-        f.panel(0, -.150, 1.136, .289, .124, .062, CLOTH, .039)
-        f.panel(0, -.270, .778, .292, .319, .031, DARK, .025)
+        f.rod((-.089, -.219, 1.037), (-.089, -.235, 1.126), .017, EDGE, 8)
+        f.rod((.089, -.219, 1.037), (.089, -.235, 1.126), .017, EDGE, 8)
+        f.panel(0, -.231, 1.140, .344, .181, .150, PANEL, .052)
+        f.cushion((0, -.149, 1.140), .286, .128, .075, .051, on_back=True)
+        f.panel(0, -.297, .778, .283, .290, .025, PANEL, .035)
         for sign in (-1, 1):
             x = sign*.137
-            points = ((x-.024, -.139, 1.065), (x+.024, -.139, 1.065),
+            points = ((x-.024, -.115, 1.065), (x+.024, -.115, 1.065),
                       (x*.28+.024, .074, pan_height+.10), (x*.28-.024, .074, pan_height+.10))
             f.face(points, STRAP, (0, 1, .18))
-            f.panel(x, -.286, .778, .046, .262, .012, STRAP, .009)
+            f.panel(x*.88, -.315, .778, .039, .233, .013, STRAP, .009)
+            f.panel(x*.88, -.324, .784, .051, .029, .009, EDGE, .005)
 
 
 def vertical_finish(f, x, y, z, width, height, tile):
     f.finish_face(((x-width/2, y, z-height/2), (x+width/2, y, z-height/2),
                    (x+width/2, y, z+height/2), (x-width/2, y, z+height/2)), tile, (0, -1, 0))
+
+
+def selector(f, x, z, marker):
+    # A flush nut captures the shaft. The handwheel widens towards its rim
+    # and tapers back into a shallow dish around the painted index.
+    rows = ((.783, .035), (.766, .022), (.750, .031), (.735, .031), (.721, .024))
+    f.rings([[(x+r*cos(i*pi/4), y, z+r*sin(i*pi/4)) for i in range(8)]
+             for y, r in rows], DARK, smooth_sides=True)
+    f.face(((x-.0025, .7206, z+.006), (x+.0025, .7206, z+.006),
+            (x+.0032, .7206, z+.020), (x-.0032, .7206, z+.020)), marker, (0, -1, 0))
+
+
+def screen_surround(f):
+    # Flange, cast shoulder, rubber seal. The opening widens out toward the
+    # operator so the live image stays visible at the edge of the seating area.
+    rows = ((.844, .682, .459, .037), (.800, .659, .436, .031), (.780, .616, .404, .023),
+            (.758, .585, .371, .017), (.758, .562, .348, .010), (.777, .550, .338, .005))
+    hoops = [[(-.096+u, y, 1.088+v) for u, v in profile(w, h, corner)] for y, w, h, corner in rows]
+    for i, (outer, inner) in enumerate(zip(hoops, hoops[1:])):
+        for j in range(len(outer)):
+            k = (j+1) % len(outer)
+            a, b = outer[j], outer[k]
+            radial = (((a[0]+b[0])/2+.096)*4, -1., ((a[2]+b[2])/2-1.088)*4)
+            f.face((a, b, inner[k], inner[j]), (DARK, PANEL, LINER, RUBBER, DARK)[i], radial)
 
 
 def consoles(f, role):
@@ -249,9 +330,7 @@ def consoles(f, role):
     f.slab(0, .708, .656, 1.126, .088, .069, RUBBER, .023)
     # The screen is a separate runtime mesh. The bevel wraps the glass, with
     # the task strip set above the seated operator's field of view.
-    f.panel(-.096, .822, 1.088, .676, .452, .060, DARK, .043)
-    f.panel(-.096, .800, 1.088, .605, .399, .035, LINER, .025)
-    f.panel(-.096, .781, 1.088, .570, .354, .018, DARK, .014)
+    screen_surround(f)
     f.slab(-.096, .813, 1.344, .699, .192, .053, PANEL, .025)
     f.slab(-.096, .772, 1.316, .411, .042, .009, LIGHT, .011)
     vertical_finish(f, 0, .828, 1.450, 1.140, .100, role.lower())
@@ -260,15 +339,15 @@ def consoles(f, role):
                     "comms_strip" if role == "Comms" else "thermal" if role == "Engineering" else "power")
     for x in (.31, .426, .542):
         for z in (.971, 1.068):
-            f.rod((x, .782, z), (x, .739, z), .031, DARK, 10)
-            f.panel(x, .714, z+.008, .010, .020, .011, GOLD, .002)
+            selector(f, x, z, GOLD if role in ("Nav", "Engineering") else EDGE)
     for x in (-.565, .565):
         for z in (.748, 1.362):
             f.rod((x, .828, z), (x, .818, z), .013, EDGE, 6)
     for i in range(6):
         x = -.46 + i*.175
-        f.slab(x, .813, .722, .113, .066, .030, DARK, .008)
-        f.slab(x, .801, .743, .071, .033, .017, IND if i == 2 else LINER, .004)
+        f.slab(x, .813, .720, .098, .058, .026, DARK, .013)
+        f.rings([[(x+u, .805+v, z+v*.27) for u, v in profile(w, d, .007)]
+                 for w, d, z in ((.067,.039,.731),(.048,.029,.749))], IND if i == 2 else LINER)
     if role == "Comms":
         f.rod((.544,.732,.826), (.544,.726,.955), .019, RUBBER, 8)
     else:
@@ -291,13 +370,20 @@ def pressure_door(f):
     f.panel(0, -.126, 1.082, 1.092, 1.902, .067, PANEL, .283)
     vertical_finish(f, 0, -.161, 1.071, .78, 1.5, "hatch")
     f.panel(0, -.174, 1.43, .339, .26, .052, DARK, .074)
-    f.panel(0, -.203, 1.43, .273, .192, .028, "DeckBinnacle", .053)
-    f.rod((.247, -.143, .99), (.247, -.222, .99), .063, DARK, 12)
-    f.rod((.247, -.226, .99), (.047, -.224, 1.070), .022, EDGE, 8)
+    f.panel(0, -.203, 1.43, .277, .193, .028, "DeckBinnacle", .058)
+    f.panel(0, -.220, 1.43, .233, .151, .012, DARK, .047)
+    f.rod((.247, -.143, .99), (.247, -.209, .99), .059, DARK, 12)
+    f.rod((.247, -.202, .99), (.247, -.228, .99), .042, EDGE, 10)
+    # Padded dog lever sits away from the plate so the grip has finger clearance.
+    f.rod((.249, -.224, .990), (.185, -.257, 1.027), .021, EDGE, 8)
+    f.rod((.185, -.257, 1.027), (.058, -.263, 1.071), .022, DARK, 10)
+    f.rod((.058, -.263, 1.071), (.043, -.261, 1.073), .020, EDGE, 8)
     for sign in (-1, 1):
         f.rod((sign*.574, -.12, .71), (sign*.574, -.12, 1.35), .023, EDGE, 8)
-        f.panel(sign*1.67, -.057, 1.04, .615, 1.333, .116, PANEL, .055)
-        vertical_finish(f, sign*1.67, -.118, 1.022, .526, .983, "olive")
+        # Slide the port service cover off the plotting shelf's interphone flange.
+        cabinet_x, cabinet_width = (1.92, .49) if sign > 0 else (-1.67, .615)
+        f.panel(cabinet_x, -.057, 1.04, cabinet_width, 1.333, .116, PANEL, .055)
+        vertical_finish(f, cabinet_x, -.118, 1.022, cabinet_width-.089, .983, "olive")
     f.panel(0, -.131, 2.004, .384, .102, .068, DARK, .029)
     f.panel(0, -.171, 2.004, .245, .043, .012, IND, .011)
 

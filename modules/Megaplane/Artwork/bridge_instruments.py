@@ -56,6 +56,16 @@ def rectangle(x, y, z, width, height, clip):
              (w-clip,h), (-w+clip,h), (-w,h-clip), (-w,-h+clip))]
 
 
+def rounded_rectangle(x, y, z, width, height, radius):
+    """Three samples per corner for visible castings and gasket edges."""
+    w, h = width / 2, height / 2
+    corners = ((w-radius,-h+radius), (w-radius,h-radius),
+               (-w+radius,h-radius), (-w+radius,-h+radius))
+    return [Vector((x + u + radius*cos((2*corner+step-2)*pi/4), y,
+                    z + v + radius*sin((2*corner+step-2)*pi/4)))
+            for corner, (u,v) in enumerate(corners) for step in range(3)]
+
+
 def join_rings(surf, first, second, mat, centre):
     for i, a in enumerate(first):
         j=(i+1) % len(first)
@@ -71,8 +81,10 @@ def finished_quad(surface, finish, tile, points, normal):
     finish.append((face, tile, corners))
 
 
-def install_finished(surface, obj, finish):
+def install_finished(surface, obj, finish, smooth_faces=()):
     surface.install(obj)
+    for face in smooth_faces:
+        obj.data.polygons[face].use_smooth = True
     for face, tile, corners in finish:
         assign_finish(obj, face, tile, corners=corners)
 
@@ -84,41 +96,47 @@ def bolt(surface, x, y, z, radius=.009):
                  [(x-r*.55,y-.0005,z+r*.13) for r in (radius,-radius)], DARK, AFT)
 
 
-def cassette(surf, x, y, z, width, height, depth=.08):
+def cassette(surf, x, y, z, width, height, depth=.08, rounded=False):
     """Cast housing tapers back into the coaming, with a square display rebate."""
     centre = Vector((x,y,z))
-    back = rectangle(x, y+depth, z-.012, width+.026, height+.014, .023)
-    shoulder = rectangle(x, y+.023, z, width+.060, height+.064, .027)
-    frame = rectangle(x, y-.009, z, width+.044, height+.044, .021)
-    inner = rectangle(x, y, z, width+.002, height+.002, .006)
+    contour = rounded_rectangle if rounded else rectangle
+    back = contour(x, y+depth, z-.012, width+.026, height+.014, .023)
+    shoulder = contour(x, y+.023, z, width+.060, height+.064, .027)
+    frame = contour(x, y-.009, z, width+.044, height+.044, .021)
+    inner = contour(x, y, z, width+.002, height+.002, .006)
     join_rings(surf, back, shoulder, SKIN, centre)
     join_rings(surf, shoulder, frame, RUBBER, centre)
-    for i in range(8):
-        j=(i+1)%8
-        surf.face((frame[i],frame[j],inner[j],inner[i]), TRIM if i == 0 else SKIN, AFT)
+    for i in range(len(frame)):
+        j = (i+1) % len(frame)
+        finish = TRIM if frame[i].z <= z-height/2 and frame[j].z <= z-height/2 else SKIN
+        surf.face((frame[i],frame[j],inner[j],inner[i]), finish, AFT)
     surf.face(inner, DARK, AFT)
     for side in (-1, 1):
         for stack in (-1, 1):
             bolt(surf, x+side*(width/2+.013), y-.009, z+stack*(height/2-.035), .007)
 
 
-def spindle(surf, x, y, z, radius, indicator=True):
+def spindle(surf, smooth_faces, x, y, z, radius):
     """A rotary selector with a flange, castellated grip, relieved face and witness line."""
     count = 16
     def disc(ypos, r, knurl=False):
         return [Vector((x + cos(a*2*pi/count)*r*(.88 if knurl and a%2 else 1),
                         ypos,z + sin(a*2*pi/count)*r*(.88 if knurl and a%2 else 1))) for a in range(count)]
     base, collar = disc(y+.012, radius*1.28), disc(y-.002, radius*1.28)
-    rear, grip, top = disc(y-.004,radius,True), disc(y-.033,radius,True), disc(y-.039,radius*.78)
+    rear, grip, top = disc(y-.004,radius,True), disc(y-.029,radius,True), disc(y-.038,radius*.73)
     centre = Vector((x,y,z))
+    start = len(surf.faces)
     join_rings(surf,base,collar,TRIM,centre)
+    smooth_faces.extend(range(start, len(surf.faces)))
     surf.face(collar,SKIN,AFT)
     join_rings(surf,rear,grip,RUBBER,centre)
+    start = len(surf.faces)
     join_rings(surf,grip,top,SKIN,centre)
+    smooth_faces.extend(range(start, len(surf.faces)))
     surf.face(top, SKIN,AFT)
-    if indicator:
-        surf.face([(x+dx,y-.040,z+dz) for dx,dz in
-                   ((-.0035,.002),(.0035,.002),(.0035,radius*.68),(-.0035,radius*.68))],WITNESS,AFT)
+    mark = radius*.136
+    surf.face([(x+dx,y-.0385,z+dz) for dx,dz in
+               ((-mark,.003),(mark,.003),(mark*.74,radius*.67),(-mark*.74,radius*.67))],WITNESS,AFT)
 
 
 def face_art(surface, tiles, x,y,z,width,height,tile):
@@ -127,11 +145,11 @@ def face_art(surface, tiles, x,y,z,width,height,tile):
                   (x+width/2,y,z+height/2), (x-width/2,y,z+height/2)], LEGEND,AFT)
 
 
-def punched_panel(surf, tiles, x,y,z,width,height,tile, controls):
+def punched_panel(surf, tiles, smooth_faces, x,y,z,width,height,tile, controls):
     cassette(surf,x,y,z,width,height,.060)
     face_art(surf,tiles,x,y-.001,z,width-.006,height-.007,tile)
     for pos in controls:
-        spindle(surf,x+pos*width, y-.002,z-height*.275, min(.036,height*.15))
+        spindle(surf,smooth_faces,x+pos*width, y-.002,z-height*.275, min(.036,height*.15))
 
 
 def coaming(surface, finish):
@@ -277,23 +295,23 @@ def fit_bridge(nodes):
 def sculpt_bridge(nodes):
     owner = nodes["Fuselage_Cockpit"]
     housing, hardware, tiles = Surface(), Surface(), {}
-    trim, switch_tiles = [], []
+    trim, switch_tiles, smooth_faces = [], [], []
     coaming(housing, trim)
     overhead(hardware, switch_tiles)
     for name,x,z,w,h in (("TacticalScreen",-1.49,5.075,.372,.360),
                          ("SystemsScreen",-.83,5.09,.630,.215)):
-        cassette(hardware,x,102.18,z,w,h)
+        cassette(hardware,x,102.18,z,w,h,rounded=True)
         if name not in nodes:
             nodes[name]=locator(name,(x,102.18,z),owner)
     # Instrument lighting and engraved maker's plate flank the pilot. On the other
     # station the windscreen reveals the environmental and bus-distribution selectors.
-    punched_panel(hardware,tiles,-1.932,102.055,5.109,.268,.176,1,(-.29,.29))
-    punched_panel(hardware,tiles,-.116,102.163,5.073,.45,.166,0,())
-    punched_panel(hardware,tiles,.53,102.16,5.074,.54,.212,4,(-.34,0,.34))
-    punched_panel(hardware,tiles,1.17,102.16,5.074,.56,.212,5,(-.34,0,.34))
-    punched_panel(hardware,tiles,1.71,102.07,5.047,.34,.165,6,(-.29,.29))
+    punched_panel(hardware,tiles,smooth_faces,-1.932,102.055,5.109,.268,.176,1,(-.29,.29))
+    punched_panel(hardware,tiles,smooth_faces,-.116,102.163,5.073,.45,.166,0,())
+    punched_panel(hardware,tiles,smooth_faces,.53,102.16,5.074,.54,.212,4,(-.34,0,.34))
+    punched_panel(hardware,tiles,smooth_faces,1.17,102.16,5.074,.56,.212,5,(-.34,0,.34))
+    punched_panel(hardware,tiles,smooth_faces,1.71,102.07,5.047,.34,.165,6,(-.29,.29))
     # The local brightness knob on the chart bezel stays clear of the live pixel area.
-    spindle(hardware,-1.23,102.145,5.032,.028)
+    spindle(hardware,smooth_faces,-1.23,102.145,5.032,.028)
     # The demisting duct mouths sit under the cowl, below the sightline. Each has
     # vertical vanes and a pair of high-contrast witness marks on the outer flange.
     for x in (-2.28,2.115):
@@ -306,7 +324,7 @@ def sculpt_bridge(nodes):
     hnode = nodes.get("FlightDeck_Glareshield") or child_mesh("FlightDeck_Glareshield",owner)
     install_finished(housing, hnode, trim)
     hwear = nodes.get("FlightDeck_InstrumentBridge") or child_mesh("FlightDeck_InstrumentBridge",owner)
-    install_finished(hardware, hwear, switch_tiles)
+    install_finished(hardware, hwear, switch_tiles, smooth_faces)
     registration(hwear,tiles)
     nodes[hnode.name]=hnode
     nodes[hwear.name]=hwear
