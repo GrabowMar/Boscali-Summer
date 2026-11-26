@@ -14,12 +14,12 @@ namespace BoscaliSummer.Modules.Squad.Patches
         }
     }
 
-    [HarmonyPatch(typeof(Unit), nameof(Unit.ReportKilled))]
+    // The shared native patch calls this observer when the Squad module is active.
     internal static class SquadKillPatch
     {
-        private static void Postfix(Unit __instance)
+        internal static void RecordKill(Unit unit)
         {
-            if (GameAccess.IsServer()) SquadRuntime.Active?.RecordKill(__instance);
+            if (GameAccess.IsServer()) SquadRuntime.Active?.RecordKill(unit);
         }
     }
 

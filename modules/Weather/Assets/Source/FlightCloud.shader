@@ -1,6 +1,10 @@
 Shader "Boscali/FlightCloud"
 {
-    Properties { _CloudDensity ("Density", Range(0,2)) = 1 }
+    Properties
+    {
+        _CloudDensity ("Density", Range(0,2)) = 1
+        [HideInInspector] _CloudPhaseMask ("Checker Sample Phases", 2D) = "black" {}
+    }
     SubShader
     {
         Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent-10" "RenderType"="Transparent" }
@@ -17,6 +21,9 @@ Shader "Boscali/FlightCloud"
         sampler2D _WeatherEnvelopeTex;
         float _WeatherEnvelopeOn;
         sampler3D _CloudNoiseTex;
+        sampler2D _CloudPhaseMask;
+        float4 _CloudPhaseMask_TexelSize;
+        float _CloudDebugMode;
         float3 _CloudWorldOffset, _CloudCameraForward, _CloudSunDirection, _CloudCameraPos;
         float3 _CloudSunColor, _CloudAmbientColor, _CloudGroundColor, _CloudFogColor;
         float2 _CloudWindOffset, _CloudAltitudeBounds, _CloudHeroBounds;
@@ -1804,7 +1811,22 @@ Shader "Boscali/FlightCloud"
             return stratum < 2u ? low : 1.0 - low;
         }
 
-        float4 MarchSky(float3 origin, float3 ray, float sceneDistance, float2 pixel, out float cloudDistance)
+        float CheckerSamplePhase(float2 pixel)
+        {
+            // CloudMotionProbe mode -1 measures the hash sampler in the same build.
+            if (_CloudCheckerOn < 0.5 || _CloudPhaseMask_TexelSize.z < 128.0 || _CloudDebugMode == -1.0)
+                return CloudSamplePhase(pixel);
+
+            uint2 texel = (uint2)pixel;
+            uint cell = (texel.x & 1u) | ((texel.y & 1u) << 1u);
+            float2 uv = (float2(texel >> 1u) + 0.5) * _CloudPhaseMask_TexelSize.xy;
+            // Each 2x2 has one sample in each quarter. Each checker phase reads one
+            // channel, with a tiled blue-noise distribution and no frame offset.
+            float4 phases = tex2Dlod(_CloudPhaseMask, float4(uv, 0, 0));
+            return (phases[cell] * 255.0 + 0.5) / 256.0;
+        }
+
+        float4 MarchSky(float3 origin, float3 ray, float sceneDistance, float samplePhase, out float cloudDistance)
         {
             float3 ro = origin + _CloudWorldOffset;
             float sceneLimit = min(sceneDistance, CLOUD_HORIZON_LIMIT);
@@ -1865,7 +1887,6 @@ Shader "Boscali/FlightCloud"
             float sunGlow = SunGlowLobes(cosine);
             float awayFromSun = saturate(0.5 - 0.5 * cosine);
             // Freeze the phase per texel so a still view can converge without boiling.
-            float samplePhase = CloudSamplePhase(pixel);
             float jitter = lerp(0.1, 0.9, samplePhase);
 
             // Two sample streams merged by distance. The ordinary one is full detail to the near limit, then a coarse march
@@ -2308,7 +2329,7 @@ Shader "Boscali/FlightCloud"
                 float3 ray = normalize(i.world - origin);
                 float rawDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
                 float cloudDistance;
-                float4 sky = MarchSky(origin, ray, SceneDistance(rawDepth, dot(ray, -UNITY_MATRIX_V[2].xyz)), i.pos.xy, cloudDistance);
+                float4 sky = MarchSky(origin, ray, SceneDistance(rawDepth, dot(ray, -UNITY_MATRIX_V[2].xyz)), CloudSamplePhase(i.pos.xy), cloudDistance);
                 if (sky.a < 0.002) discard;
                 return sky;
             }
@@ -2370,7 +2391,7 @@ Shader "Boscali/FlightCloud"
                 #endif
                 LowOut o;
                 float cloudDistance;
-                o.colour = MarchSky(_CloudCameraPos, ray, sceneDistance, texel, cloudDistance);
+                o.colour = MarchSky(_CloudCameraPos, ray, sceneDistance, CheckerSamplePhase(texel), cloudDistance);
                 // Quarter data retains scene depth for resolve. The direct half-size
                 // output needs only the nearest relevant depth for the final upsample.
                 float upsampleDepth = _CloudCheckerOn < 0.5 && o.colour.a > 0.97 ?
@@ -2421,7 +2442,7 @@ Shader "Boscali/FlightCloud"
                 float sceneDistance = rawDepth >= 0.999999 ? CLOUD_HORIZON_LIMIT : LinearEyeDepth(rawDepth) * viewLength;
                 #endif
                 float cloudDistance;
-                return MarchSky(_CloudCameraPos, view / viewLength, sceneDistance, i.pos.xy, cloudDistance);
+                return MarchSky(_CloudCameraPos, view / viewLength, sceneDistance, CloudSamplePhase(i.pos.xy), cloudDistance);
             }
             ENDHLSL
         }

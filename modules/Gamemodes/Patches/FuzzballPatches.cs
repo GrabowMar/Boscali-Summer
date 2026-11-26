@@ -2,7 +2,6 @@ using BoscaliSummer.Modules.Gamemodes.Runtime;
 using HarmonyLib;
 using NuclearOption.Networking;
 using NuclearOption.SavedMission;
-using NuclearOption.SceneLoading;
 using System.Collections.Generic;
 using System.Reflection;
 
@@ -109,12 +108,6 @@ namespace BoscaliSummer.Modules.Gamemodes.Patches
     internal static class FuzzballSceneReadyPatch
     {
         private static void Postfix() => FuzzballFlight.SceneReady();
-    }
-
-    [HarmonyPatch(typeof(MapLoader), nameof(MapLoader.Load))]
-    internal static class FuzzballReloadMapPatch
-    {
-        private static void Prefix(MapLoader __instance) => FuzzballFlight.BeforeMapLoad(__instance);
     }
 
     [HarmonyPatch]

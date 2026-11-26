@@ -76,15 +76,14 @@ namespace BoscaliSummer.Modules.Support.Patches
     /// The held-node kill assist (+5 CR to the operator): every unit death on the host, AI and indirect kills included (the player-only
     /// <c>ReportKillAction</c> path never saw those). <c>CyberService.NoteKill</c> dedupes per target. The same postfix feeds the SOF cover-kill relief.
     /// </summary>
-    [HarmonyPatch(typeof(Unit), nameof(Unit.ReportKilled))]
     internal static class CyberUnitKilledPatch
     {
-        private static void Postfix(Unit __instance)
+        internal static void RecordKill(Unit unit)
         {
-            try { if (GameAccess.IsServer() && CyberService.Active != null) CyberService.Active.NoteKill(__instance); }
+            try { if (GameAccess.IsServer() && CyberService.Active != null) CyberService.Active.NoteKill(unit); }
             catch (Exception e) { PatchGuard.Report("Support.CyberUnitKilled", e); }
             // SOF cover kill (an enemy ground unit died near a pinned team): rides this same postfix, no second patch.
-            try { if (GameAccess.IsServer() && SofService.Active != null) SofService.Active.NoteKill(__instance); }
+            try { if (GameAccess.IsServer() && SofService.Active != null) SofService.Active.NoteKill(unit); }
             catch (Exception e) { PatchGuard.Report("Support.SofUnitKilled", e); }
         }
     }

@@ -54,6 +54,7 @@ namespace BoscaliSummer.Modules.Megaplane
                     levels.Far.Add(renderer);
                 }
             }
+            if (originals.TryGetValue("Fuselage_Cockpit", out Levels cockpit)) MegaplaneDeckMesh.Batch(nodes, cockpit.Near);
             foreach (KeyValuePair<AeroPart, Levels> island in islands)
             {
                 // References cross the island's animated pivots but never its detachable neighbours.

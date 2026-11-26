@@ -12,13 +12,19 @@ sys.path.insert(0, str(HERE))
 from bsmp import read_model
 
 
-def inspect():
+def before_target(obj, inverse, eye, target):
+    origin = inverse @ eye
+    ray = inverse @ target - origin
+    return obj.ray_cast(origin, ray.normalized(), distance=ray.length - .0005)[0]
+
+
+def inspect(model_file=None, assets=None):
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    assets = HERE.parent / "Assets"
-    nodes = {o.name:o for o in read_model(assets/"megaplane.mesh.gz", assets)}
+    assets = assets or HERE.parent / "Assets"
+    nodes = {o.name:o for o in read_model(model_file or assets/"megaplane.mesh.gz", assets)}
     bpy.context.view_layer.update()
     eye = nodes["pilot"].matrix_world.translation + Vector((0, .30, .26))
-    blockers = [o for o in nodes.values() if o.type == "MESH" and o.name.startswith(
+    blockers = [(o, o.matrix_world.inverted()) for o in nodes.values() if o.type == "MESH" and o.name.startswith(
         ("FlightDeck_", "Detail_Windscreen", "Glass_Canopy", "Int_Avionics", "Int_Bridge",
          "ForeCheek", "BridgeCrown", "Fuselage_Cockpit"))]
     backs = [nodes[n] for n in ("Fuselage_Cockpit", "Glass_Canopy", "Detail_WindscreenFrames",
@@ -48,7 +54,7 @@ def inspect():
     triangle_count = sum(len(o.data.polygons) for o in bridge)
     assert 350 < triangle_count < 6500, f"Unexpected flight-deck geometry cost: {triangle_count}"
     clearance = 100
-    for o in bridge:
+    for o in (*bridge, old_panel):
         for v in o.data.vertices:
             p = o.matrix_world @ v.co
             ray_origin = Vector((p.x, 130., p.z))
@@ -68,46 +74,54 @@ def inspect():
         for i in range(11):
             for j in range(9):
                 target = socket.matrix_world.translation + Vector(((i/10-.5)*width,-.003,(j/8-.5)*height))
-                ray = target-eye
-                limit = ray.length - .0005
-                direction = ray.normalized()
-                for o in blockers:
-                    found, hit, _, _ = o.ray_cast(o.matrix_world.inverted() @ eye,direction)
-                    if found:
-                        assert (o.matrix_world @ hit - eye).length >= limit, f"{o.name} obscures {name} at {i},{j}"
+                for o, inv in blockers:
+                    assert not before_target(o, inv, eye, target), f"{o.name} obscures {name} at {i},{j}"
                 n += 1
-    # The lower seven instrument faces sit forward of the apron in machined cassettes.
-    # Check the working image and, in particular, the compass line just below the PFD title.
-    # Each bank is read from its own pilot chair, with the centre map read by the captain.
-    glass = nodes["FlightDeck_Displays"]
-    bounds = {}
-    for face in glass.data.polygons:
-        if not glass.data.materials[face.material_index].name.endswith("Display_Emit"):
+
+    displays = nodes["FlightDeck_Displays"]
+    screens, pedestal = {}, set()
+    for p in displays.data.polygons:
+        if not displays.data.materials[p.material_index].name.endswith("Display_Emit"):
             continue
-        points = [glass.matrix_world @ glass.data.vertices[i].co for i in face.vertices]
-        if max(p.y for p in points) - min(p.y for p in points) > .001 or max(p.z for p in points) < 4.8:
+        points = [displays.matrix_world @ displays.data.vertices[i].co for i in p.vertices]
+        if max(q.y for q in points) - min(q.y for q in points) > .001:
+            pedestal.update(tuple(q) for q in points)
             continue
-        pair = (round(min(p.x for p in points), 4), round(max(p.x for p in points), 4))
-        bounds.setdefault(pair, []).extend(points)
-    assert len(bounds) == 7, "Missing upright lower display cassette"
-    for points in bounds.values():
-        xs, zs = [p.x for p in points], [p.z for p in points]
-        seat = eye.copy()
-        if min(xs) > 0:
-            seat.x = nodes["FlightDeck_SeatMount_Copilot"].matrix_world.translation.x
-        for u in (.16, .5, .84):
-            for v in (.22, .5, .80, .88):
-                target = Vector((min(xs) + u*(max(xs)-min(xs)), points[0].y, min(zs) + v*(max(zs)-min(zs))))
-                ray = target - seat
-                for obj in blockers:
-                    if obj.name == "FlightDeck_Yokes":
-                        continue
-                    ok, point, _, _ = obj.ray_cast(obj.matrix_world.inverted() @ seat, ray.normalized())
-                    if ok:
-                        distance = (obj.matrix_world @ point - seat).length
-                        assert distance >= ray.length - .0005, f"{obj.name} crosses a lower instrument at {target}"
+        key = round(min(q.x for q in points), 4), round(max(q.x for q in points), 4)
+        screens.setdefault(key, []).extend(points)
+    assert len(screens) == 7 and len(pedestal) == 4, "Missing a lower flight-deck display aperture"
+    for (left, right), points in screens.items():
+        low, high = min(p.z for p in points), max(p.z for p in points)
+        seat_eye = eye.copy()
+        if left > 0:
+            seat_eye.x = nodes["FlightDeck_SeatMount_Copilot"].matrix_world.translation.x
+        for i in range(1, 10):
+            for j in range(1, 10):
+                target = Vector((left + i/10*(right-left), points[0].y, low + j/10*(high-low)))
+                for o, inv in blockers:
+                    assert not before_target(o, inv, seat_eye, target), f"{o.name} obscures the lower display at {target}"
                 n += 1
+
+    front_left, front_right, back_left, back_right = map(Vector, sorted(pedestal, key=lambda q:(q[1], q[0])))
+    fascia = [(o, inv) for o, inv in blockers if o.name in ("FlightDeck_Panel", "FlightDeck_CabinLiner")]
+    knee_samples = 0
+    for label in ("Pilot", "Copilot"):
+        mount = nodes["FlightDeck_SeatMount_" + label].matrix_world.translation
+        seat_eye = Vector((mount.x, eye.y, eye.z))
+        for u in (.15, .5, .85):
+            for v in (.15, .5, .85):
+                target = front_left.lerp(front_right, u).lerp(back_left.lerp(back_right, u), v)
+                for o, inv in blockers:
+                    assert not before_target(o, inv, seat_eye, target), f"{o.name} obscures the inclined display from {label}"
+                n += 1
+        for side in (-.24, -.12, 0, .12, .24):
+            for height in (4.39, 4.47, 4.55, 4.63):
+                knee = Vector((mount.x + side, mount.y - .25, height))
+                for o, inv in fascia:
+                    assert not before_target(o, inv, knee, knee + Vector((0,.79,0))), f"{o.name} crosses the {label} knee well"
+                knee_samples += 1
     print(f"Bridge: {triangle_count} triangles, outer-skin clearance {clearance:.3f} m, {n} pilot sight rays clear.")
+    print(f"Lower flight deck: 7 upright displays and the inclined display unobstructed, {knee_samples} clear knee-well samples.")
     print(f"Windshield: all {len(printed_corners)} physical surround corners seated on the 12 mm backing, no stranded seam vertices.")
     print("Coaming front normals and removal of both obsolete warning blocks verified.")
 

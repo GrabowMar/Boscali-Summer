@@ -14,12 +14,14 @@ namespace BoscaliSummer.Modules.Squad
         private static readonly ModuleMetadata Module = new ModuleMetadata("squad", "Squad / ace hunts");
 
         public ModuleMetadata Metadata => Module;
-        public Type[] PatchTypes => new[] { typeof(SquadDamagePatch), typeof(SquadKillPatch), typeof(SquadPilotDeathPatch) };
+        public Type[] PatchTypes => new[] { typeof(SquadDamagePatch), typeof(SquadPilotDeathPatch) };
         public void Install(ModuleContext context)
         {
             SquadManager manager = context.AddSceneService<SquadManager>(44);
             SquadNet network = context.AddComponent<SquadNet>();
             manager.Configure(context.Settings.Squad, network, context.Services); network.Configure(manager);
+            UnitReportKilledPatch.AfterReport += SquadKillPatch.RecordKill;
+            context.OnTeardown(() => UnitReportKilledPatch.AfterReport -= SquadKillPatch.RecordKill);
             context.AddService<ISquadView>(manager);
             context.AddService<IAceWingRoster>(manager);
             var scopeGauge = new AceScopeGauge(manager);

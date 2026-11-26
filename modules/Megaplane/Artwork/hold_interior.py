@@ -12,13 +12,15 @@ from forebody import Surface, child_mesh
 class Fittings(Surface):
     """Batch closed solids into the mesh of their shared damage/animation owner."""
 
-    def loft(self, lower, upper, material):
+    def loft(self, lower, upper, material, hidden_below=None):
         center = sum(lower+upper, Vector()) / (len(lower)*2)
         for ring in (lower, upper):
             self.face(ring, material, sum(ring, Vector())/len(ring)-center)
         for i, p in enumerate(lower):
             j = (i+1) % len(lower)
             face = [p, lower[j], upper[j], upper[i]]
+            if hidden_below is not None and max(v.z for v in face) < hidden_below:
+                continue
             self.face(face, material, sum(face, Vector())/4-center)
 
     def box(self, center, size, material, bevel=0):
@@ -29,13 +31,13 @@ class Fittings(Surface):
             (-w+r,-d),(w-r,-d),(w,-d+r),(w,d-r),(w-r,d),(-w+r,d),(-w,d-r),(-w,-d+r)]
         self.loft(*[[Vector((x+a,y+b,z+q)) for a,b in profile] for q in (-h,h)], material)
 
-    def rod(self, start, end, radius, material, sides=8):
+    def rod(self, start, end, radius, material, sides=8, hidden_below=None):
         a,b = Vector(start), Vector(end)
         axis = (b-a).normalized()
         normal = axis.cross(Vector((0,0,1) if abs(axis.z)<.9 else (0,1,0))).normalized()
         tangent = axis.cross(normal)
         ring = [radius*(normal*cos(i*2*pi/sides)+tangent*sin(i*2*pi/sides)) for i in range(sides)]
-        self.loft([a+t for t in ring], [b+t for t in ring], material)
+        self.loft([a+t for t in ring], [b+t for t in ring], material, hidden_below)
 
     def finish(self, name, owner):
         obj = child_mesh("Detail_Bay_" + name, owner)
@@ -67,7 +69,8 @@ def cargo_deck(nodes):
             y = -45.53+i*2.43
             b.box((x,y,-3.796), (.66,2.23,.072), "BayRubber", .085)
             for dy in (-.74,0,.74):
-                b.rod((x-.225,y+dy,-3.784),(x+.225,y+dy,-3.784),.044,"Edge",10)
+                # The pad encloses the lower arc up to z=-3.760 over the complete roller span.
+                b.rod((x-.225,y+dy,-3.784),(x+.225,y+dy,-3.784),.044,"Edge",10, hidden_below=-3.761)
     for x in (-4.52,4.52):
         for i in range(12):
             y=-45.1+i*2.37
@@ -99,10 +102,11 @@ def catwalk(nodes):
             b.rod((-8.71,y,-3.65),(-7.68,y,-2.98),.068,"Mech")
         for z in (-2.24,-1.74):
             b.rod((-7.64,a+.12,z),(-7.64,e-.12,z),.042,"BayOchre" if z>-2 else "Edge")
-        # Parallel stamped drainage slots are modelled as dark flush strips.
+        # Dark drainage marks follow the top of the walk without floating solids.
         for i in range(round((e-a)*3)):
             y=a+.15+i*.32
-            b.box((-8.15,y,-2.772),(.64,.043,.022),"BayRubber")
+            b.face([(-8.15+dx,y+dy,-2.7835) for dx,dy in
+                    ((-.32,-.0215),(.32,-.0215),(.32,.0215),(-.32,.0215))], "BayRubber", (0,0,1))
     for i in range(4):
         y=-44.65+i*.24
         b.box((-8.19,y,-3.69+i*.245),(1.15,.27,.10),"BayIvory")

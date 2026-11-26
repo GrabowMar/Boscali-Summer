@@ -26,8 +26,7 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
             typeof(FuzzballAircraftListPatch), typeof(FuzzballCanSpawnPatch), typeof(FuzzballHangarsPatch),
             typeof(FuzzballSpawnPatch), typeof(FuzzballDefinitionPatch), typeof(FuzzballSavedSpawnPatch),
             typeof(FuzzballCargoPatch), typeof(FuzzballTroopsPatch), typeof(FuzzballDepotPatch),
-            typeof(FuzzballPilotPatch), typeof(FuzzballSceneReadyPatch), typeof(CompetitiveFactoryPatch),
-            typeof(FuzzballReloadMapPatch)
+            typeof(FuzzballPilotPatch), typeof(FuzzballSceneReadyPatch), typeof(CompetitiveFactoryPatch)
         };
 
         internal static void SceneReady()

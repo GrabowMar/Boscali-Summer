@@ -32,13 +32,12 @@ namespace BoscaliSummer.Modules.Megaplane
             if (nodes.TryGetValue("FlightDeck_CabinLiner", out Transform shell) &&
                 shell.TryGetComponent(out cabin.liner))
                 cabin.lensSlot = System.Array.FindIndex(cabin.liner.sharedMaterials, m => m.name == "BS_Megaplane_CrewDome_Emit");
-            var fixtures = new List<Light>(7);
-            foreach (Transform lens in new[] { front, mid, aft })
+            var fixtures = new List<Light>(7)
             {
-                bool center = lens == mid;
-                fixtures.Add(MakeLamp(lens, Vector3.down, center ? new Color(.90f, .95f, 1f) : new Color(1f, .91f, .78f),
-                    lens == front ? 4.5f : 7f, 6.4f, 142f, 105f));
-            }
+                MakeLamp(front, Vector3.down, new Color(1f, .89f, .76f), 2.65f, 5.1f, 140f, 112f),
+                MakeLamp(mid, Vector3.down, new Color(1f, .86f, .68f), 3.75f, 5.1f, 140f, 112f),
+                MakeLamp(aft, Vector3.down, new Color(1f, .81f, .60f), 3.65f, 5.1f, 140f, 112f)
+            };
             foreach (string role in new[] { "Nav", "Comms", "Engineering", "Cargo" })
             {
                 if (!nodes.TryGetValue("FlightDeck_TaskLamp_" + role, out Transform lens)) continue;

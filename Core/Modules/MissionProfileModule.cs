@@ -8,7 +8,7 @@ namespace BoscaliSummer.Core.Modules
         public ModuleMetadata Metadata { get; } =
             new ModuleMetadata("mission-profile", "Mission start prompt");
 
-        public Type[] PatchTypes => BoscaliMission.PatchTypes;
+        public Type[] PatchTypes => [.. BoscaliMission.PatchTypes, typeof(MapLoadPatch), typeof(UnitReportKilledPatch)];
 
         public void Install(ModuleContext context) =>
             BoscaliMission.EnsureRegistered(context.Settings);

@@ -11,7 +11,7 @@ The second command requires Pillow and derives the cockpit damage diagram from
 the final exported mesh. Use the workspace nomodkit venv for that command.
 The first command opens a fresh scene and writes the packed, metre-scale master
 to assets/KY44Groza. Its root object has sliders for flaps, hold, gear, fans
-and the four intake lids on the two nose-lift fans.
+the fighter bay and the four intake lids on the two nose-lift fans.
 Panel textures live alongside the embedded mesh. To regenerate the textures,
 run build_panels.py in Blender before rebuilding the model.
 
@@ -19,15 +19,8 @@ The verify_*.json files beside this builder are nomodkit game scenarios. Run
 them from this checkout in a BepInEx sandbox. Fighter and railgun loadouts
 use different prefabs, so each payload setting takes effect on a fresh launch.
 
-The default rebuild applies the current flight deck to the previous released
-Groza master and matches the shipped near and distant assets. It reads that
-master and the previous distant LOD from Git. For an extracted source release
-set KY44_CREW_BASE_DIR to the folder containing the original KY-44 Groza.blend
-and megaplane.lod.gz supplied in Build input.
-
-Use -- --from-breakwater to reconstruct the earlier aircraft from the original
-Breakwater, or point KY44_BASE_MESH at a historical BSMP v2 file. This historical
-path predates manual forebody and gear refinements in the released Groza master.
+By default the versioned Breakwater source comes from Git. KY44_BASE_MESH can
+instead point at a local copy of that original compressed BSMP v2 file.
 """
 import os
 import sys
@@ -52,10 +45,11 @@ from crown import finish_crown_shading
 from structures import detail_structure
 from finish import finish_surface
 from build_lods import write_lods
-from flightdeck import frame_displays
+from flightdeck import fit_pilot_fascia, frame_displays
 from bridge_instruments import fit_bridge
 from crew_room import fit_crew_room
 from hold_interior import outfit_hold
+from fighter_bay import outfit_fighter_bay
 from planform import rebuild_planform
 from wing_structure import fit_wing_splices
 from reactor import fit_reactor
@@ -92,6 +86,18 @@ def stage(root):
     scene.camera = cam
     cam.location = (-245,265,100)
     cam.rotation_euler = (Vector((0,-2,3))-cam.location).to_track_quat("-Z","Y").to_euler()
+    for name, eye, target, lens in (
+        ("Flight deck review", (-1.08,100.49,5.46), (-1.03,102.09,5.04), 16),
+        ("Crew cabin review", (.03,95.98,5.65), (0,99.65,5.21), 15),
+        ("Command post review", (-.28,96.64,5.67), (-1.14,95.99,5.08), 24),
+        ("Watch station review", (-.79,98.66,5.56), (-1.89,98.10,5.13), 23),
+    ):
+        camera = bpy.data.cameras.new(name)
+        camera.lens, camera.clip_start, camera.clip_end = lens, .025, 3000
+        review = bpy.data.objects.new(name, camera)
+        scene.collection.objects.link(review)
+        review.location = eye
+        review.rotation_euler = (Vector(target)-review.location).to_track_quat("-Z","Y").to_euler()
     for screen in bpy.data.screens:
         for area in screen.areas:
             if area.type == "VIEW_3D":
@@ -124,6 +130,7 @@ def build():
     frame_displays(nodes)
     detail_structure(nodes)
     outfit_hold(nodes)
+    outfit_fighter_bay(nodes)
     finish_surface(nodes)
     rebuild_planform(nodes)
     add_nose_assist(nodes)
@@ -135,6 +142,7 @@ def build():
     fit_fore_sections(nodes)
     fit_bridge(nodes)
     fit_crew_room(nodes)
+    fit_pilot_fascia(nodes)
     bpy.context.view_layer.update()
     root = nodes["BS_Megaplane"]
     write_lods(nodes, ASSETS/"megaplane.lod.gz")
@@ -152,8 +160,4 @@ def build():
 
 
 if __name__ == "__main__":
-    if "--from-breakwater" in sys.argv or os.getenv("KY44_BASE_MESH"):
-        build()
-    else:
-        from build_crew_room import main
-        main()
+    build()

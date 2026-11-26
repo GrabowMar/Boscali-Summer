@@ -55,6 +55,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int FarProfileTexId = Shader.PropertyToID("_WeatherFarProfileTex");
         private static readonly int EnvelopeTexId = Shader.PropertyToID("_WeatherEnvelopeTex");
         private static readonly int EnvelopeOnId = Shader.PropertyToID("_WeatherEnvelopeOn");
+        private static readonly int PhaseMaskId = Shader.PropertyToID("_CloudPhaseMask");
         private static byte[] sharedNoise;
         private static int generatingNoise;
         private static Mesh cube;
@@ -505,6 +506,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 // Before vanilla smoke (2998-3001): a missile trail in front of a cloud draws over
                 // it instead of vanishing behind the volume. Vanilla cloud puffs sat at 2996-2997.
                 material = new Material(shader) { name = "Boscali Weather Volume", renderQueue = 2997 };
+                Texture2D phaseMask = CanopyShaderBundle.GetCloudPhaseMask();
+                if (phaseMask != null) material.SetTexture(PhaseMaskId, phaseMask);
                 Shader compositeShader = CanopyShaderBundle.GetFlightCloudCompositeShader();
                 if (compositeShader != null && compositeShader.isSupported)
                     compositeMaterial = new Material(compositeShader) { name = "Boscali Weather Composite", renderQueue = 2997 };

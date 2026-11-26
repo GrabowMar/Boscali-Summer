@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Maps.Patches
 {
-    /// <summary>The game asks its map list four ways; each one first makes sure the mod's maps are on the list.</summary>
+    /// <summary>Populate the map list for native lookups and immediately before native loads.</summary>
     [HarmonyPatch(typeof(MapLoader))]
     internal static class MapLoaderListPatch
     {
@@ -19,10 +19,11 @@ namespace BoscaliSummer.Modules.Maps.Patches
         [HarmonyPatch(nameof(MapLoader.CanLoad))]
         [HarmonyPatch(nameof(MapLoader.TryGetMapName))]
         [HarmonyPatch(nameof(MapLoader.TryResolveKey))]
-        [HarmonyPatch(nameof(MapLoader.Load))]
-        private static void Prefix(MapLoader __instance)
+        private static void Prefix(MapLoader __instance) => EnsureListed(__instance);
+
+        internal static void EnsureListed(MapLoader loader)
         {
-            try { MapCatalog.EnsureListed(__instance); }
+            try { MapCatalog.EnsureListed(loader); }
             catch (Exception e) { PatchGuard.Report("Maps.List", e); }
         }
     }

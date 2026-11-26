@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BoscaliSummer.Core.Game;
 using Newtonsoft.Json;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -153,14 +154,6 @@ namespace BoscaliSummer.Modules.Megaplane
             };
         }
 
-        private static bool countingKills;
-
-        private static void CountKill(Unit __instance)
-        {
-            foreach (var witness in Object.FindObjectsOfType<CrewWitness>())
-                if (witness.Source == __instance) witness.Kills++;
-        }
-
         private static object Crew(string step, string profile, Aircraft aircraft)
         {
             var witness = Object.FindObjectsOfType<CrewWitness>().FirstOrDefault(w => w.Profile == profile);
@@ -168,13 +161,6 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 if (aircraft == null || !aircraft.IsServer || aircraft.pilots.Length == 0 || aircraft.Player == null)
                     throw new InvalidOperationException("This case requires the actual player to be seated");
-                if (!countingKills)
-                {
-                    var patch = new HarmonyLib.Harmony("BoscaliSummer.Dev.GrozaCrewWitness");
-                    patch.Patch(HarmonyLib.AccessTools.Method(typeof(Unit), nameof(Unit.ReportKilled)),
-                        prefix: new HarmonyLib.HarmonyMethod(typeof(MegaplaneCrashProbe),nameof(CountKill)));
-                    countingKills = true;
-                }
                 var holder = new GameObject("Groza crew witness");
                 holder.transform.SetParent(Datum.origin,false);
                 witness = holder.AddComponent<CrewWitness>();
@@ -202,6 +188,14 @@ namespace BoscaliSummer.Modules.Megaplane
 
         private sealed class CrewWitness : MonoBehaviour
         {
+            private void OnEnable() => UnitReportKilledPatch.BeforeReport += CountKill;
+            private void OnDisable() => UnitReportKilledPatch.BeforeReport -= CountKill;
+
+            private void CountKill(Unit unit)
+            {
+                if (Source == unit) Kills++;
+            }
+
             private static readonly System.Reflection.FieldInfo Health = HarmonyLib.AccessTools.Field(typeof(Pilot),"hitPoints");
             internal string Profile;
             internal Aircraft Source;

@@ -15,10 +15,12 @@ namespace BoscaliSummer.Modules.Megaplane
     internal sealed class MegaplaneModule : IModule
     {
         public ModuleMetadata Metadata => new ModuleMetadata("megaplane", "KY-44 Groza");
-        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneClientMapReadyPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch), typeof(MegaplaneLoadoutPatch), typeof(MegaplaneSavedLoadoutPatch), typeof(MegaplaneCargoStationPatch), typeof(MegaplaneHangarAvailabilityPatch), typeof(MegaplaneHangarAirStartPatch), typeof(MegaplaneBatteryFirePatch), typeof(MegaplaneBatteryAimPatch), typeof(MegaplaneSiloSelectPatch), typeof(MegaplaneSiloFirePatch), typeof(MegaplaneSelfHitPatch), typeof(MegaplaneStatusInitializePatch), typeof(MegaplaneCrashCleanupPatch), typeof(MegaplaneCrashLifecyclePatch) };
+        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch), typeof(MegaplaneLoadoutPatch), typeof(MegaplaneSavedLoadoutPatch), typeof(MegaplaneCargoStationPatch), typeof(MegaplaneHangarAvailabilityPatch), typeof(MegaplaneHangarAirStartPatch), typeof(MegaplaneBatteryFirePatch), typeof(MegaplaneBatteryAimPatch), typeof(MegaplaneSiloSelectPatch), typeof(MegaplaneSiloFirePatch), typeof(MegaplaneSelfHitPatch), typeof(MegaplaneStatusInitializePatch), typeof(MegaplaneCrashCleanupPatch), typeof(MegaplaneCrashLifecyclePatch) };
         public void Install(ModuleContext context)
         {
             MegaplaneSettings.Current = context.Settings.Megaplane;
+            MapLoadPatch.WrapResult = MegaplaneClientMapReady.WaitIfNeeded;
+            context.OnTeardown(() => MapLoadPatch.WrapResult = null);
             context.AddService<ICarrierBayControl>(new MegaplaneBayControls());
             if (!GameManager.IsHeadless) context.AddSceneService<MegaplaneOperationsHud>(57);
             MegaplaneNet.Ensure();   // the bay/railgun art replication: up before any scene can hold a carrier
@@ -54,16 +56,16 @@ namespace BoscaliSummer.Modules.Megaplane
 
     // The server immediately sends aircraft and their encyclopedia indices when a joining client finishes its map load.
     // On a cold start Blueprinter can still be reading the bundles, leading Mirage to permanently discard the spawn.
-    [HarmonyPatch(typeof(MapLoader), nameof(MapLoader.Load))]
-    internal static class MegaplaneClientMapReadyPatch
+    internal static class MegaplaneClientMapReady
     {
         private static bool Registered => Encyclopedia.Lookup != null && Encyclopedia.Lookup.ContainsKey(MegaplaneTemplate.Key);
 
-        private static void Postfix(ref UniTask<MapLoader.LoadResult> __result)
+        internal static UniTask<MapLoader.LoadResult> WaitIfNeeded(UniTask<MapLoader.LoadResult> loading)
         {
             NetworkManagerNuclearOption manager = GameAccess.NetworkManagerOrNull;
             if (manager?.Client?.Active == true && manager.Server?.Active != true && MegaplaneBlueprinterPatch.Available && !Registered)
-                __result = WaitForCatalogue(__result, manager);
+                return WaitForCatalogue(loading, manager);
+            return loading;
         }
 
         private static async UniTask<MapLoader.LoadResult> WaitForCatalogue(UniTask<MapLoader.LoadResult> loading, NetworkManagerNuclearOption manager)

@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static Shader updateShader;
         private static Shader flightCloudShader;
         private static Shader flightCloudCompositeShader;
+        private static Texture2D cloudPhaseMask;
         private static Shader sunShaftsShader;
         private static Shader sunDiscShader;
         private static Shader skyGlowShader;
@@ -104,6 +105,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             GetShader();
             return flightCloudCompositeShader;
+        }
+
+        internal static Texture2D GetCloudPhaseMask()
+        {
+            GetShader();
+            if (cloudPhaseMask == null && bundle != null)
+                cloudPhaseMask = bundle.LoadAsset<Texture2D>("assets/weathershader/cloud-phase.png");
+            return cloudPhaseMask;
         }
 
         /// <summary>The sun-shafts smear (SunShaftsPass).</summary>

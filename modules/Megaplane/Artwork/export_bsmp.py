@@ -7,8 +7,15 @@ from pathlib import Path
 import bpy
 import numpy as np
 
+from pose import neutral_pose
+
 
 def write_model(root, path):
+    with neutral_pose(root):
+        return _write_model(root, path)
+
+
+def _write_model(root, path):
     stream = io.BytesIO()
 
     def pack(fmt, *values):

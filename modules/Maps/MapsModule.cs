@@ -22,6 +22,8 @@ namespace BoscaliSummer.Modules.Maps
         public void Install(ModuleContext context)
         {
             var missions = new MapMissions();
+            MapLoadPatch.BeforeLoad += MapLoaderListPatch.EnsureListed;
+            context.OnTeardown(() => MapLoadPatch.BeforeLoad -= MapLoaderListPatch.EnsureListed);
             BoscaliMission.ExtraGroups += missions.Groups;
             BoscaliMission.Labels += missions.Label;
             MapLaunchPatch.Resolve = missions.Launch;

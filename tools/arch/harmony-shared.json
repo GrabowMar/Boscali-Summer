@@ -126,11 +126,6 @@
       "classification": "INDEPENDENT",
       "reason": "One postfix (hit ledger) and one prefix (records blast power); different kinds."
     },
-    "MapLoader.Load": {
-      "owners": ["Gamemodes", "Maps", "Megaplane"],
-      "classification": "INDEPENDENT",
-      "reason": "Gamemodes clears the loaded-map keys and Maps adds catalogue entries in separate prefixes. Megaplane's client-only postfix waits for its aircraft definition after native loading."
-    },
     "MessageFeed.Enqueue": {
       "owners": ["Command", "Hud"],
       "classification": "INDEPENDENT",
@@ -234,11 +229,6 @@
       "owners": ["HighCommand", "Squad"],
       "classification": "INDEPENDENT",
       "reason": "Postfixes recording the damager into separate state."
-    },
-    "Unit.ReportKilled": {
-      "owners": ["Megaplane", "Squad", "Support"],
-      "classification": "INDEPENDENT",
-      "reason": "Squad and Support record kills in separate state in postfixes. Megaplane's opt-in development prefix only increments the Groza crew test witness count."
     },
     "UnitDefinition.IsAllowed": {
       "owners": ["Core", "Gamemodes"],

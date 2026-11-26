@@ -5,6 +5,7 @@ using BoscaliSummer.Modules.Support.Presentation;
 using BoscaliSummer.Modules.Support.Presentation.Fronts;
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Modules;
 
 namespace BoscaliSummer.Modules.Support
@@ -23,8 +24,7 @@ namespace BoscaliSummer.Modules.Support
             typeof(Patches.CyberLaunchMountPatch),
             typeof(Patches.CyberLaunchFirePatch),
             typeof(Patches.CyberDetectScopePatch),
-            typeof(Patches.CyberShareBlockPatch),
-            typeof(Patches.CyberUnitKilledPatch)
+            typeof(Patches.CyberShareBlockPatch)
         };
 
         public void Install(ModuleContext context)
@@ -55,6 +55,8 @@ namespace BoscaliSummer.Modules.Support
             manager.AttachCyber(cyberService);
             sofService.Configure(manager, space, cyberService);
             manager.AttachSof(sofService);
+            UnitReportKilledPatch.AfterReport += Patches.CyberUnitKilledPatch.RecordKill;
+            context.OnTeardown(() => UnitReportKilledPatch.AfterReport -= Patches.CyberUnitKilledPatch.RecordKill);
             opsService.Configure(manager, space, cyberService, sofService);
             manager.AttachOps(opsService);
             overlordService.Configure(manager, space, cyberService, sofService);

@@ -19,6 +19,8 @@ namespace BoscaliSummer.Modules.Gamemodes
         public void Install(ModuleContext context)
         {
             var missions = new GamemodeMissions(context.Logger);
+            MapLoadPatch.BeforeLoad += FuzzballFlight.BeforeMapLoad;
+            context.OnTeardown(() => MapLoadPatch.BeforeLoad -= FuzzballFlight.BeforeMapLoad);
             BoscaliMission.ExtraGroups += missions.Groups;
             BoscaliMission.Labels += missions.Label;
             BoscaliMission.PresetModulesOff = Preset;
