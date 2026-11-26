@@ -104,6 +104,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool TurretAuto;
         /// <summary>The airframe has weapon bay doors, and they are being held open.</summary>
         public bool HasBayDoors, BayDoorsOpen;
+        public bool HasFighterBay;
+        public string FighterBaySlots, LaunchFighterBlocked, RecallFightersBlocked, WaveOffBlocked;
         /// <summary>Standing drop-zone owner and a faction-known, designated ground fix for the cargo branch.</summary>
         public bool CargoZoneAvailable, CargoZoneSet, CargoZoneCapable, CargoFixAvailable;
         public string CargoZoneLeg = "", CargoFixName = "";

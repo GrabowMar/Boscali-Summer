@@ -15,10 +15,10 @@ namespace BoscaliSummer.Modules.Megaplane
     {
         internal const string Key = "BS_Megaplane";
         // Mirage uses these only for network instantiation. Mission saves use the definition key.
-        // Different native damage tables must never receive one another's byte-indexed RPCs.
-        private const int NativePartLayout = 2;
-        internal const int PrefabHashFighters = 0x42534D50 + 4 * NativePartLayout;
-        internal const int PrefabHashRailgun = 0x42534D52 + 4 * NativePartLayout;
+        // Native damage and battery RPCs address parts and stations by index. Match the same layout on both peers.
+        private const int NativeLayout = 4;
+        internal const int PrefabHashFighters = 0x42534D50 + 4 * NativeLayout;
+        internal const int PrefabHashRailgun = 0x42534D52 + 4 * NativeLayout;
         internal static int PrefabHash => MegaplaneSettings.Railgun ? PrefabHashRailgun : PrefabHashFighters;
         internal const float Mass = 6500000f;          // The existing gross mass controls collisions and carried momentum.
         internal static AircraftDefinition Definition { get; private set; }
@@ -155,6 +155,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 skin.gameObject.AddComponent<MegaplaneForebodyPanel>().SetFace(section.face);
             }
             RefitAirframe(aircraft, model, nodes);
+            MegaplaneCountermeasures.Install(aircraft, nodes);
             foreach (string side in new[] { "L", "R" })
                 if (nodes.TryGetValue("NoseAssist_" + side, out Transform housing))
                     housing.gameObject.AddComponent<MegaplaneNoseFan>().Bind(nodes, side);
@@ -176,12 +177,17 @@ namespace BoscaliSummer.Modules.Megaplane
             definition.description = $"A fission-powered flying carrier with a {definition.width:0} m span, eight engine pods and an internal cargo hold. " +
                 (railgun ? "Its ventral bay carries a retractable RG-240 Trident. " :
                     "Its ventral bay can launch and recover two fighters. Hold course and speed during recovery. ") +
+                "Inboard racks carry strike stores and outboard racks carry escort weapons. The airframe carries 480 flares. " +
                 "The Groza starts airborne. At low speed, lower the gear, add throttle and pull back for nose lift. Center the stick to hold altitude.";
             MegaplaneGuns.Graft(encyclopedia, aircraft, nodes, railgun);
             // The bay holds one payload: the other's art is switched off (its hitboxes go with it).
             foreach (KeyValuePair<string, Transform> n in nodes)
                 if (railgun ? n.Key.StartsWith("Trapeze") || n.Key.StartsWith("FighterSlot_") : n.Key.StartsWith("Railgun")) n.Value.gameObject.SetActive(false);
-            if (!railgun) MegaplaneBayTemplate.Build(encyclopedia, aircraft, nodes);
+            if (!railgun)
+            {
+                MegaplaneBayTemplate.Build(encyclopedia, aircraft, nodes);
+                if (go.GetComponent<MegaplaneBay>() != null) go.AddComponent<MegaplaneBayOperations>();
+            }
             MegaplaneStores.Build(encyclopedia, aircraft, p, nodes);
             go.AddComponent<MegaplaneDefence>();
             definition.mass = Mass;

@@ -1,0 +1,41 @@
+{
+  "name": "ky44-wing-stores",
+  "description": "Check the native Groza strike and escort selectors, spacing, a mixed wing fit, and sequential escort missile release.",
+  "mission": "Free Flight",
+  "mods": ["boscalisummer"],
+  "timeout_s": 120,
+  "environment": {"config": {"boscalisummer": {"Trenches": {"Enabled": false}, "TheaterOps": {"Enabled": false}, "Events": {"Enabled": false}, "Garrisons": {"Enabled": false}, "DynamicOperations": {"Enabled": false}, "Support": {"Enabled": false}, "Weather": {"Enabled": false}, "Megaplane": {"BayPayload": "Fighters"}}}},
+  "ops": [
+    {"op": "seat", "id": "carrier", "aircraft": "KY-44 Groza", "near": [10000, -35000], "altitude": 3000, "speed": 135, "heading": 90, "view": "orbit", "timeout": 60},
+    {"op": "record", "ids": ["carrier"], "hz": 2},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.SavedFit", "args": {"id": "carrier"}, "store": "old"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneWeaponProbe.WingFit", "args": {"id": "carrier", "fit": true}, "store": "fit"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.View", "args": {"id": "carrier", "x": 106, "y": -32, "z": 36, "lx": 121, "ly": 1, "lz": -22, "fov": 65}},
+    {"op": "wait", "seconds": 1},
+    {"op": "capture", "name": "groza-strike-and-escort-racks", "hide_ui": true},
+    {"op": "spawn", "id": "target", "type": "SFB-81 Darkreach", "faction": "Primeva", "at": {"near": {"id": "carrier", "offset": [12000, 0, 0]}}, "altitude": 3000, "speed": 135, "heading": 90},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneWeaponProbe.WingFit", "args": {"id": "carrier", "idTarget": "target", "release": true}, "store": "first"},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneWeaponProbe.WingFit", "args": {"id": "carrier", "idTarget": "target", "release": true}, "store": "second"},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneWeaponProbe.WingFit", "args": {"id": "carrier"}, "store": "after"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "log_clean", "sources": ["Boscali Summer"]},
+    {"check": "alive", "ids": ["carrier"]},
+    {"check": "result_equals", "path": "old.valid", "value": true},
+    {"check": "result_equals", "path": "fit.strikeOptions", "value": true},
+    {"check": "result_equals", "path": "fit.escortOptions", "value": true},
+    {"check": "result_equals", "path": "fit.distinctRacks", "value": true},
+    {"check": "result_equals", "path": "fit.strikeMount", "value": "AGM_heavy_single"},
+    {"check": "result_equals", "path": "fit.escortMount", "value": "AAM2_double"},
+    {"check": "result_equals", "path": "first.before", "value": 8},
+    {"check": "result_equals", "path": "first.after", "value": 7},
+    {"check": "result_equals", "path": "second.after", "value": 6},
+    {"check": "result_equals", "path": "after.fired", "value": 2},
+    {"check": "result_equals", "path": "after.bothWingsReleased", "value": true}
+  ]
+}

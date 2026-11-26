@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -10,8 +11,7 @@ namespace BoscaliSummer.Modules.Megaplane
     /// <summary>The carrier models no gun heads: it carries the game's own turrets (BOTE does the same with whole ships).
     /// "GunMount_Side_*" art empties (flank fairings) get the VL-49 Tarantula's side-door 76 mm mount, scaled up into the
     /// BL-155 BASTION gunship howitzer (left battery points -X, right +X at rest; the empty marks its base plate).
-    /// "GunMount_CIWS_*" get the fastest-firing ship gun (datalink, point defence), "_Down" hung under the belly.
-    /// "SiloMount_*" (dorsal vertical-launch silos) get the ship missile launcher with the deepest magazine. With the
+    /// CIWS turrets guard the hull and both upper and lower wing sectors. The dorsal silos carry paired NL-98 and R9 batteries. With the
     /// railgun payload, the heaviest ship gun becomes the RG-240 TRIDENT under "Railgun_Pitch" (see MegaplaneRailgun).
     /// Native Turret/Gun do aiming, firing and replication: an unselected station engages on its own, the selected one is
     /// under pilot control (aims where the cockpit camera looks, or at the locked target). The clones' ship-hull parts are
@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Megaplane
     {
         internal const string Prefix = "BS_Gun_";
         internal const string SideDonor = "turret_76mm_SideMount";
-        internal const float SideScale = 3.2f;   // the Tarantula's 76 mm grown to a 155 mm gun on a 380 m hull
+        internal const float SideScale = 3.2f;   // scale the Tarantula's 76 mm donor to fit the Groza's flank fairings
         private static readonly FieldInfo Stations = AccessTools.Field(typeof(Turret), "weaponStations");
         private static readonly FieldInfo Parts = AccessTools.Field(typeof(Turret), "criticalParts");
         private static readonly FieldInfo Unit = AccessTools.Field(typeof(Turret), "attachedUnit");
@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Megaplane
         private static readonly FieldInfo FireCtl = AccessTools.Field(typeof(Turret), "fireControl");
         private static readonly FieldInfo Detectors = AccessTools.Field(typeof(Turret), "targetDetectors");
         private static readonly FieldInfo FireRate = AccessTools.Field(typeof(Gun), "fireRate");
+        private static readonly FieldInfo Cones = AccessTools.Field(typeof(Turret), "firingCones");
         internal static string Picked { get; private set; }
         internal static string PickedSilo { get; private set; }
         internal static WeaponInfo Bastion { get; private set; }
@@ -70,9 +71,12 @@ namespace BoscaliSummer.Modules.Megaplane
             Donor heavy = donors.OrderByDescending(d => d.Info.massPerRound).First();
             Donor ciws = donors.OrderByDescending(d => d.Rate).First();
             WeaponMount side = encyclopedia.weaponMounts.FirstOrDefault(m => m != null && (m.jsonKey == SideDonor || m.name == SideDonor));
-            Donor[] siloTypes = silos.OrderByDescending(d => d.Rate).GroupBy(d => d.Info).Select(g => g.First()).Take(2).ToArray();
+            Donor[] siloTypes = silos.OrderByDescending(d => d.Rate).ThenBy(d => d.Ship, StringComparer.Ordinal).GroupBy(d => d.Info).Select(g => g.First()).ToArray();
+            Donor forwardSilo = Silo(siloTypes, "NL-98");
+            Donor aftSilo = Silo(siloTypes, "StratoLance R9", forwardSilo.Info);
+            if (aftSilo.Root == null) aftSilo = forwardSilo;
             Picked = (side != null ? side.jsonKey + " x" + SideScale : "no side mount") + " + " + ciws.Ship + "/" + ciws.Root.name + (railgun ? " + rail " + heavy.Ship + "/" + heavy.Root.name : "");
-            PickedSilo = string.Join(", ", siloTypes.Select(d => d.Ship + "/" + d.Info.weaponName + " x" + d.Rate));
+            PickedSilo = string.Join(", ", new[] { forwardSilo, aftSilo }.Where(d => d.Root != null).Select(d => d.Ship + "/" + d.Info.weaponName + " x" + d.Rate));
 
             foreach (KeyValuePair<string, Transform> node in nodes.Where(n => n.Key.StartsWith("GunMount_") || n.Key.StartsWith("SiloMount_")).ToList())
             {
@@ -83,25 +87,83 @@ namespace BoscaliSummer.Modules.Megaplane
                     continue;
                 }
                 bool isSilo = node.Key.StartsWith("SiloMount_");
-                if (isSilo && siloTypes.Length == 0) continue;
                 bool secondPair = node.Key == "SiloMount_2" || node.Key == "SiloMount_3";
-                Donor d = isSilo ? siloTypes[secondPair && siloTypes.Length > 1 ? 1 : 0] : ciws;
-                GameObject clone = Clone(d.Root.gameObject, host.transform, Prefix + (isSilo ? node.Key : node.Key.Substring("GunMount_".Length)));
-                clone.transform.position = node.Value.position;
-                clone.transform.rotation = aircraft.transform.rotation * Quaternion.Euler(0f, 0f, node.Key.EndsWith("_Down") ? 180f : 0f);
-                Arm(aircraft, clone, "datalink");
-                clone.layer = host.gameObject.layer;
-                // A firing cone hung on the ship's hull (outside the clone) would point at the prefab asset: drop it (empty = all round; the hull linecast still guards self-hits).
-                foreach (Turret turret in clone.GetComponentsInChildren<Turret>(true))
-                    if (AccessTools.Field(typeof(Turret), "firingCones") is FieldInfo cones && cones.GetValue(turret) is System.Array arr &&
-                        arr.Cast<object>().Any(c => !(AccessTools.Field(c.GetType(), "transform")?.GetValue(c) is Transform ct) || !ct.IsChildOf(clone.transform)))
-                    {
-                        Debug.Log("[Megaplane] " + clone.name + ": firing cones outside the mount dropped");
-                        cones.SetValue(turret, System.Array.CreateInstance(arr.GetType().GetElementType(), 0));
-                    }
+                Donor d = isSilo ? (secondPair ? aftSilo : forwardSilo) : ciws;
+                if (d.Root == null || host == null) continue;
+                bool down = node.Key.EndsWith("_Down", StringComparison.Ordinal);
+                InstallBattery(aircraft, host, d, isSilo ? node.Key : node.Key.Substring("GunMount_".Length), node.Value.position, down, 0f);
+            }
+            foreach (int sign in new[] { -1, 1 })
+            {
+                string sideSuffix = sign < 0 ? "_L" : "_R";
+                AddWingBattery(aircraft, nodes, ciws, "Wing_Inner" + sideSuffix, "CIWS_Inner" + sideSuffix + "_Down", new Vector3(72f * sign, 3.07f, -17f), true, sign);
+                AddWingBattery(aircraft, nodes, ciws, "Wing_Mid" + sideSuffix, "CIWS_Mid" + sideSuffix, new Vector3(117f * sign, 6.57f, -26f), false, sign);
             }
             if (side == null) Debug.LogWarning("[Megaplane] side gun donor absent: " + SideDonor);
             if (railgun && nodes.TryGetValue("Railgun_Pitch", out Transform pitch)) Rail(aircraft, heavy, nodes, pitch);
+        }
+
+        private static Donor Silo(Donor[] donors, string name, WeaponInfo used = null)
+        {
+            Donor preferred = donors.FirstOrDefault(d => d.Info != used && d.Info.weaponName == name);
+            return preferred.Root != null ? preferred : donors.FirstOrDefault(d => d.Info != used);
+        }
+
+        private static void AddWingBattery(Aircraft aircraft, Dictionary<string, Transform> nodes, Donor donor,
+            string wingName, string name, Vector3 skinPoint, bool down, int sign)
+        {
+            if (!nodes.TryGetValue(wingName, out Transform wing)) return;
+            AeroPart host = wing.GetComponentInParent<AeroPart>(true);
+            if (host == null) return;
+            // The shaped pedestal enters the wing skin and shares the surrounding damage part.
+            string pedestalName = down ? "VentralBarbette_2" : "DorsalBarbette_0";
+            if (nodes.TryGetValue(pedestalName, out Transform pedestal) && pedestal.GetComponent<MeshFilter>() is MeshFilter mesh && pedestal.GetComponent<MeshRenderer>() is MeshRenderer renderer)
+            {
+                var foundation = new GameObject("Groza_" + name + "_Base") { layer = host.gameObject.layer };
+                foundation.transform.SetParent(host.transform, false);
+                foundation.transform.SetPositionAndRotation(aircraft.transform.TransformPoint(skinPoint), aircraft.transform.rotation);
+                foundation.AddComponent<MeshFilter>().sharedMesh = mesh.sharedMesh;
+                foundation.AddComponent<MeshRenderer>().sharedMaterials = renderer.sharedMaterials;
+            }
+            InstallBattery(aircraft, host, donor, name, aircraft.transform.TransformPoint(skinPoint), down, sign);
+        }
+
+        private static void InstallBattery(Aircraft aircraft, AeroPart host, Donor donor, string name, Vector3 position, bool down, float outward)
+        {
+            Transform parent = host.transform;
+            if (down)
+            {
+                // Stock CIWS can aim on the clone root itself. Keep the fixed belly roll above that traverse transform.
+                parent = new GameObject(Prefix + name) { layer = host.gameObject.layer }.transform;
+                parent.SetParent(host.transform, false);
+                parent.SetPositionAndRotation(position, aircraft.transform.rotation * Quaternion.AngleAxis(180f, Vector3.forward));
+            }
+            GameObject clone = Clone(donor.Root.gameObject, parent, down ? donor.Root.name : Prefix + name);
+            clone.transform.SetPositionAndRotation(position, down ? parent.rotation : aircraft.transform.rotation);
+            Arm(aircraft, down ? parent.gameObject : clone, "datalink");
+            clone.layer = host.gameObject.layer;
+            foreach (Turret turret in clone.GetComponentsInChildren<Turret>(true))
+            {
+                if (donor.Info.gun)
+                {
+                    // The firing hemisphere follows the deck and cant of the mount.
+                    var sector = new GameObject(name + "_Sector").transform;
+                    sector.SetParent(host.transform, false);
+                    sector.position = position;
+                    sector.rotation = Quaternion.LookRotation(aircraft.transform.TransformDirection(new Vector3(.35f * outward, down ? -.94f : .94f, .01f)));
+                    var cone = new FiringCone();
+                    Set(cone, "transform", sector);
+                    Set(cone, "coneAngle", 90f);
+                    Cones.SetValue(turret, new[] { cone });
+                    Set(turret, "traverseRange", 360f);
+                    Set(turret, "maxElevation", 88f);
+                }
+                else
+                {
+                    Cones.SetValue(turret, Array.Empty<FiringCone>());
+                    Set(turret, "firesWithoutAiming", true);
+                }
+            }
         }
 
         private static GameObject Clone(GameObject donor, Transform parent, string name)
@@ -118,6 +180,8 @@ namespace BoscaliSummer.Modules.Megaplane
         /// <summary>Hand the clone's turrets to the carrier (template refs are remapped to each spawned copy).</summary>
         private static void Arm(Aircraft aircraft, GameObject clone, string mode)
         {
+            var mount = clone.AddComponent<MegaplaneBatteryMount>();
+            mount.Bind(clone.GetComponentInParent<AeroPart>(true), clone.GetComponentInChildren<Turret>(true));
             foreach (Turret turret in clone.GetComponentsInChildren<Turret>(true))
             {
                 Unit.SetValue(turret, aircraft);
@@ -127,6 +191,8 @@ namespace BoscaliSummer.Modules.Megaplane
                 FireCtl.SetValue(turret, null);
                 Detectors.SetValue(turret, new List<TargetDetector>());
                 Mode.SetValue(turret, System.Enum.Parse(Mode.FieldType, mode));   // private enum
+                Gun gun = turret.GetComponentInChildren<Gun>(true);
+                if (gun != null && gun.info != Trident) Set(turret, "aimSafetyWeapon", gun);
             }
             foreach (Weapon weapon in clone.GetComponentsInChildren<Weapon>(true)) weapon.AttachToUnit(aircraft);
         }
@@ -193,17 +259,29 @@ namespace BoscaliSummer.Modules.Megaplane
 
         // RG-240 TRIDENT: 64 MJ class rail. A 3 km/s slug through anything but heavy armour, a small burst on impact, one
         // round in twelve seconds while the capacitors recharge; 40 slugs in the bay magazine.
-        private const float RailVelocity = 3000f, RailInterval = 12f;
+        private const float RailVelocity = 3000f;
+        internal const float RailInterval = 12f;
         private const int RailRounds = 40;
 
         private static void Rail(Aircraft aircraft, Donor heavy, Dictionary<string, Transform> nodes, Transform pitch)
         {
             Transform elevator = nodes.TryGetValue("Railgun_Elevator", out Transform e) ? e : pitch.parent;
-            GameObject clone = Clone(heavy.Root.gameObject, elevator, Prefix + "Railgun");
-            clone.transform.rotation = aircraft.transform.rotation * Quaternion.Euler(0f, 0f, 180f);   // hung under the belly
+            // Native Turret writes its own local rotation every tick. Keep the belly roll on a fixed parent above it.
+            var frame = new GameObject("RailgunTraverseFrame").transform;
+            frame.SetParent(elevator, false);
+            frame.rotation = aircraft.transform.rotation * Quaternion.Euler(0f, 0f, 180f);
+            GameObject clone = Clone(heavy.Root.gameObject, frame, Prefix + "Railgun");
+            clone.transform.localRotation = Quaternion.identity;
             Turret turret = clone.GetComponentInChildren<Turret>(true);
             Gun gun = clone.GetComponentInChildren<Gun>(true);
             Transform elevation = (Transform)AccessTools.Field(typeof(Turret), "elevationTransform").GetValue(turret) ?? gun.transform;
+            // The ship's trunnion is ahead of its traverse axis. Groza's cradle is coaxial, so move the hidden
+            // trunnion to the traverse axis before aligning it. Otherwise the native muzzle orbits the visible bore.
+            if (elevation != turret.transform && elevation.IsChildOf(turret.transform))
+            {
+                float height = turret.transform.InverseTransformPoint(elevation.position).y;
+                elevation.position = turret.transform.TransformPoint(Vector3.up * height);
+            }
             clone.transform.position += pitch.position - elevation.position;   // native trunnion on the art's
             foreach (Renderer r in clone.GetComponentsInChildren<Renderer>(true)) r.enabled = false;   // the art is the gun
             foreach (Gun other in clone.GetComponentsInChildren<Gun>(true).Where(g => g != gun))   // one rail, not a twin mount
@@ -218,7 +296,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 Trident.name = "WI_BS_Megaplane_Trident";
                 Trident.weaponName = "RG-240 Trident";
                 Trident.shortName = "RAIL";
-                Trident.description = "Belly railgun on a lowering mount, carried instead of the parasite fighters. 3 km/s tungsten slugs, one every twelve seconds; it lowers itself when selected or given a target.";
+                Trident.description = "Ventral railgun. The doors and elevator must clear before the battery can fire. The coils recharge for twelve seconds after each shot.";
                 Trident.muzzleVelocity = RailVelocity;
                 Trident.maxSpeed = RailVelocity;
                 Trident.pierceDamage = d.pierceDamage * 6f;
@@ -239,40 +317,67 @@ namespace BoscaliSummer.Modules.Megaplane
             Set(gun, "tracerColor", new Color(.4f, 1.4f, 3f));
             Set(gun, "heatEnabled", false);
             Set(gun, "proximityTimer", false);
+            Set(gun, "guidedProjectile", null);
+            Set(gun, "ejectionTransform", null);
+            // Native Fire and RemoteSingleFire both signal a discharge through their recoil accumulator.
+            // The art controller moves its cradle and muzzle together from that signal.
+            var recoil = new GameObject("RailRecoil").transform;
+            recoil.SetParent(elevation, false);
+            Set(gun, "recoilTransform", recoil);
+            Set(gun, "recoilImpulse", 210000f);
+            Set(gun, "recoilTravel", 0f);
             Set(turret, "traverseRange", 150f);
-            Set(turret, "traverseRate", 18f);
-            Set(turret, "elevationRate", 12f);
-            Set(turret, "minElevation", -5f);    // upside down: "up" is toward the ground
+            Set(turret, "traverseRate", 32f);
+            Set(turret, "elevationRate", 19f);
+            Set(turret, "minElevation", 1.5f);   // belly mount: positive elevation points below the doors
             Set(turret, "maxElevation", 65f);
             Set(turret, "maxRange", 30000f);
+            Set(turret, "stowed", true);
+            // Replace the ship's firing limits with a direction fixed to Groza's deck, outside the traversing head.
+            var sector = new GameObject("RailgunGroundSector").transform;
+            sector.SetParent(frame, false);
+            sector.rotation = Quaternion.LookRotation(-aircraft.transform.up, aircraft.transform.forward);
+            var cone = new FiringCone();
+            Set(cone, "transform", sector);
+            Set(cone, "coneAngle", 88.5f);
+            Cones.SetValue(turret, new[] { cone });
+            Transform muzzle = null;
             if (nodes.TryGetValue("Railgun_Muzzle", out Transform tip))
             {
-                var muzzle = new GameObject("RailMuzzle").transform;
-                muzzle.SetParent(gun.transform, false);
-                muzzle.position = tip.position;
+                muzzle = new GameObject("RailMuzzle").transform;
+                muzzle.SetParent(elevation, false);
+                muzzle.SetPositionAndRotation(tip.position, tip.rotation);
                 Set(gun, "muzzles", new[] { muzzle });
-                foreach (ParticleSystem p in clone.GetComponentsInChildren<ParticleSystem>(true)) p.transform.position = muzzle.position;
+                foreach (ParticleSystem p in clone.GetComponentsInChildren<ParticleSystem>(true))
+                    if (p.transform.parent.GetComponentInParent<ParticleSystem>() == null)
+                    {
+                        p.transform.SetParent(muzzle, true);
+                        p.transform.position = muzzle.position;
+                    }
             }
             Arm(aircraft, clone, "fireSupport");
             clone.layer = elevator.gameObject.layer;
             MegaplaneRailgun rail = aircraft.gameObject.AddComponent<MegaplaneRailgun>();
-            rail.Bind(nodes, turret, elevation);
+            rail.Bind(nodes, turret, gun, elevation, muzzle);
         }
 
         /// <summary>Weapon reloads clear every station; put the guns back before the manager numbers them (same order on every
-        /// peer: hierarchy order of the shared prefab). One station per weapon type, as on a ship's battery: all four BASTIONs,
-        /// all seven CIWS, all four silos are one selection each (one station per turret was 15 rows and broke the weapon UI).
+        /// peer: hierarchy order of the shared prefab). One station per weapon type groups the four Bastions, eleven CIWS and
+        /// the two VLS pairs by their own ammunition and role, keeping the selection list short.
         /// Each turret still picks its own target; selected, the station aims them all where the pilot looks.</summary>
         internal static void Register(Aircraft aircraft)
         {
             var battery = new Dictionary<WeaponInfo, WeaponStation>();
-            foreach (Turret turret in aircraft.GetComponentsInChildren<Turret>(true))
+            foreach (MegaplaneBatteryMount mount in aircraft.GetComponentsInChildren<MegaplaneBatteryMount>(true))
             {
+                Turret turret = mount.Turret;
+                if (turret == null) continue;
                 if (!(Stations.GetValue(turret) is WeaponStation[] st) || st.Length == 0) continue;
                 WeaponStation station = st[0];
                 // a station without weapons would throw out of this Harmony prefix and break the manager's pass
                 if (station.Weapons == null || station.Weapons.Count == 0 || station.Weapons[0] == null) continue;
                 WeaponInfo info = station.Weapons[0].info;
+                turret.SetManual(false);
                 if (!battery.TryGetValue(info, out WeaponStation into))
                 {
                     battery[info] = into = station;
@@ -294,32 +399,6 @@ namespace BoscaliSummer.Modules.Megaplane
                 if (into.FullAmmo == 0) into.Rearm(into.Weapons.Sum(w => w != null ? w.GetFullAmmo() : 0) - into.GetAmmoTotal());
                 aircraft.RegisterWeaponStation(into);
             }
-        }
-    }
-
-    /// <summary>A battery station's Fire fires every gun in it. On a ship-style battery each turret picks its own target, so a
-    /// gun only fires with the turret that called: its own turret is on that target and aimed (or under pilot control).
-    /// Without this the seven CIWS would all fire whenever one had a target, the aft ones through the carrier's own tail.</summary>
-    [HarmonyPatch]
-    internal static class MegaplaneBatteryFirePatch
-    {
-        private static readonly AccessTools.FieldRef<Turret, Unit> Target = AccessTools.FieldRefAccess<Turret, Unit>("target");
-        private static readonly AccessTools.FieldRef<Turret, bool> Manual = AccessTools.FieldRefAccess<Turret, bool>("manual");
-        private static readonly AccessTools.FieldRef<Turret, bool> OnTarget = AccessTools.FieldRefAccess<Turret, bool>("onTarget");
-
-        private static IEnumerable<MethodBase> TargetMethods()
-        {
-            yield return AccessTools.Method(typeof(Gun), nameof(Gun.Fire));
-            yield return AccessTools.Method(typeof(MissileLauncher), nameof(MissileLauncher.Fire));
-        }
-
-        private static bool Prefix(Weapon __instance, Unit target, WeaponStation weaponStation)
-        {
-            if (weaponStation == null || weaponStation.Turrets == null || weaponStation.Turrets.Count < 2) return true;
-            Turret own = __instance.GetComponentInParent<Turret>();
-            if (own == null || !own.transform.root.name.StartsWith(MegaplaneTemplate.Key)) return true;
-            if (Manual(own)) return true;
-            return target != null && Target(own) == target && (OnTarget(own) || __instance is MissileLauncher);
         }
     }
 

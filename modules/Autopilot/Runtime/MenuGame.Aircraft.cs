@@ -110,6 +110,14 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             BayDoor[] doors = BayTimer != null ? a.GetComponentsInChildren<BayDoor>(true) : Array.Empty<BayDoor>();
             w.HasBayDoors = doors.Length > 0;
             w.BayDoorsOpen = BayHeld(doors);
+            if (Service<ICarrierBayControl>() is ICarrierBayControl bay && bay.TryRead(out CarrierBayStatus status))
+            {
+                w.HasFighterBay = true;
+                w.FighterBaySlots = status.Slots;
+                w.LaunchFighterBlocked = status.LaunchBlocked;
+                w.RecallFightersBlocked = status.RecallBlocked;
+                w.WaveOffBlocked = status.WaveOffBlocked;
+            }
             ILandingZone zone = Service<ILandingZone>();
             w.CargoZoneAvailable = zone != null;
             if (zone != null && zone.TryGetLocal(out GlobalPosition point))
@@ -255,6 +263,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "defence/radar": return With(a => a.CmdToggleRadar());
                 case "defence/chaff": return () => ChaffDispenser.Instance?.Pop();
                 case "weapons/bay": return With(ToggleBayDoors);
+                case "weapons/fighters/launch": return () => Service<ICarrierBayControl>()?.Request(CarrierBayAction.Launch);
+                case "weapons/fighters/recall": return () => Service<ICarrierBayControl>()?.Request(CarrierBayAction.Recall);
+                case "weapons/fighters/waveoff": return () => Service<ICarrierBayControl>()?.Request(CarrierBayAction.WaveOff);
                 case "weapons/cargo/next": return With(NextCargo);
                 case "weapons/cargo/setzone": return SetCargoZone;
                 case "weapons/cargo/clearzone": return () => Service<ILandingZone>()?.ClearLocal();

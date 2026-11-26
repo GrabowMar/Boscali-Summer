@@ -1,0 +1,30 @@
+{
+  "name": "ky44-point-defence",
+  "description": "Check Groza's lower CIWS traverse axes and its tracking of approaching, outbound and friendly missiles.",
+  "mission": "Free Flight",
+  "mods": ["boscalisummer"],
+  "environment": {"config": {"boscalisummer": {"Trenches": {"Enabled": false}, "TheaterOps": {"Enabled": false}, "Events": {"Enabled": false}, "Garrisons": {"Enabled": false}, "DynamicOperations": {"Enabled": false}, "Support": {"Enabled": false}, "Weather": {"Enabled": false}, "Megaplane": {"BayPayload": "Fighters"}}}},
+  "timeout_s": 100,
+  "ops": [
+    {"op": "seat", "id": "carrier", "aircraft": "KY-44 Groza", "near": [10000, -35000], "altitude": 3000, "speed": 135, "heading": 90, "view": "orbit", "timeout": 60},
+    {"op": "record", "ids": ["carrier"], "hz": 2},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplanePointDefenceProbe.Observe", "args": {"id": "carrier", "launch": true}, "store": "launch"},
+    {"op": "wait", "seconds": 0.6},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplanePointDefenceProbe.Observe", "args": {"id": "carrier"}, "store": "picture"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "log_clean", "sources": ["Boscali Summer"]},
+    {"check": "alive", "ids": ["carrier"]},
+    {"check": "result_equals", "path": "picture.live", "value": true},
+    {"check": "result_equals", "path": "picture.tracked", "value": 2},
+    {"check": "result_equals", "path": "picture.inbound", "value": true},
+    {"check": "result_equals", "path": "picture.crossing", "value": true},
+    {"check": "result_equals", "path": "picture.outbound", "value": false},
+    {"check": "result_equals", "path": "picture.friendly", "value": false},
+    {"check": "result_above", "path": "picture.lowerBatteries", "min": 1},
+    {"check": "result_equals", "path": "picture.lowerAxesDown", "value": true}
+  ]
+}
