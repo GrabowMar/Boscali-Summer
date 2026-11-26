@@ -12,12 +12,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 ASSETS = Path(__file__).resolve().parents[1] / "Assets"
 W, H = 512, 256
-DARK = "#08161b"
-FIELD = "#11252c"
-GRID = "#213e45"
-MUTED = "#8aa9a9"
-TEXT = "#dae8df"
-NAV, COMMS, ENGINE, DECK = "#7bd8e0", "#c5b8e7", "#f3bf81", "#96d5ab"
+DARK = "#10180f"
+FIELD = "#1e281a"
+GRID = "#3a482d"
+MUTED = "#a1b08c"
+TEXT = "#dce5ca"
+NAV, COMMS, ENGINE, DECK = "#b9d88c", "#a5ccb0", "#e7b464", "#b6cb80"
 WARN, TRIP = "#edbb74", "#f39179"
 ROLES = ("NAVIGATION", "COMMUNICATIONS", "FLIGHT ENGINEERING", "DECK OPERATIONS")
 ACCENTS = (NAV, COMMS, ENGINE, DECK)

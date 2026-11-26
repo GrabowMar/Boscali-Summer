@@ -25,8 +25,10 @@ BAYS = {
                      plane(0,0,-1,-3.8),plane(-1,0,0,6.55)),(-1,0,0),2.05),
     "ForeCheek_R": ((plane(0,1,0,83.55),plane(0,-1,0,-102),plane(0,0,1,-3.5),
                      plane(0,0,-1,-3.8),plane(1,0,0,6.55)),(1,0,0),2.05),
+    # A shallow service chase above the crew headliner keeps the backing and
+    # equipment out of the passage when the fuselage narrows at the flight deck.
     "BridgeCrown": ((plane(0,1,0,86.8),plane(0,-1,0,-103),plane(0,0,1,6.68),
-                     plane(-1,0,0,-6.4),plane(1,0,0,-6.4)),(0,0,1),1.16),
+                     plane(-1,0,0,-6.4),plane(1,0,0,-6.4)),(0,0,1),.38),
     "NoseChin": ((plane(0,1,0,92),plane(0,.23,-1,27.34)),(0,0,-1),2.12),
 }
 

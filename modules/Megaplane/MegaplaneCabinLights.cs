@@ -26,9 +26,9 @@ namespace BoscaliSummer.Modules.Megaplane
             cabin.carrier = aircraft;
             cabin.bridge = section;
             cabin.lamps = new[] {
-                Downlight(front, new Color(1f, .87f, .72f), 2.2f),
-                Downlight(mid, new Color(.90f, .95f, 1f), 3f),
-                Downlight(aft, new Color(1f, .91f, .78f), 2.8f)
+                Downlight(front, new Color(1f, .89f, .76f), 2.65f),
+                Downlight(mid, new Color(1f, .86f, .68f), 3.75f),
+                Downlight(aft, new Color(1f, .81f, .60f), 3.65f)
             };
         }
 

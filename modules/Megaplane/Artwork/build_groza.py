@@ -45,7 +45,7 @@ from crown import finish_crown_shading
 from structures import detail_structure
 from finish import finish_surface
 from build_lods import write_lods
-from flightdeck import frame_displays
+from flightdeck import fit_pilot_fascia, frame_displays
 from bridge_instruments import fit_bridge
 from crew_room import fit_crew_room
 from hold_interior import outfit_hold
@@ -85,6 +85,18 @@ def stage(root):
     scene.camera = cam
     cam.location = (-245,265,100)
     cam.rotation_euler = (Vector((0,-2,3))-cam.location).to_track_quat("-Z","Y").to_euler()
+    for name, eye, target, lens in (
+        ("Flight deck review", (-1.08,100.49,5.46), (-1.03,102.09,5.04), 16),
+        ("Crew cabin review", (.03,95.98,5.65), (0,99.65,5.21), 15),
+        ("Command post review", (-.28,96.64,5.67), (-1.14,95.99,5.08), 24),
+        ("Watch station review", (-.79,98.66,5.56), (-1.89,98.10,5.13), 23),
+    ):
+        camera = bpy.data.cameras.new(name)
+        camera.lens, camera.clip_start, camera.clip_end = lens, .025, 3000
+        review = bpy.data.objects.new(name, camera)
+        scene.collection.objects.link(review)
+        review.location = eye
+        review.rotation_euler = (Vector(target)-review.location).to_track_quat("-Z","Y").to_euler()
     for screen in bpy.data.screens:
         for area in screen.areas:
             if area.type == "VIEW_3D":
@@ -128,6 +140,7 @@ def build():
     fit_fore_sections(nodes)
     fit_bridge(nodes)
     fit_crew_room(nodes)
+    fit_pilot_fascia(nodes)
     bpy.context.view_layer.update()
     root = nodes["BS_Megaplane"]
     write_lods(nodes, ASSETS/"megaplane.lod.gz")

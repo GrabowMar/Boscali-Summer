@@ -1,489 +1,348 @@
-"""Six-station Groza pressure cabin. Local furnishing coordinates are metres, +Y forward.
-
-The pilot pair keeps the native eye and controls. Each specialist's work surface is
-dimensioned from the seat pan. A common aisle runs from the pressure door to the pilots.
-"""
+"""Groza pressure bridge, in metres with +Y toward the windscreen."""
 from math import cos, pi, sin
-import bpy
+
 import bmesh
+import bpy
 from mathutils import Vector
 
 from bridge_instruments import locator
+from cabin_finish import assign_finish
+from command_post import build_command_post
 from crew_graphics import ROLES, assign_print, assign_screen
 from finish import new_paint
 from forebody import Surface, child_mesh
 
 
 FLOOR = 4.109
-STATIONS = (("Nav", -1, 97.95), ("Comms", 1, 97.95),
-            ("Engineering", -1, 94.72), ("Cargo", 1, 94.72))
-LAMPS = (("Forward", 99.76, 6.265), ("Mid", 96.50, 6.56), ("Aft", 93.52, 6.61))
+HATCH = 95.72
+THROAT = 99.24
+SEAT_X = 1.12
+STATIONS = (("Nav", -1, 98.18), ("Comms", 1, 98.18),
+            ("Engineering", -1, 96.62), ("Cargo", 1, 96.62))
+LAMPS = (("Forward", 99.71, 6.225), ("Mid", 97.41, 6.296), ("Aft", 96.19, 6.296))
 LINER, PANEL, EDGE = "CrewLiner", "CrewPanel", "DeckRail"
 DARK, RUBBER = "DeckRecess", "DeckPadding"
-CLOTH, BOLSTER, STRAP = "CrewUpholstery", "CrewBolster", "CrewWebbing"
-CANVAS, ORANGE, PAPER = "CrewOliveCanvas", "CrewRescueWeb", "CrewChartPaper"
-FLOOR_MAT, GOLD, LIGHT, IND = "CrewTread", "CrewOchre", "CrewDome_Emit", "DeckWitness_Emit"
+CLOTH, STRAP = "CrewUpholstery", "CrewWebbing"
+FLOOR_MAT, GOLD, LIGHT, IND = "CrewTread", "CrewOchre", "CrewDome_Emit", "CrewAmber_Emit"
+INSULATION, PIPING = "CrewInsulation", "CrewPiping"
 
 
 def palette():
     for name, color, gloss in (
-        (LINER,(.30,.347,.345),.24), (PANEL,(.108,.158,.166),.34),
-        (CLOTH,(.102,.157,.205),.13), (BOLSTER,(.058,.092,.120),.19),
-        (STRAP,(.29,.34,.30),.18), (FLOOR_MAT,(.107,.125,.128),.22),
-        (GOLD,(.48,.306,.112),.32), (LIGHT,(.68,.70,.60),.40),
-        (CANVAS,(.165,.191,.097),.14),(ORANGE,(.73,.214,.048),.20),
-        (PAPER,(.68,.65,.48),.18)):
-        mat = new_paint(name,color,gloss)
-        if name == LIGHT:
-            node=mat.node_tree.nodes["Principled BSDF"]
-            node.inputs["Emission Color"].default_value=(*color,1.)
-            node.inputs["Emission Strength"].default_value=.8
+        (LINER, (.115, .141, .159), .27), (PANEL, (.088, .103, .113), .34),
+        (CLOTH, (.081, .082, .060), .13), (STRAP, (.25, .241, .164), .19),
+        (FLOOR_MAT, (.054, .069, .075), .31), (GOLD, (.50, .30, .087), .33),
+        (LIGHT, (.55, .43, .26), .34), (IND, (.44, .21, .048), .32),
+        (INSULATION, (.160, .182, .190), .21), (PIPING, (.072, .089, .112), .31),
+    ):
+        material = new_paint(name, color, gloss)
+        shader = material.node_tree.nodes["Principled BSDF"]
+        if name in (LIGHT, IND):
+            shader.inputs["Emission Color"].default_value = (*color, 1.)
+            shader.inputs["Emission Strength"].default_value = 1.2 if name == LIGHT else .54
+
+
+def profile(width, depth, corner):
+    x, y = width / 2, depth / 2
+    c = min(corner, x*.6, y*.6)
+    if not c:
+        return ((-x, -y), (x, -y), (x, y), (-x, y))
+    return ((-x+c, -y), (x-c, -y), (x, -y+c), (x, y-c),
+            (x-c, y), (-x+c, y), (-x, y-c), (-x, -y+c))
 
 
 class Frame:
-    """Batch shapes in the local axes of a cabin module then export them as one part."""
-    def __init__(self, origin=(0,0,FLOOR), right=(1,0,0), forward=(0,1,0)):
-        self.origin, self.right, self.forward = map(Vector,(origin,right,forward))
-        self.surface=Surface()
-        self.prints=[]
+    """Batch a module's shapes and UVs in its own right/forward axes."""
+
+    def __init__(self, origin=(0, 0, FLOOR), right=(1, 0, 0), forward=(0, 1, 0), batch=None):
+        self.origin, self.right, self.forward = map(Vector, (origin, right, forward))
+        if batch is None:
+            self.surface = Surface()
+            self.prints, self.finishes = [], []
+        else:
+            self.surface = batch.surface
+            self.prints, self.finishes = batch.prints, batch.finishes
 
     def point(self, xyz):
-        x,y,z=xyz
-        return self.origin+self.right*x+self.forward*y+Vector((0,0,z))
+        x, y, z = xyz
+        return self.origin + self.right*x + self.forward*y + Vector((0, 0, z))
 
     def face(self, points, material, normal):
-        self.surface.face([self.point(p) for p in points], material,
-                          self.point(normal)-self.origin)
+        self.surface.face([self.point(p) for p in points], material, self.point(normal) - self.origin)
 
-    def rings(self,rings,material):
-        centre=sum((sum((Vector(p) for p in ring),Vector())/len(ring) for ring in rings),Vector())/len(rings)
-        for a,b in zip(rings,rings[1:]):
+    def rings(self, rings, material):
+        center = sum((Vector(p) for r in rings for p in r), Vector()) / sum(map(len, rings))
+
+        def outward(points):
+            return sum((Vector(p) for p in points), Vector()) / len(points) - center
+
+        for a, b in zip(rings, rings[1:]):
             for i in range(len(a)):
-                j=(i+1)%len(a)
-                pts=(a[i],a[j],b[j],b[i])
-                self.face(pts,material,sum((Vector(p) for p in pts),Vector())/len(pts)-centre)
-        for ring in (rings[0],rings[-1]):
-            self.face(ring,material,sum((Vector(p) for p in ring),Vector())/len(ring)-centre)
+                j = (i + 1) % len(a)
+                points = (a[i], a[j], b[j], b[i])
+                self.face(points, material, outward(points))
+        for ring in (rings[0], rings[-1]):
+            self.face(ring, material, outward(ring))
 
-    def slab(self,x,y,z,w,d,h,material,corner=.025):
-        c=min(corner,w*.35,d*.35)
-        self.rings([[(x+u,y+v,k) for u,v in
-                    ((-w/2+c,-d/2),(w/2-c,-d/2),(w/2,-d/2+c),(w/2,d/2-c),
-                     (w/2-c,d/2),(-w/2+c,d/2),(-w/2,d/2-c),(-w/2,-d/2+c))]
-                    for k in (z-h/2,z+h/2)],material)
+    def slab(self, x, y, z, w, d, h, material, corner=.025):
+        self.rings([[(x+u, y+v, k) for u, v in profile(w, d, corner)]
+                    for k in (z-h/2, z+h/2)], material)
 
-    def panel(self,x,y,z,w,h,depth,material,corner=.025):
-        """Vertical cartridge; the negative local Y end faces the operator."""
-        c=min(corner,w*.3,h*.3)
-        self.rings([[(x+u,k,z+v) for u,v in
-                   ((-w/2+c,-h/2),(w/2-c,-h/2),(w/2,-h/2+c),(w/2,h/2-c),
-                    (w/2-c,h/2),(-w/2+c,h/2),(-w/2,h/2-c),(-w/2,-h/2+c))]
-                   for k in (y-depth/2,y+depth/2)],material)
+    def panel(self, x, y, z, w, h, depth, material, corner=.025):
+        self.rings([[(x+u, k, z+v) for u, v in profile(w, h, corner)]
+                    for k in (y-depth/2, y+depth/2)], material)
 
-    def rod(self,a,b,r,material,n=8):
-        a,b=Vector(a),Vector(b)
-        axis=(b-a).normalized()
-        u=axis.cross(Vector((0,0,1)) if abs(axis.z)<.94 else Vector((0,1,0))).normalized()
-        v=axis.cross(u)
-        self.rings([[p+r*(u*cos(2*pi*i/n)+v*sin(2*pi*i/n)) for i in range(n)] for p in (a,b)],material)
+    def rod(self, a, b, radius, material, n=8):
+        a, b = Vector(a), Vector(b)
+        axis = (b-a).normalized()
+        u = axis.cross(Vector((0, 0, 1)) if abs(axis.z) < .94 else Vector((0, 1, 0))).normalized()
+        v = axis.cross(u)
+        self.rings([[p + radius*(u*cos(2*pi*i/n) + v*sin(2*pi*i/n))
+                     for i in range(n)] for p in (a, b)], material)
 
-    def print_face(self,corners,tile,normal):
-        idx=len(self.surface.faces)
-        self.face(corners, PANEL, normal)
-        ids=[self.surface.index[tuple(round(c,6) for c in self.point(p))] for p in corners]
-        self.prints.append((idx,tile,ids))
+    def corners(self, points):
+        return [self.surface.index[tuple(round(c, 6) for c in self.point(p))] for p in points]
 
-    def finish(self,name,owner):
-        obj=child_mesh(name,owner)
+    def print_face(self, points, tile, normal):
+        index = len(self.surface.faces)
+        self.face(points, PANEL, normal)
+        self.prints.append((index, tile, self.corners(points)))
+
+    def finish_face(self, points, tile, normal):
+        index = len(self.surface.faces)
+        self.face(points, PANEL, normal)
+        self.finishes.append((index, tile, self.corners(points)))
+
+    def finish(self, name, owner):
+        obj = child_mesh(name, owner)
         self.surface.install(obj)
-        for idx,tile,indices in self.prints:
-            assign_print(obj,tile,idx,indices)
+        for index, tile, corners in self.prints:
+            assign_print(obj, tile, index, corners)
+        for index, tile, corners in self.finishes:
+            assign_finish(obj, index, tile, corners=corners)
         return obj
 
 
-def seat(f):
-    # Two sliding runners carry a box pedestal and the hinged pan. The back,
-    # head pad and five-point belt are visible from the aisle behind each operator.
-    for x in (-.218,.218):
-        f.slab(x,-.035,.022,.068,.82,.044,EDGE,.012)
-        for y in (-.30,.22):
-            f.slab(x,y,.065,.086,.09,.058,DARK)
-    f.slab(0,-.025,.165,.38,.42,.215,PANEL,.05)
-    f.slab(0,.018,.328,.53,.57,.095,EDGE,.07)
-    f.slab(0,.030,.405,.52,.53,.095,CLOTH,.075)
-    for x in (-.224,.224):
-        f.slab(x,.01,.451,.082,.51,.078,BOLSTER,.03)
-    # The back rakes six centimetres over its height. Padded shoulders grow
-    # out of a moulded structural shell; the harness is anchored at its crown.
-    f.rings([[(-w/2,y-.058,z),(w/2,y-.058,z),(w/2,y+.058,z),(-w/2,y+.058,z)]
-             for z,y,w in ((.35,-.224,.54),(.69,-.25,.58),(.96,-.29,.53),(1.08,-.30,.36))],PANEL)
-    f.panel(0,-.196,.725,.47,.52,.08,BOLSTER,.06)
-    for z,w in ((.57,.37),(.68,.40),(.79,.41),(.88,.38)):
-        f.panel(0,-.143-(z-.57)*.10,z,w,.093,.031,CLOTH,.024)
-    f.panel(0,-.288,1.115,.35,.207,.13,CLOTH,.044)
-    for sign in (-1,1):
-        f.rod((sign*.253,.026,.36),(sign*.292,.035,.64),.019,EDGE)
-        f.slab(sign*.292,.047,.663,.070,.36,.059,BOLSTER,.025)
-        belt=[(sign*.154,-.228,1.002),(sign*.146,-.080,.77),
-              (sign*.078,-.075,.49),(sign*.038,.035,.453)]
-        for a,b in zip(belt,belt[1:]):
-            f.face([(a[0]-.018,a[1],a[2]),(a[0]+.018,a[1],a[2]),
-                    (b[0]+.018,b[1],b[2]),(b[0]-.018,b[1],b[2])],STRAP,(0,1,.3))
-    f.slab(.016,.05,.459,.081,.069,.018,EDGE,.012)
-    f.panel(0,-.36,.67,.36,.21,.043,BOLSTER,.025)
-    f.panel(0,-.387,.757,.36,.028,.012,STRAP,.006)
+# A narrow pressure capsule behind the pilots opens into the original flight-deck glazing.
+# Rows are y, floor half-width, shoulder half-width, roof half-width, shoulder and head height.
+BODY = ((HATCH, 2.24, 2.27, 1.58, 1.37, 2.26), (96.02, 2.32, 2.37, 1.66, 1.44, 2.26),
+        (97.43, 2.32, 2.37, 1.66, 1.44, 2.26), (98.95, 2.32, 2.36, 1.62, 1.44, 2.26),
+        (THROAT, 2.47, 2.36, 1.43, 1.37, 2.23), (99.73, 3.21, 2.89, 1.52, .42, 2.18),
+        (100.74, 3.47, 2.45, 1.06, .38, 2.15), (101.76, 3.05, 1.84, .65, .38, 1.86),
+        (102.54, 2.65, 1.30, .46, .38, 1.68))
 
 
-def keys(f,x,y,w=.53):
-    f.slab(x,y,.803,w,.173,.026,DARK,.014)
-    for row in range(3):
-        for col in range(9):
-            f.slab(x+(col-4)*w*.095,y+(row-1)*.043,.822,w*.080,.034,.016,
-                   EDGE if col==8 and row==2 else PANEL,.004)
+def section(row):
+    _, floor, wall, roof, sill, top = row
+    return ((0, 0), (floor, 0), (floor, .20), (wall, sill),
+            (roof, top-.17), (.57*roof, top), (0, top))
 
 
-def personal_kit(f, role):
+def shell(f):
+    for aft, front in zip(BODY, BODY[1:]):
+        a, b = aft[0], front[0]
+        rear, nose = section(aft), section(front)
+        for i, material in enumerate((FLOOR_MAT, DARK, PANEL, LINER, INSULATION, INSULATION)):
+            if (i == 3 and a >= THROAT) or (i >= 4 and a >= 100.74):
+                continue
+            for sign in (-1, 1):
+                points = [(sign*x, y, z) for (x, z), y in
+                          ((rear[i], a), (rear[i+1], a), (nose[i+1], b), (nose[i], b))]
+                normal = (0, 0, 1) if i == 0 else (-sign, 0, -.08 if i < 4 else -3)
+                f.face(points, material, normal)
+    # Flush pressure cap behind the inset door. No cargo or airframe surfaces
+    # are visible around it from the aisle.
+    aft = section(BODY[0])[1:]
+    perimeter = list(aft) + [(-x, z) for x, z in reversed(aft[:-1])]
+    for a, b in zip(perimeter, perimeter[1:] + perimeter[:1]):
+        f.face(((a[0], HATCH, a[1]), (b[0], HATCH, b[1]), (0, HATCH, 1.31)), PANEL, (0, 1, 0))
+    end = section(BODY[-1])
+    points = list(end[1:4]) + [(-x, z) for x, z in reversed(end[1:4])]
+    f.face([(x, BODY[-1][0], z) for x, z in points], DARK, (0, -1, 0))
+
+
+def equipment_liner(f):
+    # Repeated flush avionics covers sit inside the sloping upper pressure panels.
+    for y in (96.25, 97.42, 98.62):
+        for sign in (-1, 1):
+            inner, outer = sign*1.66, sign*2.21
+            points = ((outer, y-.50, 1.52), (outer, y+.50, 1.52),
+                      (inner, y+.50, 2.012), (inner, y-.50, 2.012))
+            f.finish_face(points, "headliner", (-sign, 0, -1))
+            f.rod((sign*1.57, y-.55, 2.035), (sign*1.57, y+.55, 2.035), .030, PIPING, 6)
+            f.rod((sign*1.52, y-.55, 2.057), (sign*1.52, y+.55, 2.057), .013, EDGE, 6)
+            f.slab(sign*1.54, y-.48, 2.07, .17, .088, .078, PANEL, .014)
+    # Raised sheet-metal bridges between the insulated headliner tiles.
+    for y in (96.80, 98.01, 99.20):
+        f.slab(0, y, 2.166, 3.11, .095, .113, LINER, .021)
+    for y in (96.29, 97.40, 98.57):
+        f.finish_face(((-.68, y-.43, 2.249), (.68, y-.43, 2.249),
+                       (.68, y+.43, 2.249), (-.68, y+.43, 2.249)), "headliner", (0, 0, -1))
+    for name, y, z in LAMPS:
+        h = z-FLOOR
+        f.slab(0, y, h+.033, .52, .23, .082, DARK, .028)
+        f.slab(0, y, h+.004, .402, .106, .013, LIGHT, .015)
+    for y in (96.16, 97.03, 97.90, 98.77, 99.64, 100.51):
+        f.finish_face(((-.490, y-.42, .009), (.490, y-.42, .009),
+                       (.490, y+.42, .009), (-.490, y+.42, .009)), "nonskid", (0, 0, 1))
+    for sign in (-1, 1):
+        f.slab(sign*.527, 97.474, .019, .054, 3.45, .035, EDGE, .011)
+        for y in (96.24, 97.42, 98.60):
+            f.slab(sign*.52, y, .024, .034, .108, .016, GOLD, .005)
+        for y in (96.20, 97.04, 97.88, 98.72):
+            f.finish_face(((sign*.56, y-.412, .005), (sign*2.208, y-.412, .005),
+                           (sign*2.208, y+.412, .005), (sign*.56, y+.412, .005)), "nonskid", (0, 0, 1))
+        f.slab(sign*2.22, 97.47, .036, .086, 3.47, .074, DARK, .012)
+
+
+def chair(f, pilot):
+    width = .544 if pilot else .434
+    pan_height = .395 if pilot else .491
+    back_height = 1.11 if pilot else .90
+    for sign in (-1, 1):
+        f.slab(sign*(width*.39), -.048, .018, .068, .588, .036, DARK, .013)
+        f.rod((sign*.151, -.124, .19), (sign*.181, -.092, pan_height+.012), .031, EDGE, 8)
+        f.slab(sign*width*.50, .013, pan_height+.017, .037, .464, .096, PANEL, .018)
+    f.slab(0, -.015, .166, width*.65, .302, .218, PANEL, .036)
+    f.slab(0, .035, pan_height-.035, width, .432, .076, LINER, .035)
+    f.slab(0, .029, pan_height+.038, width-.066, .398, .088, CLOTH, .041)
+    hw = width*.39
+    f.finish_face(((-hw, -.141, pan_height+.083), (hw, -.141, pan_height+.083),
+                   (hw, .202, pan_height+.083), (-hw, .202, pan_height+.083)), "fabric", (0, 0, 1))
+    for sign in (-1, 1):
+        f.rod((sign*hw, -.152, pan_height-.016), (sign*hw, -.247, back_height-.070), .028, LINER, 8)
+        f.rod((sign*.169, -.14, pan_height-.03), (sign*.217, -.14, pan_height-.03), .044, DARK, 8)
+    f.panel(0, -.204, (pan_height+back_height)/2, width-.044, back_height-pan_height, .107, PANEL, .070)
+    f.panel(0, -.147, (pan_height+back_height)/2, width-.089, back_height-pan_height-.079, .072, CLOTH, .054)
+    f.finish_face(((-hw+.024, -.110, pan_height+.092), (hw-.024, -.110, pan_height+.092),
+                   (hw-.024, -.110, back_height-.104), (-hw+.024, -.110, back_height-.104)), "fabric", (0, 1, 0))
+    f.slab(0, -.208, back_height-.036, width*.58, .123, .10, CLOTH, .031)
+    vertical_finish(f, 0, -.259, (pan_height+back_height)/2, width-.130, back_height-pan_height-.136, "charcoal")
+    if pilot:
+        f.panel(0, -.231, 1.140, .344, .181, .161, PANEL, .046)
+        f.panel(0, -.150, 1.136, .289, .124, .062, CLOTH, .039)
+        f.panel(0, -.270, .778, .292, .319, .031, DARK, .025)
+        for sign in (-1, 1):
+            x = sign*.137
+            points = ((x-.024, -.139, 1.065), (x+.024, -.139, 1.065),
+                      (x*.28+.024, .074, pan_height+.10), (x*.28-.024, .074, pan_height+.10))
+            f.face(points, STRAP, (0, 1, .18))
+            f.panel(x, -.286, .778, .046, .262, .012, STRAP, .009)
+
+
+def vertical_finish(f, x, y, z, width, height, tile):
+    f.finish_face(((x-width/2, y, z-height/2), (x+width/2, y, z-height/2),
+                   (x+width/2, y, z+height/2), (x-width/2, y, z+height/2)), tile, (0, -1, 0))
+
+
+def consoles(f, role):
+    # One recessed removable console per watch position, bolted into the liner.
+    casing = ((.87, .30), (1.22, .30), (1.22, 1.51), (.96, 1.51), (.829, 1.37),
+              (.829, .72), (.73, .64), (.87, .54))
+    f.rings([[(x, y, z) for y, z in casing] for x in (-.63, .63)], PANEL)
+    vertical_finish(f, 0, .827, 1.038, 1.224, .625, "charcoal")
+    for x in (-.485, .485):
+        f.slab(x, .998, .247, .257, .34, .427, PANEL, .038)
+        f.panel(x, .813, .254, .227, .346, .052, DARK, .026)
+        vertical_finish(f, x, .786, .254, .199, .313, "vent")
+    f.slab(0, .862, .657, 1.226, .291, .106, LINER, .041)
+    f.slab(0, .708, .656, 1.126, .088, .069, RUBBER, .023)
+    # The screen is a separate runtime mesh. The bevel wraps the glass, with
+    # the task strip set above the seated operator's field of view.
+    f.panel(-.096, .822, 1.088, .676, .452, .060, DARK, .043)
+    f.panel(-.096, .800, 1.088, .605, .399, .035, LINER, .025)
+    f.panel(-.096, .781, 1.088, .570, .354, .018, DARK, .014)
+    f.slab(-.096, .813, 1.344, .699, .192, .053, PANEL, .025)
+    f.slab(-.096, .772, 1.316, .411, .042, .009, LIGHT, .011)
+    vertical_finish(f, 0, .828, 1.450, 1.140, .100, role.lower())
+    f.panel(.425, .815, 1.081, .342, .388, .063, DARK, .029)
+    vertical_finish(f, .425, .782, 1.14, .303, .153,
+                    "comms_strip" if role == "Comms" else "thermal" if role == "Engineering" else "power")
+    for x in (.31, .426, .542):
+        for z in (.971, 1.068):
+            f.rod((x, .782, z), (x, .739, z), .031, DARK, 10)
+            f.panel(x, .714, z+.008, .010, .020, .011, GOLD, .002)
+    for x in (-.565, .565):
+        for z in (.748, 1.362):
+            f.rod((x, .828, z), (x, .818, z), .013, EDGE, 6)
+    for i in range(6):
+        x = -.46 + i*.175
+        f.slab(x, .813, .722, .113, .066, .030, DARK, .008)
+        f.slab(x, .801, .743, .071, .033, .017, IND if i == 2 else LINER, .004)
     if role == "Comms":
-        # Headset suspended from a short mushroom peg on the seat back.
-        f.rod((.050,-.330,.976),(.050,-.426,.976),.022,EDGE,10)
-        f.rod((.050,-.426,.976),(.050,-.426,.999),.023,EDGE,10)
-        arc=[(.050+.137*cos(i*pi/16),-.423,.908+.119*sin(i*pi/16)) for i in range(17)]
-        for i,(a,b) in enumerate(zip(arc,arc[1:])):
-            f.rod(a,b,.021 if 3<=i<=12 else .013,BOLSTER if 3<=i<=12 else EDGE,8)
-        for s in (-1,1):
-            x=.050+s*.138
-            f.rod((x,-.422,.912),(x,-.423,.859),.013,EDGE)
-            f.panel(x,-.420,.840,.090,.138,.081,DARK,.036)
-            f.panel(x,-.464,.840,.078,.111,.025,CANVAS,.032)
-            f.panel(x,-.481,.841,.047,.079,.015,STRAP,.020)
-        f.rod((.178,-.444,.805),(.122,-.485,.757),.007,EDGE)
-        f.rod((.122,-.485,.757),(.042,-.494,.750),.013,DARK)
-        lead=[(-.09,-.422,.790),(-.117,-.423,.662),(-.081,-.429,.577),
-              (.040,-.424,.545),(.151,-.414,.593),(.175,-.383,.647)]
-        for a,b in zip(lead,lead[1:]):
-            f.rod(a,b,.007,DARK,6)
-    elif role == "Cargo":
-        # A lashed soft-sided deck bag: gusset, overlapping flap, two cinches,
-        # pull tabs and a carry handle. Its weight sits on the existing pocket.
-        f.panel(-.020,-.412,.733,.424,.357,.112,CANVAS,.057)
-        f.panel(-.018,-.474,.794,.422,.174,.039,CANVAS,.052)
-        f.panel(-.018,-.495,.753,.348,.014,.010,BOLSTER,.004)
-        for x in (-.155,.112):
-            f.panel(x,-.501,.735,.041,.298,.012,ORANGE,.007)
-            f.panel(x,-.511,.690,.051,.042,.011,DARK,.007)
-            f.panel(x,-.518,.691,.033,.013,.006,EDGE,.002)
-        for x in (-.088,.058):
-            f.rod((x,-.408,.889),(x,-.421,.958),.013,STRAP)
-        f.rod((-.088,-.421,.958),(.058,-.421,.958),.015,STRAP)
-        f.panel(.050,-.497,.847,.085,.026,.009,PAPER,.003)
-    elif role == "Nav":
-        # A folded, bound plotting wallet tucked into the back pocket.
-        f.panel(-.035,-.367,.797,.237,.138,.018,CANVAS,.007)
-        f.panel(-.036,-.378,.823,.210,.074,.007,PAPER,.004)
-        f.panel(-.112,-.382,.829,.015,.079,.008,ORANGE,.003)
-
-
-def handset(f,x,y,z):
-    # Hung on a cradle with an actual coiled lead dropping to the lower rack.
-    f.panel(x,y+.022,z,.095,.28,.081,PANEL)
-    f.rod((x,y-.047,z-.105),(x,y-.070,z+.105),.035,DARK,10)
-    for dz in (-.112,.112):
-        f.panel(x,y-.065,z+dz,.112,.076,.07,RUBBER)
-    prev=(x,y-.04,z-.15)
-    for i in range(1,39):
-        t=i/38
-        pt=(x+.018*cos(t*10*pi),y-.025+.017*sin(t*10*pi),z-.15-.29*t)
-        f.rod(prev,pt,.006,BOLSTER,5);prev=pt
-
-
-def console(f,role):
-    idx=ROLES.index(role)
-    accent=(EDGE,IND,GOLD,STRAP)[idx]
-    width=(1.99,1.91,2.14,2.04)[idx]
-    # The leg opening is deliberately uninterrupted in the centre. Side cabinets
-    # and a rear cable chase support a taper-edged worktop and a separate display.
-    for x in (-1,1):
-        f.slab(x*(width/2-.173),1.02,.36,.29,.61,.67,PANEL,.05)
-        f.slab(x*(width/2-.173),.728,.36,.235,.035,.46,DARK,.012)
-        for level in range(4):
-            f.panel(x*(width/2-.173),.700,.213+.099*level,.20,.068,.025,PANEL,.012)
-            f.panel(x*(width/2-.173)+.067,.681,.215+.099*level,.033,.010,.012,accent,.002)
-    f.slab(0,1.03,.735,width,1.13,.080,EDGE,.095)
-    f.slab(0,1.02,.773,width-.02,1.12,.047,PANEL,.09)
-    f.slab(0,.479,.764,width-.26,.055,.053,RUBBER,.02)
-    f.slab(0,1.35,.39,width-.45,.085,.59,LINER,.02)
-    f.slab(0,1.087,.864,.24,.165,.175,EDGE,.023)
-    f.panel(0,1.083,1.071,.900,.525,.105,DARK,.044)
-    f.panel(0,1.036,1.071,.856,.485,.042,EDGE,.028)
-    f.panel(0,1.022,1.071,.835,.457,.026,RUBBER,.014)
-    f.panel(.326,.997,.822,.056,.010,.010,IND,.001)
-    # The sill lip and overhang bracket the panel, leaving its 0.82 x 0.45 m face clear.
-    f.slab(0,1.010,1.328,.902,.13,.025,DARK,.012)
-    # An enamel identity plate is bolted onto the sidecar facing the seat.
-    sign=-1 if idx in (0,2) else 1
-    tagx=sign*.666
-    f.panel(tagx,1.125,1.157,.376,.194,.062,PANEL,.023)
-    f.print_face([(tagx-.171,1.092,1.072),(tagx+.171,1.092,1.072),
-                  (tagx+.171,1.092,1.242),(tagx-.171,1.092,1.242)],idx,(0,-1,0))
-    # The card sits under a keeper and is readable from the chair.
-    px,py=-sign*.64,.80
-    f.slab(px,py,.803,.349,.20,.012,DARK,.009)
-    f.print_face([(px-.163,py-.081,.811),(px+.163,py-.081,.811),
-                  (px+.163,py+.081,.811),(px-.163,py+.081,.811)],4+idx,(0,0,1))
-    f.slab(px,py+.084,.818,.09,.017,.016,EDGE,.004)
-    if role=="Nav":
-        keys(f,.08,.693,.43)
-        # A rolled route sheet is held by two spanning hoops on the chart table.
-        f.rod((-.56,.935,.851),(.15,.935,.851),.045,LINER,12)
-        for x in (-.51,.103):
-            f.rod((x,.935,.851),(x+.021,.935,.851),.049,GOLD,12)
-        f.slab(-.53,.677,.806,.22,.174,.016,EDGE,.024)
-        f.rod((-.53,.68,.812),(-.53,.68,.846),.050,STRAP,12)
-    elif role=="Comms":
-        keys(f,-.061,.7,.47)
-        handset(f,.68,1.06,.997)
-        # Channel selector bank and push-to-talk paddle next to the handset.
-        for j in range(4):
-            x=-.83+j*.091
-            f.rod((x,.765,.795),(x,.765,.849),.027,RUBBER,10)
-            f.slab(x,.78,.852,.009,.023,.006,IND)
-        f.slab(.43,.60,.824,.15,.082,.048,GOLD)
-    elif role=="Engineering":
-        for j in range(5):
-            x=-.42+j*.177
-            f.slab(x,.745,.813,.125,.207,.028,DARK,.017)
-            for k in range(3):
-                f.slab(x,.68+k*.058,.838,.074,.027,.024,accent if j==4 else EDGE,.005)
-        for x in (.6,.73,.86):
-            f.rod((x,.96,.797),(x,.96,.85),.037,RUBBER,10)
-            f.slab(x,.978,.852,.008,.027,.005,IND)
-        for j in range(3):
-            f.panel(-.68,1.086,.873+j*.055,.37,.036,.036,DARK,.006)
+        f.rod((.544,.732,.826), (.544,.726,.955), .019, RUBBER, 8)
     else:
-        keys(f,-.13,.70,.43)
-        for j in range(2):
-            x=.28+j*.126
-            f.slab(x,.706,.808,.093,.211,.024,DARK)
-            f.rod((x,.70,.816),(x,.75,.895),.014,EDGE)
-            f.rod((x-.029,.75,.897),(x+.029,.75,.897),.020,GOLD)
-        for j in range(3):
-            f.slab(.68+j*.050,.87,.819,.029,.155,.021,BOLSTER,.009)
+        f.print_face(((.318,.931,.713), (.548,.931,.713), (.548,1.063,.713), (.318,1.063,.713)),
+                     4+ROLES.index(role), (0, 0, 1))
 
 
-def build_screen(role,frame,owner):
-    screen=Frame(frame.origin,frame.right,frame.forward)
-    # The normal points towards the seated operator, and the same orientation
-    # defines the UVs in Blender and the per-instance game atlas.
-    corners=[(-.41,1.004,1.071-.225),(.41,1.004,1.071-.225),
-             (.41,1.004,1.071+.225),(-.41,1.004,1.071+.225)]
-    screen.face(corners,DARK,(0,-1,0))
-    obj=screen.finish("FlightDeck_StationScreen_"+role,owner)
-    assign_screen(obj,role,corners=[screen.surface.index[tuple(round(c,6) for c in screen.point(p))] for p in corners])
+def station_screen(role, f, owner):
+    points = ((-.366, .768, .924), (.174, .768, .924), (.174, .768, 1.252), (-.366, .768, 1.252))
+    f.face(points, DARK, (0, -1, 0))
+    obj = f.finish("FlightDeck_StationScreen_" + role, owner)
+    assign_screen(obj, role, corners=f.corners(points))
     return obj
 
-# Each cabin station defines the deck width, width at the top of the sidewall,
-# width under the ceiling shoulder, and clear height above the floor.
-BODY=((92.22,4.04,4.04,3.44,2.67),(93.52,4.04,4.04,3.44,2.65),
-      (96.50,4.04,3.96,3.10,2.61),(97.95,4.00,3.61,2.63,2.48),
-      (99.12,3.89,3.23,2.17,2.35),(99.76,3.71,2.90,1.78,2.31),
-      (100.74,3.47,2.45,1.06,2.15),(101.76,3.05,1.84,.65,1.86),
-      (102.54,2.65,1.30,.46,1.68))
 
-
-def envelope(y):
-    for a,b in zip(BODY,BODY[1:]):
-        if a[0]-.001<=y<=b[0]+.001:
-            t=(y-a[0])/(b[0]-a[0])
-            return [p+(q-p)*t for p,q in zip(a[1:],b[1:])]
-    raise ValueError(y)
-
-
-def lining_section(y):
-    floor,mid,top,h=envelope(y)
-    return [(0,y,0),(floor,y,0),(floor,y,.25),(mid,y,1.37),
-            (top,y,h-.19),(.69*top,y,h),(0,y,h)]
-
-
-def interior(f):
-    # The sidewalls, shoulder, headliner, floor and pressure bulkhead share all
-    # perimeter vertices. The forward side openings coincide with the windshield.
-    for a,b in zip(BODY,BODY[1:]):
-        left,right=lining_section(a[0]),lining_section(b[0])
-        for i in range(6):
-            mat=(FLOOR_MAT,DARK,PANEL,LINER,LINER,LINER)[i]
-            for s in (-1,1):
-                if a[0]>=99.12 and i>=3:
-                    # Leave the forward pilots' original glazing exposed through
-                    # the full upper aperture. Their original roof closes above.
-                    continue
-                coords=[(s*x,y,z) for x,y,z in (left[i],left[i+1],right[i+1],right[i])]
-                f.face(coords,mat,(0,0,1) if i==0 else (-s,0,-.02 if i<4 else -4))
-    # Close the shell aft of the hold and underneath the pilot fascia. End caps
-    # extend to the same edges as the adjoining floor and liner.
-    for y in (BODY[0][0], BODY[-1][0]):
-        row=lining_section(y)
-        if y==BODY[0][0]:
-            outline=row[1:]+[(-x,ry,z) for x,ry,z in reversed(row[1:-1])]
-            for a,b in zip(outline,outline[1:]+outline[:1]):
-                f.face((a,b,(0,y,1.32)),LINER,(0,1,0))
-        else:
-            f.face([(-row[1][0],y,0),(row[1][0],y,0),(row[2][0],y,.25),
-                    (row[3][0],y,.90),(-row[3][0],y,.90),(-row[2][0],y,.25)],DARK,(0,-1,0))
-    # The ceiling above the aft room ends in an upholstered header. Its front
-    # face tapers upward *behind* the pilots; no lip crosses their eye line.
-    y=99.12
-    row=lining_section(y)
-    for s in (-1,1):
-        p=[(s*x,y,z) for x,_,z in row[3:]]
-        for a,b in zip(p,p[1:]):
-            f.face((a,b,(b[0],y,b[2]+.048),(a[0],y,a[2]+.048)),DARK,(0,1,0))
-    # Longitudinal aisle tiles with true shadow gaps over a continuous floor.
-    for n in range(9):
-        y=92.78+n*.92
-        if y>100.35: break
-        f.slab(0,y,.009,1.14,.905,.016,FLOOR_MAT,.047)
-        for s in (-1,1):
-            f.slab(s*.604,y,.012,.025,.899,.014,EDGE,.007)
-            if n in (0,3,6):
-                for k in range(3):
-                    f.slab(s*.513,y-.21+k*.087,.022,.065,.026,.008,GOLD,.005)
-    # Full-width shallow floor service plates sit behind the working chairs.
-    for s in (-1,1):
-        for j in range(5):
-            y=92.99+j*1.45
-            f.slab(s*.99,y,.009,.69,1.37,.014,FLOOR_MAT,.045)
-            f.slab(s*1.245,y+.47,.019,.048,.13,.012,DARK,.012)
-    # Repeated overhead pressure frames have tapered shoulders, an insulated
-    # centre panel and gasket. Hardware is concentrated near service apertures.
-    for y in (92.45,93.72,95.15,96.56,97.75,98.85):
-        row=lining_section(y)
-        for s in (-1,1):
-            for a,b in zip(row[3:],row[4:]):
-                x1,_,z1=a;x2,_,z2=b
-                x1*=s;x2*=s
-                v=((x1,y-.035,z1-.017),(x1,y+.035,z1-.017),
-                   (x2,y+.035,z2-.017),(x2,y-.035,z2-.017))
-                f.face(v,PANEL,(-s,0,-1))
-            # Downlights sit in a recessed perforated air-distribution panel.
-            if y<98.8:
-                _,_,_,h=envelope(y)
-                for j in range(7):
-                    f.slab(s*(.76+j*.09),y+.12,h-.034,.051,.069,.024,DARK,.012)
-    # The lamp surround and its narrow diffuser are distinct from the dynamic
-    # light component at the corresponding locator. Forward unit mounts to
-    # the original roof through a short central fairing.
-    for name,y,z in LAMPS:
-        h=z-FLOOR
-        f.slab(0,y,h+.082,.70,.19,.111,PANEL,.047)
-        f.slab(0,y,h+.042,.57,.117,.037,DARK,.026)
-        f.slab(0,y,h+.026,.50,.076,.012,LIGHT,.023)
-        if name=="Forward":
-            f.slab(0,y+.02,h+.188,.63,.27,.15,LINER,.049)
-    # Shoulder-mounted low-level aisle guidance and deep side return skirtings.
-    for s in (-1,1):
-        for y in (93.15,95.92,98.83):
-            floor,_,_,_=envelope(y)
-            f.rod((s*(floor-.060),y-.24,.145),(s*(floor-.060),y+.24,.145),.028,EDGE)
-            f.rod((s*(floor-.086),y-.13,.150),(s*(floor-.086),y+.13,.150),.013,IND)
-
-
-def bulkhead():
-    # Face the door from inside the room, so the positive local Y coordinate is aft.
-    f=Frame((0,92.22,FLOOR),(-1,0,0),(0,-1,0))
-    f.panel(0,-.028,1.043,1.397,2.08,.066,DARK,.16)
-    f.panel(0,-.077,1.039,1.294,2.01,.051,EDGE,.14)
-    f.panel(0,-.115,1.040,1.208,1.959,.043,PANEL,.13)
-    f.panel(0,-.143,1.041,1.108,1.865,.021,LINER,.10)
-    f.panel(-.02,-.167,1.56,.439,.402,.033,DARK,.08)
-    f.panel(-.02,-.191,1.56,.387,.350,.021,EDGE,.06)
-    f.panel(-.02,-.207,1.56,.336,.294,.021,"DeckBinnacle",.045)
-    # A stainless grab rail and a two-stage dog latch.
-    for x in (-.19,.19):
-        f.rod((x,-.147,.94),(x,-.249,.94),.028,EDGE)
-    f.rod((-.19,-.249,.94),(.19,-.249,.94),.031,EDGE)
-    f.panel(.367,-.174,1.135,.114,.207,.038,RUBBER)
-    f.rod((.367,-.226,1.15),(.244,-.244,1.21),.021,GOLD)
-    f.panel(0,-.16,2.175,.52,.135,.04,PANEL)
-    for x in (-.122,0,.122):
-        f.panel(x,-.188,2.174,.086,.028,.015,IND,.006)
-    for s in (-1,1):
-        f.panel(s*.811,-.015,1.05,.055,2.00,.040,EDGE,.021)
-        # Segmented access-panel seams run across the cabin's aft face.
-        for x in (1.12,2.40,3.48):
-            f.panel(s*x,-.015,1.26,.024,2.36,.028,PANEL,.008)
-    # Twin service cabinets have countersunk vent fins, retaining latches and
-    # a side-mounted flashlight. The equipment pack uses crossing web straps.
-    for x in (-2.53,-1.65):
-        f.panel(x,-.135,1.13,.78,1.55,.18,PANEL,.057)
-        f.panel(x,-.244,1.17,.683,1.39,.040,LINER,.039)
-        f.panel(x+.227,-.275,1.17,.089,.178,.037,DARK)
-        for j in range(7):
-            f.panel(x,-.271,1.50+j*.032,.50,.011,.015,PANEL,.004)
-        f.panel(x,-.270,.58,.48,.062,.020,EDGE)
-    f.panel(1.83,-.196,.94,.91,1.04,.28,DARK,.077)
-    f.panel(1.83,-.361,.95,.82,.91,.15,"CrewBolster",.090)
-    for x in (1.58,2.08):
-        f.panel(x,-.446,.96,.070,.91,.03,STRAP,.01)
-        f.panel(x,-.468,.95,.084,.094,.026,EDGE,.012)
-    # Crew duty board mounted above the restrained bag. The route strip and
-    # shift sheet are separate paper leaves under clips on the same pin board.
-    f.panel(1.88,-.039,1.925,1.16,.69,.062,DARK,.033)
-    f.panel(1.88,-.075,1.925,1.113,.645,.025,CANVAS,.020)
-    for x in (1.435,2.325):
-        for z in (1.664,2.186):
-            f.rod((x,-.092,z),(x,-.105,z),.013,EDGE,8)
-    for x,z,tile in ((1.66,1.959,4),(2.13,1.902,7)):
-        f.panel(x-.009,-.095,z-.014,.474,.293,.009,LINER,.007)
-        f.panel(x,-.105,z,.461,.278,.010,PAPER,.005)
-        f.print_face([(x-.215,-.112,z-.114),(x+.215,-.112,z-.114),
-                      (x+.215,-.112,z+.114),(x-.215,-.112,z+.114)],tile,(0,-1,0))
-        f.panel(x,-.123,z+.129,.081,.038,.018,EDGE,.005)
-    f.panel(1.88,-.100,2.211,.32,.032,.014,ORANGE,.005)
-    f.rod((2.77,-.161,.48),(2.77,-.161,1.46),.124,GOLD,14)
-    f.rod((2.77,-.16,1.43),(2.77,-.16,1.56),.075,PANEL,12)
-    for z in (.68,1.18):
-        f.rod((2.77,-.161,z-.025),(2.77,-.161,z+.025),.134,EDGE,14)
-    return f
+def pressure_door(f):
+    # The hatch closes the short cabin aft of the four watch positions.
+    f.panel(0, -.038, 1.082, 1.334, 2.128, .078, DARK, .323)
+    f.panel(0, -.085, 1.082, 1.233, 2.038, .072, LINER, .318)
+    f.panel(0, -.126, 1.082, 1.092, 1.902, .067, PANEL, .283)
+    vertical_finish(f, 0, -.161, 1.071, .78, 1.5, "hatch")
+    f.panel(0, -.174, 1.43, .339, .26, .052, DARK, .074)
+    f.panel(0, -.203, 1.43, .273, .192, .028, "DeckBinnacle", .053)
+    f.rod((.247, -.143, .99), (.247, -.222, .99), .063, DARK, 12)
+    f.rod((.247, -.226, .99), (.047, -.224, 1.070), .022, EDGE, 8)
+    for sign in (-1, 1):
+        f.rod((sign*.574, -.12, .71), (sign*.574, -.12, 1.35), .023, EDGE, 8)
+        f.panel(sign*1.67, -.057, 1.04, .615, 1.333, .116, PANEL, .055)
+        vertical_finish(f, sign*1.67, -.118, 1.022, .526, .983, "olive")
+    f.panel(0, -.131, 2.004, .384, .102, .068, DARK, .029)
+    f.panel(0, -.171, 2.004, .245, .043, .012, IND, .011)
 
 
 def remove_old_furnishings(nodes):
-    for name in ("FlightDeck_Consoles","FlightDeck_CrewDisplays","FlightDeck_CrewSeats",
-                 "FlightDeck_Floor","FlightDeck_JumpSeat","FlightDeck_Overhead","FlightDeck_Seats"):
-        obj=nodes.pop(name)
+    for name in ("FlightDeck_Consoles", "FlightDeck_CrewDisplays", "FlightDeck_CrewSeats",
+                 "FlightDeck_Floor", "FlightDeck_JumpSeat", "FlightDeck_Overhead", "FlightDeck_Seats"):
+        obj = nodes.pop(name)
         assert not obj.children, f"Unexpected original cockpit rig on {name}"
-        bpy.data.objects.remove(obj,do_unlink=True)
-    # Old rear display bezels were part of the same mesh as the pilot MFD surrounds.
-    obj=nodes["Int_AvionicsBezels"]
-    mesh=bmesh.new()
+        bpy.data.objects.remove(obj, do_unlink=True)
+    obj = nodes["Int_AvionicsBezels"]
+    mesh = bmesh.new()
     mesh.from_mesh(obj.data)
-    bmesh.ops.delete(mesh,geom=[v for v in mesh.verts if (obj.matrix_world@v.co).y<99],context="VERTS")
+    bmesh.ops.delete(mesh, geom=[v for v in mesh.verts if (obj.matrix_world @ v.co).y < 99], context="VERTS")
     mesh.to_mesh(obj.data)
     mesh.free()
 
 
 def fit_crew_room(nodes):
-    owner=nodes["Fuselage_Cockpit"]
+    owner = nodes["Fuselage_Cockpit"]
     remove_old_furnishings(nodes)
     palette()
-    cabin=Frame()
-    interior(cabin)
-    modules=[cabin.finish("FlightDeck_CabinLiner",owner),bulkhead().finish("FlightDeck_AftPressureDoor",owner)]
-    for label,x in (("Pilot",-1.15),("Copilot",.92)):
-        f=Frame((x,100.70,FLOOR))
-        seat(f)
-        modules.append(f.finish("FlightDeck_Seat_"+label,owner))
-        modules.append(locator("FlightDeck_SeatMount_"+label,(x,100.725,4.725),owner))
-    for role,s,y in STATIONS:
-        axes=((0,-s,0),(s,0,0))
-        f=Frame((s*2.336,y,FLOOR),*axes)
-        seat(f)
-        personal_kit(f,role)
-        modules.append(f.finish("FlightDeck_Seat_"+role,owner))
-        work=Frame(f.origin,*axes)
-        console(work,role)
-        modules.append(work.finish("FlightDeck_Station_"+role,owner))
-        modules.append(build_screen(role,f,owner))
-    for name,y,z in LAMPS:
-        modules.append(locator("FlightDeck_Lamp"+name,(0,y,z),owner))
-    nodes.update({o.name:o for o in modules})
+    cabin = Frame()
+    shell(cabin)
+    equipment_liner(cabin)
+    aft = Frame((0, HATCH, FLOOR), (-1, 0, 0), (0, -1, 0))
+    pressure_door(aft)
+    parts = [cabin.finish("FlightDeck_CabinLiner", owner), aft.finish("FlightDeck_AftPressureDoor", owner),
+             build_command_post(Frame, owner, FLOOR)]
+    for label, x in (("Pilot", -1.15), ("Copilot", .92)):
+        seat = Frame((x, 100.70, FLOOR))
+        chair(seat, pilot=True)
+        parts.append(seat.finish("FlightDeck_Seat_" + label, owner))
+        parts.append(locator("FlightDeck_SeatMount_" + label, (x, 100.725, 4.725), owner))
+    watch = Frame()
+    bank = Frame()
+    for role, side, y in STATIONS:
+        axes = ((0, -side, 0), (side, 0, 0))
+        origin = (SEAT_X*side, y, FLOOR)
+        chair(Frame(origin, *axes, batch=watch), pilot=False)
+        consoles(Frame(origin, *axes, batch=bank), role)
+        parts.append(station_screen(role, Frame(origin, *axes), owner))
+    parts.append(watch.finish("FlightDeck_WatchSeats", owner))
+    parts.append(bank.finish("FlightDeck_WatchConsoles", owner))
+    for name, y, z in LAMPS:
+        parts.append(locator("FlightDeck_Lamp" + name, (0, y, z), owner))
+    nodes.update({o.name: o for o in parts})
     bpy.context.view_layer.update()
