@@ -57,6 +57,23 @@ def inspect():
                 assert above and above[0] + below[0] >= 2.05, (position, above, below)
             aisle += 1
 
+    # The pilots' seat pans end at y=101.01. Leave knee room beneath their instruments.
+    for x in (-1.15, .92):
+        fascia = first_hit([nodes["FlightDeck_Panel"]], Vector((x, 99.0, 4.70)), Vector((0, 1, 0)))
+        assert fascia and 99.0 + fascia[0] > 101.30, (x, fascia)
+
+    # A high sidewall once projected across half the captain's forward window, despite
+    # passing all instrument sight rays. Sweep both pilots' outboard horizon to the beam.
+    window_rays = 0
+    for x, side in ((-1.15, -1), (.92, 1)):
+        eye = Vector((x, 100.707, 5.436))
+        for angle in range(0, 91, 5):
+            yaw = math.radians(side * angle)
+            for elevation in (0, 2, 4):
+                direction = Vector((math.sin(yaw), math.cos(yaw), math.tan(math.radians(elevation)))).normalized()
+                assert first_hit([shell], eye, direction) is None, (x, angle, elevation)
+                window_rays += 1
+
     screens = 0
     for role in ("Nav", "Comms", "Engineering", "Cargo"):
         screen = nodes["FlightDeck_StationScreen_" + role]
@@ -70,7 +87,8 @@ def inspect():
                 hit = first_hit(room, eye, ray)
                 assert hit and hit[1] == screen.name and hit[2].dot(facing) > .99, (role, offset_y, offset_z, hit)
                 screens += 1
-    print(f"Crew cabin: {count} closed-shell rays, {aisle} clear aisle samples, {screens} readable screen samples.")
+    print(f"Crew cabin: {count} closed-shell rays, {aisle} clear aisle samples, {screens} readable screen samples, "
+          f"{window_rays} clear window rays and both pilots' knee wells.")
 
 
 if __name__ == "__main__":

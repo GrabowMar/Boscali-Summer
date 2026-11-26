@@ -7,10 +7,12 @@ from math import cos, pi, sin
 import bpy
 import bmesh
 from mathutils import Vector
+from mathutils.bvhtree import BVHTree
 
 from bridge_instruments import locator
 from crew_graphics import ROLES, assign_print, assign_screen
 from finish import new_paint
+from flightdeck import seat_lower_displays
 from forebody import Surface, child_mesh
 
 
@@ -18,6 +20,7 @@ FLOOR = 4.109
 STATIONS = (("Nav", -1, 97.95), ("Comms", 1, 97.95),
             ("Engineering", -1, 94.72), ("Cargo", 1, 94.72))
 LAMPS = (("Forward", 99.76, 6.265), ("Mid", 96.50, 6.56), ("Aft", 93.52, 6.61))
+TASK_LIGHTS = [(role,s*2.50,y-.25,6.22) for role,s,y in STATIONS]
 LINER, PANEL, EDGE = "CrewLiner", "CrewPanel", "DeckRail"
 DARK, RUBBER = "DeckRecess", "DeckPadding"
 CLOTH, BOLSTER, STRAP = "CrewUpholstery", "CrewBolster", "CrewWebbing"
@@ -234,9 +237,9 @@ def console(f,role):
     if role=="Nav":
         keys(f,.08,.693,.43)
         # A rolled route sheet is held by two spanning hoops on the chart table.
-        f.rod((-.56,.935,.851),(.15,.935,.851),.045,LINER,12)
-        for x in (-.51,.103):
-            f.rod((x,.935,.851),(x+.021,.935,.851),.049,GOLD,12)
+        f.rod((-.79,.70,.851),(-.79,1.37,.851),.045,LINER,12)
+        for y in (.75,1.30):
+            f.rod((-.79,y,.851),(-.79,y+.021,.851),.049,GOLD,12)
         f.slab(-.53,.677,.806,.22,.174,.016,EDGE,.024)
         f.rod((-.53,.68,.812),(-.53,.68,.846),.050,STRAP,12)
     elif role=="Comms":
@@ -300,7 +303,11 @@ def envelope(y):
 
 def lining_section(y):
     floor,mid,top,h=envelope(y)
-    return [(0,y,0),(floor,y,0),(floor,y,.25),(mid,y,1.37),
+    # Lower the sidewall sill as it meets the flight deck. Continuing the aft
+    # cabin shoulder into the tapered nose cuts through the outer glazing.
+    t=max(0.,min(1.,(y-98.35)/1.41))
+    sill=1.37-.77*t*t*(3.-2.*t)
+    return [(0,y,0),(floor,y,0),(floor,y,.25),(mid,y,sill),
             (top,y,h-.19),(.69*top,y,h),(0,y,h)]
 
 
@@ -328,7 +335,7 @@ def interior(f):
                 f.face((a,b,(0,y,1.32)),LINER,(0,1,0))
         else:
             f.face([(-row[1][0],y,0),(row[1][0],y,0),(row[2][0],y,.25),
-                    (row[3][0],y,.90),(-row[3][0],y,.90),(-row[2][0],y,.25)],DARK,(0,-1,0))
+                    row[3],(-row[3][0],y,row[3][2]),(-row[2][0],y,.25)],DARK,(0,-1,0))
     # The ceiling above the aft room ends in an upholstered header. Its front
     # face tapers upward *behind* the pilots; no lip crosses their eye line.
     y=99.12
@@ -379,6 +386,19 @@ def interior(f):
         f.slab(0,y,h+.026,.50,.076,.012,LIGHT,.023)
         if name=="Forward":
             f.slab(0,y+.02,h+.188,.63,.27,.15,LINER,.049)
+    for role,x,y,z in TASK_LIGHTS:
+        clear=z-FLOOR
+        # The lens hangs from a tapered shoulder bracket with a deep visor on
+        # the aisle side. Viewed from the seating position it lights the desk.
+        sign=1 if x>0 else -1
+        f.slab(x,y,clear+.077,.178,.517,.109,PANEL,.029)
+        f.slab(x,y,clear+.041,.142,.45,.049,DARK,.020)
+        f.slab(x+sign*.011,y,clear+.027,.085,.365,.014,LIGHT,.017)
+        f.slab(x-sign*.070,y,clear+.012,.024,.452,.076,PANEL,.012)
+        _,wall,top,h=envelope(y)
+        head=h-.19*max(0.,min(1.,(abs(x)-.69*top)/(.31*top)))
+        support=max(.02,head-clear-.11)
+        f.slab(x,y,clear+.112+support*.5,.137,.384,support,LINER,.027)
     # Shoulder-mounted low-level aisle guidance and deep side return skirtings.
     for s in (-1,1):
         for y in (93.15,95.92,98.83):
@@ -459,11 +479,58 @@ def remove_old_furnishings(nodes):
     bmesh.ops.delete(mesh,geom=[v for v in mesh.verts if (obj.matrix_world@v.co).y<99],context="VERTS")
     mesh.to_mesh(obj.data)
     mesh.free()
+    # The former instrument bathtub extends a full metre aft through both
+    # occupants. Compress the lower apron towards the existing instrument sill.
+    # The screen cartridges start beyond y=101.39, so their faces, UVs and
+    # alignment with the live displays remain untouched.
+    panel=nodes["FlightDeck_Panel"]
+    local=panel.matrix_world.inverted()
+    for vertex in panel.data.vertices:
+        p=panel.matrix_world@vertex.co
+        if p.y<101.39:
+            shift=(101.39-p.y)*.97
+            p.y+=shift
+            p.x*=1.-.30*min(1.,shift/1.25)
+            vertex.co=local@p
+    panel.data.update()
+
+
+def clear_crown_service_well(nodes):
+    # The original deep pressure backing intersects standing heads and cuts
+    # across the forward seats. Taper the service cavity above the cabin,
+    # retaining the perimeter outside the room and the original outer sheet.
+    cover=nodes["BridgeCrown"]
+    points=[cover.matrix_world@v.co for v in cover.data.vertices]
+    outer=[list(p.vertices) for p in cover.data.polygons if
+           not cover.data.materials[p.material_index].name.endswith(("_BayFrame","_SplicePrimer"))]
+    skin=BVHTree.FromPolygons(points,outer)
+    def smooth(x):
+        t=max(0.,min(1.,x))
+        return t*t*(3.-2.*t)
+    for name in ("Detail_ForeBay_BridgeCrown","Detail_ForePiece_BridgeCrown","BridgeCrown"):
+        obj=nodes[name]
+        inv=obj.matrix_world.inverted()
+        for vert in obj.data.vertices:
+            v=obj.matrix_world@vert.co
+            amount=smooth((v.y-89.3)/2.4)*(1.-smooth((abs(v.x)-3.68)/1.92))
+            if amount<.0001:
+                continue
+            roof=skin.ray_cast((v.x,v.y,20),(0,0,-1))[0]
+            if roof is None:
+                roof=skin.find_nearest((v.x,v.y,v.z+.65))[0]
+            if roof is None or roof.z-v.z<.004:
+                continue
+            compact=.68+.16*smooth((v.y-93.)/4.6)
+            v.z+=(roof.z-v.z)*compact*amount
+            vert.co=inv@v
+        obj.data.update()
 
 
 def fit_crew_room(nodes):
     owner=nodes["Fuselage_Cockpit"]
     remove_old_furnishings(nodes)
+    seat_lower_displays(nodes)
+    clear_crown_service_well(nodes)
     palette()
     cabin=Frame()
     interior(cabin)
@@ -485,5 +552,7 @@ def fit_crew_room(nodes):
         modules.append(build_screen(role,f,owner))
     for name,y,z in LAMPS:
         modules.append(locator("FlightDeck_Lamp"+name,(0,y,z),owner))
+    for role,x,y,z in TASK_LIGHTS:
+        modules.append(locator("FlightDeck_TaskLamp_"+role,(x,y,z),owner))
     nodes.update({o.name:o for o in modules})
     bpy.context.view_layer.update()

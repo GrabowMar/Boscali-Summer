@@ -19,8 +19,15 @@ The verify_*.json files beside this builder are nomodkit game scenarios. Run
 them from this checkout in a BepInEx sandbox. Fighter and railgun loadouts
 use different prefabs, so each payload setting takes effect on a fresh launch.
 
-By default the versioned Breakwater source comes from Git. KY44_BASE_MESH can
-instead point at a local copy of that original compressed BSMP v2 file.
+The default rebuild applies the current flight deck to the previous released
+Groza master and matches the shipped near and distant assets. It reads that
+master and the previous distant LOD from Git. For an extracted source release
+set KY44_CREW_BASE_DIR to the folder containing the original KY-44 Groza.blend
+and megaplane.lod.gz supplied in Build input.
+
+Use -- --from-breakwater to reconstruct the earlier aircraft from the original
+Breakwater, or point KY44_BASE_MESH at a historical BSMP v2 file. This historical
+path predates manual forebody and gear refinements in the released Groza master.
 """
 import os
 import sys
@@ -145,4 +152,8 @@ def build():
 
 
 if __name__ == "__main__":
-    build()
+    if "--from-breakwater" in sys.argv or os.getenv("KY44_BASE_MESH"):
+        build()
+    else:
+        from build_crew_room import main
+        main()
