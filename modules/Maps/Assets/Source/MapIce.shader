@@ -59,7 +59,7 @@ Shader "Boscali/MapIce"
                 float4 positionCS : SV_POSITION;
                 float3 positionWS : TEXCOORD0;
                 half3 normalWS : TEXCOORD1;
-                float2 map : TEXCOORD2;
+                float3 map : TEXCOORD2;
                 half4 color : COLOR;
                 float fog : TEXCOORD3;
             };
@@ -69,7 +69,8 @@ Shader "Boscali/MapIce"
                 o.positionWS = TransformObjectToWorld(v.positionOS);
                 o.positionCS = TransformWorldToHClip(o.positionWS);
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
-                o.map = v.uv * 81920.0;   // metres on the map: it stays put when the floating origin shifts the world
+                // Map XZ and local height stay fixed when the floating origin shifts.
+                o.map = float3(v.uv.x * 81920.0, v.positionOS.y, v.uv.y * 81920.0);
                 o.color = v.color;
                 o.fog = ComputeFogFactor(o.positionCS.z);
                 return o;
@@ -91,23 +92,44 @@ Shader "Boscali/MapIce"
             }
             half4 frag(Varyings i) : SV_Target
             {
-                half fine = SAMPLE_TEXTURE2D(_Noise, sampler_Noise, i.map / 37.0).r, broad = SAMPLE_TEXTURE2D(_Noise, sampler_Noise, i.map / 2300.0 + .37).r;
+                half fine = SAMPLE_TEXTURE2D(_Noise, sampler_Noise, i.map.xz / 37.0).r, broad = SAMPLE_TEXTURE2D(_Noise, sampler_Noise, i.map.xz / 2300.0 + .37).r;
                 clip(i.color.a - .5 + (fine - .5) * .3);   // a ragged edge where the ice thins out
                 half3 view = normalize(GetWorldSpaceViewDir(i.positionWS));
                 half2 ray = view.xz / max(view.y, .25);     // the ground is the tangent plane: x east, z north
                 float away = saturate((distance(i.positionWS, GetCameraPositionWS()) - 500.0) / 2500.0);
-                float2 close = i.map / _Near, wide = i.map / _Far;
+                float3 iceUV = i.map / _Near;
+                float2 close = iceUV.xz, wide = i.map.xz / _Far;
                 half cracks = lerp(Cracks(close, ray, 6), 1, away) * lerp(1, Cracks(wide, ray, 4), .5 - .3 * away);   // the great fractures fade with distance: from the air the sheet is white
                 // how much snow lies on the ice here: the map paints snow white and bare ice blue
                 half snowy = smoothstep(.28, .7, i.color.r + (fine - .5) * .25) * smoothstep(.25, .6, broad + .35 * i.color.r);
-                half3 ice = SAMPLE_TEXTURE2D(_IceColor, sampler_IceColor, close).rgb * 2.2 * lerp(i.color.rgb, half3(.55, .78, .92), .45);
+                half3 iceDetail = SAMPLE_TEXTURE2D(_IceColor, sampler_IceColor, close).rgb;
+                half3 topBump = UnpackNormal(SAMPLE_TEXTURE2D(_IceNormal, sampler_IceNormal, close));
+                half3 iceBump = half3(topBump.x, 0, topBump.y);
+                half3 normal = normalize(i.normalWS);
+                // Borrow the triplanar technique used by Hollow Terrain System. Restrict side projections
+                // to nearby, exposed ice cliffs to preserve the flat-sheet shading and distant sampling cost.
+                half cliff = smoothstep(.10, .54, 1 - abs(normal.y)) * (1 - away) * (1 - snowy);
+                float3 iceDx = ddx(iceUV), iceDy = ddy(iceUV);
+                UNITY_BRANCH
+                if (cliff > .01)
+                {
+                    half2 weights = abs(normal.xz);
+                    weights *= weights;
+                    weights /= max(weights.x + weights.y, .001);
+                    half3 faceX = SAMPLE_TEXTURE2D_GRAD(_IceColor, sampler_IceColor, iceUV.zy, iceDx.zy, iceDy.zy).rgb;
+                    half3 faceZ = SAMPLE_TEXTURE2D_GRAD(_IceColor, sampler_IceColor, iceUV.xy, iceDx.xy, iceDy.xy).rgb;
+                    half3 bumpX = UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_IceNormal, sampler_IceNormal, iceUV.zy, iceDx.zy, iceDy.zy));
+                    half3 bumpZ = UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_IceNormal, sampler_IceNormal, iceUV.xy, iceDx.xy, iceDy.xy));
+                    iceDetail = lerp(iceDetail, faceX * weights.x + faceZ * weights.y, cliff);
+                    iceBump = lerp(iceBump, half3(0, bumpX.y, bumpX.x) * weights.x + half3(bumpZ.x, bumpZ.y, 0) * weights.y, cliff);
+                }
+                half3 ice = iceDetail * 2.2 * lerp(i.color.rgb, half3(.55, .78, .92), .45);
                 ice = lerp(lerp(_DepthColor.rgb, ice, cracks), half3(.6, .8, .93), .45);   // blue ice is pale from the air, not sea blue
-                half3 snow = (.88 + .5 * SAMPLE_TEXTURE2D(_Snow, sampler_Snow, i.map / 23.0).rgb) * lerp(i.color.rgb, half3(1, 1, 1), .5) * (.92 + .14 * broad);   // the snow texture is its sparkle only, nearly black
+                half3 snow = (.88 + .5 * SAMPLE_TEXTURE2D(_Snow, sampler_Snow, i.map.xz / 23.0).rgb) * lerp(i.color.rgb, half3(1, 1, 1), .5) * (.92 + .14 * broad);   // the snow texture is its sparkle only, nearly black
                 half3 base = lerp(ice, snow, snowy);
-                half3 bumpIce = UnpackNormal(SAMPLE_TEXTURE2D(_IceNormal, sampler_IceNormal, close));
-                half3 bumpSnow = UnpackNormal(SAMPLE_TEXTURE2D(_SnowNormal, sampler_SnowNormal, i.map / 23.0));
-                half3 bump = lerp(bumpIce, bumpSnow, snowy) * (1 - .7 * away);
-                half3 normal = normalize(i.normalWS + half3(bump.x, 0, bump.y) * .55);
+                half3 bumpSnow = UnpackNormal(SAMPLE_TEXTURE2D(_SnowNormal, sampler_SnowNormal, i.map.xz / 23.0));
+                half3 bump = lerp(iceBump, half3(bumpSnow.x, 0, bumpSnow.y), snowy) * (1 - .7 * away);
+                normal = normalize(normal + bump * .55);
                 Light sun = GetMainLight(TransformWorldToShadowCoord(i.positionWS));
                 half shadow = sun.shadowAttenuation * sun.distanceAttenuation;
                 half wrap = saturate((dot(normal, sun.direction) + .45) / 1.45) * shadow;

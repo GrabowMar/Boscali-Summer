@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Maps.Domain
         [Serializable]
         internal sealed class Strip
         {
-            public string name = "", role = "", surface = "", side = "";
+            public string name = "", role = "", surface = "", side = "", donor = "";
             public float x, y, z, length, width = 40f, padLength, padWidth;
             public int heading;
             /// <summary>The AI's taxi routes of the airfield, made by the generator: flat x, y, z, x, y, z — each pair

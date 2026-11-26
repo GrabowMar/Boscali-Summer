@@ -3,10 +3,14 @@ name = "Tassara"
 biome = "desert"
 seed = 7
 cell = 20
+vertex_budget = 2400000
 latitude = 23
 heightmap = "Source/tassara.height.png"   # tools/MapAssets/tassara_height.py: the Grand Erg Oriental — seif chains running with the wind, gourds where the erg is thickest, caravan corridors between them, two Ubari lakes, a wadi, and the drowned border range
 height_min = 100
 height_max = 1200
+bathymetry = true
+natural_terrain = true
+runtime_airfields = true
 
 # A sand sea of the central Sahara, on the old caravan pistes: three airstrips in a triangle, salt lakes where
 # the deflation hollows reach water, palm oases and a ksar on their shores, an oil camp in the northeast, and
@@ -530,3 +534,73 @@ x = 11284
 z = 19440
 radius = 300
 amount = 0.7
+
+# Shorter, offset crests at the edge of the erg leave the long caravan corridors open.
+[[edit]]
+op = "dunes"
+x = -14900
+z = -24900
+to = [-12600, -23300, -10900, -22200]
+radius = 2300
+amount = 8
+size = 360
+angle = 126
+
+[[edit]]
+op = "roughen"
+x = 4380
+z = -7700
+to = [4610, -5410, 4760, -2700]
+radius = 1250
+amount = 7
+size = 230
+
+[[paint]]
+layer = "rock"
+x = 4390
+z = -7660
+to = [4610, -5460, 4760, -2700]
+radius = 520
+amount = 0.7
+
+[[paint]]
+layer = "salt"
+x = 18200
+z = -16830
+to = [19280, -16490, 20100, -15980]
+radius = 510
+amount = 0.56
+
+[[paint]]
+layer = "mud"
+x = -9290
+z = -9820
+radius = 250
+amount = 0.32
+
+[[prop]]
+kind = "water_tower"
+x = -9060
+z = -9700
+yaw = 100
+variant = 1
+
+[[prop]]
+kind = "containers"
+x = 21520
+z = 15040
+yaw = 70
+variant = 2
+
+[[prop]]
+kind = "pylon"
+x = 22380
+z = 15330
+yaw = 70
+
+[[prop]]
+kind = "hut"
+x = 11430
+z = 19470
+yaw = 250
+variant = 2
