@@ -39,9 +39,19 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (up) v.BirdsUp++;
                 v.Fleet.Add(new FleetCardView
                 {
-                    Kind = k, Callsign = Names[k], State = state, Tone = tone, Up = up, Fuel = up ? b.Fuel : 0f, Covers = up ? Covers(v, b) : "", Perk = PerkLine(v, k),
+                    Kind = k, Bus = b.Bus, Callsign = Names[k], State = state, Tone = tone, Up = up, Fuel = up ? b.Fuel : 0f, Covers = up ? Covers(v, b) : "", Perk = PerkLine(v, k),
                     CanRelocate = up && !b.Relocating && b.Fuel >= GeoBird.Cost(0.005f), // OrbitRoom.CanRelocate's rule
                     Launch = Offer(Front.Space, ProgrammeId.LaunchSatellite, (byte)k, v.Row, queued, c),
+                });
+            }
+            for (int i = 0; i < v.Row.Queue.Count; i++)
+            {
+                FrontQueueRow q = v.Row.Queue[i];
+                if (q.Id != ProgrammeId.LaunchSatellite || !q.HasPoint || !GeoSpace.TryUnpackLaunch(q.Kind, out BirdKind kind, out SatelliteBus bus)) continue;
+                v.Ghosts.Add(new MapGhostView
+                {
+                    U = c.Frame.U(q.X), V = c.Frame.V(q.Z), Radius = GeoSpace.Footprint(kind, bus),
+                    Label = "INSERTION · " + Names[(int)kind]
                 });
             }
             v.BirdCap = Math.Min(FrontRules.BirdCap, FrontRules.BirdsPerPad * v.PadsUp);
@@ -49,8 +59,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             foreach (OrbitTrackView b in v.Birds)
             {
                 if (b.Own) continue;
-                string near = NearestOwn(v, b);
-                v.Hostile.Add(new HostileBirdView { Kind = (int)b.Kind, Word = GeoSpace.Names[(int)b.Kind], OverOwn = near.Length > 0, Nearest = near });
+                v.Hostile.Add(new HostileBirdView { Kind = (int)b.Kind, Id = b.TrackId, Word = GeoSpace.Names[(int)b.Kind] });
             }
             v.CoverageGap = "";
             // A gap needs a bird up and a known world: before the mirrors arrive, or with no satellite at all, every base would read as a false gap.
@@ -138,7 +147,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             for (int i = 0; i < v.Queue.Count; i++)
             {
                 FrontQueueRow q = v.Row.Queue[i];
-                if (q.Id != ProgrammeId.LaunchSatellite || q.Kind != k) continue;
+                if (q.Id != ProgrammeId.LaunchSatellite || !GeoSpace.TryUnpackLaunch(q.Kind, out BirdKind queuedKind, out _) || (int)queuedKind != k) continue;
                 FrontQueueView qv = v.Queue[i];
                 tone = !qv.Building && q.Waiting ? AvState.Caution : AvState.Info;
                 return qv.Building ? FrontPanels.Clocked("LAUNCHING ", qv.BuildLeft) : q.Waiting ? "WAITS FOR A PAD" : "QUEUED · " + Pct(qv.Progress);
@@ -158,20 +167,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (n++ < 3) names += (names.Length > 0 ? ", " : "") + a.Name;
             }
             return n == 0 ? "COVERS NOTHING" : "COVERS " + names + (n > 3 ? " +" + (n - 3) : "");
-        }
-
-        /// <summary>The nearest of our airbases under a (hostile) bird's footprint, "" when none.</summary>
-        private static string NearestOwn(FrontRoomView v, in OrbitTrackView b)
-        {
-            string best = "";
-            float bestD = b.Radius;
-            foreach (MapAirbaseView a in v.Airbases)
-            {
-                if (a.Side != AirbaseSide.Own) continue;
-                float d = GeoBird.Distance(b.U, b.V, a.U, a.V);
-                if (d <= bestD) { bestD = d; best = a.Name; }
-            }
-            return best;
         }
 
         private static bool UnderOwn(FrontRoomView v, in MapAirbaseView a)

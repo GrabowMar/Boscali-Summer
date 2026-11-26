@@ -33,10 +33,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private readonly BirdSlot[] birds = new BirdSlot[SpaceRules.BirdCount];
         private readonly float[] cooldownUntil = new float[SpaceRules.TaskCount];
         private readonly bool[] dead = { true, true, true };
+        private readonly int[] instances = new int[SpaceRules.BirdCount];
         private readonly GeoBird[] geo = { new GeoBird(0.40f, 0.50f, 100f), new GeoBird(0.50f, 0.50f, 100f), new GeoBird(0.60f, 0.50f, 100f) };
         private readonly float[] homeU = { 0.40f, 0.50f, 0.60f }, homeV = { 0.50f, 0.50f, 0.50f };
         private float allDownAt = float.PositiveInfinity;
-        private int nextToken;
+        private int nextToken, nextInstance;
         private bool retired;
 
         /// <summary>Every pad slot starts absent and every bird not launched: nothing is on station until built.</summary>
@@ -88,6 +89,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>The bird is up: it was launched and an ASAT strike has not killed it (a dead bird stays dead until a LAUNCH build relaunches it).</summary>
         public bool HasBird(BirdKind bird) => (byte)bird < SpaceRules.BirdCount && !dead[(byte)bird];
 
+        /// <summary>Identity of the satellite currently in the slot. A replacement never inherits the identity of a lost bird.</summary>
+        public int BirdInstance(BirdKind bird) => HasBird(bird) ? instances[(int)bird] : 0;
+
         public bool BirdDown(BirdKind bird) => (byte)bird < SpaceRules.BirdCount && dead[(byte)bird];
 
         /// <summary>Bit i set (OPTICAL, RADAR, KINETIC) has been launched at least once (a killed bird stays launched: LOST).</summary>
@@ -96,12 +100,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             get { byte m = 0; for (int i = 0; i < launched.Length; i++) if (launched[i]) m |= (byte)(1 << i); return m; }
         }
 
-        /// <summary>A satellite is put on station at its home point with a full tank. False when that bird is already alive.</summary>
-        public bool Launch(BirdKind bird)
+        /// <summary>A satellite is put on its selected station, or home when none was selected, with a full tank.</summary>
+        public bool Launch(BirdKind bird, SatelliteBus bus = SatelliteBus.Balanced, bool hasStation = false, float u = 0f, float v = 0f)
         {
-            if ((byte)bird >= SpaceRules.BirdCount || !dead[(byte)bird]) return false;
+            if ((byte)bird >= SpaceRules.BirdCount || !dead[(byte)bird] || bus > SatelliteBus.Wideband || nextInstance == int.MaxValue ||
+                (hasStation && (!float.IsFinite(u) || !float.IsFinite(v)))) return false;
             int i = (byte)bird;
-            dead[i] = false; launched[i] = true; birds[i] = default; Reset(i);
+            dead[i] = false; launched[i] = true; birds[i] = default;
+            instances[i] = ++nextInstance;
+            geo[i] = hasStation ? new GeoBird(GeoBird.ClampStation(u), GeoBird.ClampStation(v), 100f, bus) : new GeoBird(homeU[i], homeV[i], 100f, bus);
             return true;
         }
 
@@ -125,9 +132,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         /// <summary>The bird is alive and its footprint covers the map point: the gate for a perk that needs a satellite over its target.</summary>
-        public bool Covers(BirdKind bird, float now, float u, float v) => HasBird(bird) && geo[(int)bird].Covers(now, u, v, GeoSpace.Reach[(int)bird]);
-
-        private void Reset(int i) => geo[i] = new GeoBird(homeU[i], homeV[i], 100f);
+        public bool Covers(BirdKind bird, float now, float u, float v) => HasBird(bird) && geo[(int)bird].Covers(now, u, v, GeoSpace.Footprint(bird, geo[(int)bird].Bus));
 
         /// <summary>Bit i set (OPTICAL, RADAR, KINETIC) is dead.</summary>
         public byte DownMask

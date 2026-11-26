@@ -110,6 +110,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     break;
                 case "steer": request = Steer(m) ? 1 : 0; break;
 #if !PUBLIC_RELEASE
+                case "asat":
+                    int trackKind = Mathf.Clamp((int)Number(args, "bird", 0f), 0, SpaceRules.BirdCount - 1);
+                    request = m.FrontQueueAsat(m.OpsMirror.State.EnemyTrackIds[trackKind]);
+                    break;
+                case "asat-fixture": request = PrepareAsatFixture(Number(args, "padOnly", 0f) > 0.5f) ? 1 : 0; break;
+                case "asat-stage":
+                    if (BoscaliSummer.Core.Game.GameAccess.IsServer() && OpsService.Active != null &&
+                        GameManager.GetLocalPlayer(out Player asatPilot) && asatPilot != null)
+                        request = (int)OpsService.Active.RunAsatProgramme(asatPilot.HQ, m.OpsMirror.State.EnemyTrackIds[0]);
+                    break;
                 case "team": // TEST ONLY: what a finished TRAIN TEAM programme does (one free team at the camp), so a run need not wait minutes for one
                     request = SofService.Active != null && GameManager.GetLocalPlayer(out Player tp) && tp != null ? (int)SofService.Active.TrainTeam(tp.HQ).Outcome : -2;
                     break;
@@ -257,7 +267,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 Unit u = units[i];
                 if (!(u is GroundVehicle) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == mine || Mathf.Abs(u.speed) < 4f) continue;
                 GlobalPosition q = u.transform.position.ToGlobalPosition();
-                if (!g.Covers(now, frame.U(q.x), frame.V(q.z), GeoSpace.Reach[k])) continue;
+                if (!g.Covers(now, frame.U(q.x), frame.V(q.z), GeoSpace.Footprint((BirdKind)k, g.Bus))) continue;
                 double dx = q.x - nadir.x, dz = q.z - nadir.z, d = dx * dx + dz * dz;
                 if (d < bestD) { bestD = d; best = q; }
             }
@@ -274,7 +284,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             FeedContact best = default; bool found = false;
             foreach (FeedContact c in m.SpaceMirror.State.Contacts)
             {
-                if (!g.Covers(now, frame.U(c.X), frame.V(c.Z), GeoSpace.Reach[k])) continue;
+                if (!g.Covers(now, frame.U(c.X), frame.V(c.Z), GeoSpace.Footprint((BirdKind)k, g.Bus))) continue;
                 if (!found || (moving && c.Moving && !best.Moving)) { best = c; found = true; }
             }
             return found ? new GlobalPosition(best.X, 0f, best.Z) : Nadir(m, k);
@@ -515,6 +525,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r[prefix + "BirdsUp"] = up;
                 r[prefix + "Optical"] = up & 1;
                 r[prefix + "BirdsLaunched"] = (int)s.LaunchedMask;
+                float now = SupportManager.MissionNow();
+                for (int i = 0; i < SpaceRules.BirdCount; i++)
+                {
+                    var kind = (BirdKind)i;
+                    GeoBird geo = s.Geo(kind);
+                    string key = prefix + "Bird" + i;
+                    r[key + "Bus"] = s.HasBird(kind) ? (int)geo.Bus : -1;
+                    r[key + "U"] = geo.U(now);
+                    r[key + "V"] = geo.V(now);
+                }
                 infra += s.LiveUplinkCount;
             }
             if (CyberService.Active != null && CyberService.Active.TryDesk(hq, out CyberDesk cd))
@@ -534,6 +554,23 @@ namespace BoscaliSummer.Modules.Support.Runtime
 #endif
 
 #if !PUBLIC_RELEASE
+        private static bool PrepareAsatFixture(bool padOnly)
+        {
+            if (!BoscaliSummer.Core.Game.GameAccess.IsServer() || !GameManager.GetLocalPlayer(out Player pilot) || pilot == null) return false;
+            SpaceService space = Find<SpaceService>();
+            if (space == null || !BuildPad(pilot.HQ)) return false;
+            if (padOnly) return true;
+            var factions = FactionRegistry.GetAllHQs();
+            if (factions == null) return false;
+            foreach (FactionHQ enemy in factions)
+                if (enemy != null && enemy != pilot.HQ && BuildPad(enemy) && space.TryGetStateCoarse(enemy, out SpaceState state))
+                    return state.HasBird(BirdKind.Optical) || space.TryLaunchBird(enemy, BirdKind.Optical);
+            return false;
+
+            bool BuildPad(FactionHQ owner) => space.TryGetState(owner, out SpaceState state) &&
+                (state.LiveUplinkCount > 0 || space.TryBuildPad(owner, false, 0f, 0f, out _));
+        }
+
         // ---- TEST ONLY: the OVERWATCH and STARFALL proofs (tests/ingame/ops-overwatch.json) ------------------------------------------------
 
         private static float burnSeconds;
@@ -608,8 +645,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 best = GeoBird.Distance(bu, bv, tu, tv);
             }
             m.FrontSetFocus(Front.Space, frame.X(tu), frame.Z(tv)); // the director moves any bird that misses the pin onto it
-            if (best <= GeoSpace.Reach[k] * 0.6f) return -1; // well inside, so still covered when the perk fires
-            burnSeconds = best / GeoBird.Slew;
+            if (best <= GeoSpace.Footprint((BirdKind)k, g.Bus) * 0.6f) return -1; // well inside, so still covered when the perk fires
+            burnSeconds = best / g.Speed;
             return m.RelocateBird(k, tu, tv);
         }
 
@@ -717,6 +754,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             r["lastOutcome"] = lastOutcome; r["lastCharged"] = lastCharged;
             r["enemyBirdsDown"] = (int)m.OpsMirror.State.EnemyBirdsDown;
+#if !PUBLIC_RELEASE
+            r["asatFlights"] = m.OpsMirror.State.Flights.Count;
+            r["asatIncomingBird"] = m.OpsMirror.State.IncomingBird;
+            r["asatIncomingLaunched"] = m.OpsMirror.State.IncomingLaunched;
+            for (int i = 0; i < SpaceRules.BirdCount; i++) r["asatTrack" + i] = m.OpsMirror.State.EnemyTrackIds[i];
+            if (m.FrontMirror.Known)
+                foreach (FrontQueueRow row in m.FrontMirror.State.Fronts[(int)Front.Space].Queue)
+                    if (row.Id == ProgrammeId.Asat) { r["asatQueuedTrack"] = row.TargetTrack; break; }
+#endif
             int gradeLocks = 0; // perks the local pilot's skill grade keeps shut (NEEDS <SYSTEM> SKILL n)
             foreach (Domain.Calls.CallRow row in Domain.Calls.CallSheet.Rows)
                 if (m.LockReason(row.Id).StartsWith("NEEDS ", System.StringComparison.Ordinal)) gradeLocks++;

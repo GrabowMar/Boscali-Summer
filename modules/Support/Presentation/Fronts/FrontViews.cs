@@ -41,9 +41,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public MapFrame Frame;
         /// <summary>Bit i set while the faction's satellite i is not up (never launched or lost), and bit i set once it was launched this scene (from the OPS mirror).</summary>
         public byte BirdsDown, BirdsLaunched;
-        /// <summary>The strongest enemy's satellites that are not up (never launched or lost: the mirror cannot tell which); EnemyKnown is false before the OPS mirror arrives.</summary>
-        public byte EnemyBirdsDown;
-        public bool EnemyKnown;
+        public int[] EnemyTrackIds;
         /// <summary>Whether the faction owns satellite i.</summary>
         public bool[] HasBird;
         /// <summary>Each satellite's geostationary state (own / strongest enemy); null falls back to the default parking slots until the host owns it.</summary>
@@ -143,11 +141,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 FrontQueueRow q = row.Queue[i];
                 float cost = FrontRules.Cost(q.Id, c.CostScale);
                 float build = Math.Max(1f, FrontRules.BuildSeconds(q.Id));
-                bool building = i == 0 && q.Percent >= 100; // only the head ever builds: a waiting programme a donor filled is FUNDED, not BUILDING
+                bool building = i == 0 && q.Percent >= 100 && !q.Waiting; // only the head ever builds: a waiting programme a donor filled is FUNDED, not BUILDING
                 int left = (int)Math.Max(0f, Math.Ceiling(q.BuildLeft - (building ? c.Now - stamp : 0f)));
                 v.Queue.Add(new FrontQueueView
                 {
-                    Id = q.Id, Row = q.Row, Name = FrontWords.Programme(q.Id, q.Kind), Cost = cost, Building = building, BuildLeft = left, BuildTotal = (int)build,
+                    Id = q.Id, Row = q.Row, Name = FrontWords.Programme(q.Id, q.Kind), Cost = cost, Building = building, Waiting = q.Waiting, BuildLeft = left, BuildTotal = (int)build,
                     Progress = building ? Mathf.Clamp01(1f - left / build) : q.Percent / 100f
                 });
             }
@@ -279,7 +277,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             int k = PerkBird(id);
             if (k < 0 || !c.AimKnown || c.HasBird == null || !c.HasBird[k] || (c.BirdsDown & (1 << k)) != 0) return "";
-            return GeoOf(c.Geo, k, true).Covers(c.Now, c.AimU, c.AimV, Reach[k]) ? "" : SupportWords.OutsideFootprint(GeoSpace.Names[k]);
+            GeoBird bird = GeoOf(c.Geo, k, true);
+            return bird.Covers(c.Now, c.AimU, c.AimV, GeoSpace.Footprint(Kinds[k], bird.Bus)) ? "" : SupportWords.OutsideFootprint(GeoSpace.Names[k]);
         }
 
         /// <summary>One line per perk for the FRONT tab's perk list.</summary>
@@ -319,7 +318,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         /// <summary>A bird's geostationary state: the host's when the inputs carry it, else it sits parked at its default slot with a full tank.</summary>
         internal static GeoBird GeoOf(GeoBird[] src, int k, bool own) =>
-            src != null && k < src.Length && (src[k].Fuel > 0f || src[k].Length > 0f) ? src[k] : new GeoBird(own ? OwnU[k] : FoeU[k], own ? OwnV[k] : FoeV[k], 100f);
+            src != null && k < src.Length ? src[k] : new GeoBird(own ? OwnU[k] : FoeU[k], own ? OwnV[k] : FoeV[k], 100f);
 
         internal static string BirdCallsign(int k) => Names[k];
 
@@ -332,13 +331,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private static OrbitTrackView Station(int k, bool own, GeoBird g, in FrontInputs c, FrontRoomView v)
         {
-            float u = g.U(c.Now);
+            float u = g.U(c.Now), radius = own ? GeoSpace.Footprint(Kinds[k], g.Bus) : 0f;
             return new OrbitTrackView
             {
-                Kind = Kinds[k], Own = own, U = u, V = g.V(c.Now), FromU = g.FromU, FromV = g.FromV, TargetU = g.ToU, TargetV = g.ToV,
-                Relocating = g.Moving(c.Now), EtaSeconds = g.Eta(c.Now), BurnCost = g.BurnCost, Fuel = g.Fuel, Radius = Reach[k],
-                Overhead = v.HasFocus && g.Covers(c.Now, v.FocusU, v.FocusV, Reach[k]),
-                FootprintKm = Reach[k] * v.TheatreKm, Slot = SlotLon(c.Faction, own, u, c.Frame.W),
+                Kind = Kinds[k], Bus = g.Bus, Own = own, U = u, V = g.V(c.Now), FromU = g.FromU, FromV = g.FromV, TargetU = g.ToU, TargetV = g.ToV,
+                Relocating = g.Moving(c.Now), EtaSeconds = g.Eta(c.Now), BurnCost = g.BurnCost, Fuel = g.Fuel, Radius = radius,
+                Overhead = own && v.HasFocus && g.Covers(c.Now, v.FocusU, v.FocusV, radius),
+                FootprintKm = radius * v.TheatreKm, Slot = SlotLon(c.Faction, own, u, c.Frame.W),
                 Catalog = "CAT " + (40000u + (FactionIdentity.Of(c.Faction) + 977u * (uint)(k + 1) + (own ? 0u : 3331u)) % 9000u),
             };
         }
@@ -364,13 +363,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 b.Orbit = "SLOT " + b.Slot + " · " + b.Catalog;
                 v.Birds.Add(b);
             }
-            // The enemy constellation: only birds that are up (the mirror carries no launched mask for the enemy, so a down bit may be one never launched), parked the same way.
-            for (int k = 0; c.EnemyKnown && k < Kinds.Length; k++)
+            for (int k = 0; c.EnemyTrackIds != null && k < Kinds.Length && k < c.EnemyTrackIds.Length; k++)
             {
-                if ((c.EnemyBirdsDown & (1 << k)) != 0) continue;
+                if (c.EnemyTrackIds[k] <= 0) continue;
                 OrbitTrackView b = Station(k, false, GeoOf(c.EnemyGeo, k, false), c, v);
-                b.Alive = true; b.Callsign = "HOSTILE-" + (k + 1); b.State = "TRACKED"; b.Tone = AvState.Danger;
-                b.Orbit = "SLOT " + b.Slot + " · " + b.Catalog;
+                b.TrackId = c.EnemyTrackIds[k];
+                b.Alive = true; b.Callsign = "T" + b.TrackId + " · " + GeoSpace.Names[k]; b.State = "COARSE TRACK"; b.Tone = AvState.Danger;
                 v.Birds.Add(b);
             }
             Satellites(v, c, SupportManager.Active?.OpsMirror.Sites);

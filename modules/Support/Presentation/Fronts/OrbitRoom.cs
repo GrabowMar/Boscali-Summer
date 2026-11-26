@@ -1,62 +1,39 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
+using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Space;
-using BoscaliSummer.Modules.Support.Presentation.C2;
-using BoscaliSummer.Modules.Support.Presentation.Ops;
 using NOAvionics;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 {
-    /// <summary>
-    /// The SPACE front's room (R5, SPACE OPERATIONS CENTRE): deep-space navy glass. The map is the theatre at real scale: every bird hangs over its parked
-    /// point as a nadir marker, its footprint is drawn exactly as the coverage gate tests it (Reach as a share of the theatre, so a slightly flattened oval in
-    /// kilometres), a burn is the dashed path to a ghost footprint, the selected bird's fuel-cost rings are the real burn cost (1.5 + 36 per theatre width, in
-    /// percent), the pads stand at their airbases with queued pads as dashed ghosts, and the first held airbase no footprint covers is named at the foot.
-    /// The column has two tabs: SATELLITES (pads, fleet, hostile birds, standing orders: OrbitSatellitesPanel.cs) and DOWNLINK (the sensor station around the
-    /// live feed, DownlinkPane.cs; ENLARGE gives it the whole room, and the map shows its amber look box). Two local map picks, one at a time: BUILD PAD (a click
-    /// within 8 km of a held airbase queues a pad there) and RELOCATE (a click proposes a bird's new parked point, CONFIRM BURN sends it). A click on one of our
-    /// birds opens its feed. Mission-control flavour (lamps, burn-in lines, the radar sweep angle, the station-keeping boxes) is derived from fields the room already has.
-    /// </summary>
+    /// <summary>Launch planning and satellite operations share one theatre map and one set of map picks.</summary>
     internal sealed partial class OrbitRoom : IFrontRoom
     {
-        private const float DragSlop = 6f, LegendX = 14f, BirdPickPx = 22f, FootX = 560f, FootRight = 190f;
+        private const float BirdPickPx = 19f, WatchHeight = 30f;
+        private const int MaxMapLabels = 18;
+        private static readonly Color[] PayloadInk = { RoomInk.Ice, RoomInk.Rgb(0x7BE9B3), RoomInk.Rgb(0xFFD17B) };
         private float mapW = 880f, mapH = 502f;
-        private const int GridCols = 10, GridRows = 8, MaxBirdLabels = 8, MaxSiteLabels = 6;
-        private static readonly BirdKind[] Kinds = { BirdKind.Optical, BirdKind.Radar, BirdKind.Kinetic };
-        private static readonly string[] KindTag = { "OPT", "RDR", "KIN" };
-        private static readonly float[] CostLevels = { 10f, 25f, 50f };
 
         private readonly IFrontActions actions;
         private readonly FrontSkin skin;
         private FrontMapPlate plate;
 
-        // Situation: the map.
         private FrontBox situation;
-        private FrontVector side;
-        private RawImage mapImage, mapInset;
         private FrontMap.AirbaseLayer airbases;
-        private readonly TMP_Text[] birdLabels = new TMP_Text[MaxBirdLabels], reachLabels = new TMP_Text[MaxBirdLabels], siteLabels = new TMP_Text[MaxSiteLabels];
-        private readonly TMP_Text[] costLabels = new TMP_Text[5], burnLabels = new TMP_Text[3], legend = new TMP_Text[7], ghostLabels = new TMP_Text[FrontRules.MaxQueue];
-        private readonly float[] legendSwatch = new float[7];
-        private TMP_Text focusLabel, propLabel, footLabel;
-        private readonly List<Rect> plates = new List<Rect>(24);
-        private readonly List<Vector2> ringAt = new List<Vector2>(5);
-        private readonly List<string> ringWord = new List<string>(5);
-        private readonly List<Color> ringInk = new List<Color>(5);
-        private readonly Rect[] legendRect = new Rect[1];
+        private readonly TMP_Text[] mapLabels = new TMP_Text[MaxMapLabels];
+        private TMP_Text watchLabel, footLabel;
+        private Rect watchStrip, mapFooter;
+        private int mapLabelCount;
 
-        // The selected bird and the two local map picks. Selecting is local. RELOCATE: a click on the map proposes the new parked point, CONFIRM BURN sends the one
-        // RelocateBird request and CANCEL spends nothing. BUILD PAD: a click within 8 km of a held airbase queues a pad there; anywhere else says so and stays armed.
-        // Starting one ends the other; Esc ends either.
-        private int selKind = -1;
-        private bool relocating, hasPending, padPick, padMiss;
+        private int selKind = -1, selectedTrackId;
+        private bool relocating, hasPending, padPick, padMiss, launchStationPick;
         private Vector2 pending;
+        private Vector2? launchStation;
+        private SatelliteBus launchPreviewBus;
+        private BirdKind launchPreviewKind;
         private FrontRoomView last;
 
         // A map pick is a press and a release that stay together: a pan, a zoom or a drag in between places nothing.
@@ -64,7 +41,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private Vector2 pressAt, pressCenter;
         private int pressZoom;
 
-        // DOWNLINK: the docked pane (the column tab) and the enlarged one (over the map); Use puts one on screen (DownlinkPane.cs).
+        // DOWNLINK can take over the OPERATE column or enlarge over the map.
         private DownlinkPane docked, enlarged, shown;
 
         public OrbitRoom(IFrontActions actions, FrontSkin skin)
@@ -93,10 +70,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         /// <summary>The room's column panels in tab order; the window adds the FRONT tab after them.</summary>
         public IReadOnlyList<ColumnTab> Column => columnTabs;
-        /// <summary>The column tab a pick asked for since the last call (1 = DOWNLINK for a bird's feed), or -1.</summary>
+        /// <summary>The column tab a pick asked for since the last call, or -1.</summary>
         public int TakeTab() { int t = wantTab; wantTab = -1; return t; }
-        /// <summary>The DOWNLINK column tab's index (SATELLITES is 0).</summary>
-        internal const int DownlinkTab = 1;
+        internal const int LaunchTab = 0, OperateTab = 1;
         private ColumnTab[] columnTabs = new ColumnTab[0];
         private int wantTab = -1;
 
@@ -104,11 +80,35 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             mapW = w; mapH = h;
             BuildSituation(hero, w);
-            BuildSatellites(column, cw, ch);
-            docked = new DownlinkPane(this, column, cw, ch, false);
+            BuildLaunch(column, cw, ch);
+            BuildOperate(column, cw, ch);
+            docked = new DownlinkPane(this, operateRoot, cw, ch - 38f, false);
             enlarged = new DownlinkPane(this, hero, w, h, true); // over the map: the column stays (boxes on the picture lock targets)
+            returnToOperate = Small(operateRoot, "BACK TO FLIGHT CONTROL", ConsoleInset, ch - 31f, cw - 2f * ConsoleInset, () => { actions.Touch(); CloseOperateDownlink(); },
+                "Return to friendly and hostile tracks and leave the sensor feed.");
             Use(docked);
-            columnTabs = new[] { new ColumnTab("SATELLITES", AvIcon.Satellite, sats.Rect), new ColumnTab("DOWNLINK", AvIcon.Camera, docked.Box.Rect) };
+            Visible(docked.Box.Rect, false);
+            Visible(returnToOperate.Rect, false);
+            columnTabs = new[] { new ColumnTab("LAUNCH", AvIcon.Satellite, launch.Rect), new ColumnTab("OPERATE", AvIcon.Crosshair, operateRoot, operate.Rect) };
+        }
+
+        private void OpenOperateDownlink()
+        {
+            operateDownlink = true;
+            Visible(operate.Rect, false);
+            Visible(docked.Box.Rect, true);
+            Visible(returnToOperate.Rect, true);
+            docked.Box.Tagged("INCO");
+        }
+
+        internal void CloseOperateDownlink()
+        {
+            if (!operateDownlink) return;
+            operateDownlink = false;
+            Dock();
+            Visible(docked.Box.Rect, false);
+            Visible(returnToOperate.Rect, false);
+            Visible(operate.Rect, true);
         }
 
         /// <summary>Puts <paramref name="pane"/> on screen: the enlarged one hides the map, the docked one gives it back.</summary>
@@ -132,96 +132,52 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         internal void ToggleCamera()
         {
             actions.Touch();
-            if (shown != enlarged && (relocating || padPick)) { relocating = false; hasPending = false; padPick = false; Repaint(); }
+            if (shown != enlarged && Picking) { EndPicks(); Repaint(); }
             Use(shown == enlarged ? docked : enlarged); // the pane just shown paints on its first Tick
         }
 
         // ---- Situation -----------------------------------------------------------------------------------------------
 
-        /// <summary>A console panel: navy plate, steel-blue bezel line, a 3 px rail in the panel's own hue.</summary>
-        private static void Slab(FrontVector c, float x, float y, float w, float h, Color rail)
-        {
-            c.Rect(x, y, w, h, RoomInk.Plate.WithAlpha(0.92f));
-            c.Frame(x, y, w, h, 1f, RoomInk.Bezel.WithAlpha(0.85f));
-            c.Rect(x, y, 3f, h, rail.WithAlpha(0.9f));
-        }
-
         private void BuildSituation(RectTransform hero, float heroW)
         {
-            situation = new FrontBox(hero, skin, "Orbit", 0f, 0f, heroW, mapH, "ORBITAL SITUATION · GEOSTATIONARY STATIONS", AvIcon.Satellite, FrontLook.Console).Tagged("FDO");
+            situation = new FrontBox(hero, skin, "Orbit", 0f, 0f, heroW, mapH, "MISSION TRACK", AvIcon.Satellite, FrontLook.Console).Tagged("FDO");
             RectTransform body = situation.Rect;
-            // The plate fills the box body and clips its own vector layer.
-            plate = new FrontMapPlate(body, skin, mapW, mapH, GridCols, GridRows);
-            side = FrontVector.Add(body, "Cards");
-            AvLay.Place(side.rectTransform, 0f, 0f, mapW, mapH);
-            FrontLabels fx = plate.Labels;
-
-            for (int i = 0; i < MaxBirdLabels; i++)
+            plate = new FrontMapPlate(body, skin, mapW, mapH, 8, 6)
             {
-                birdLabels[i] = FrontKit.Mono(body, "BirdLabel" + i, 0f, 0f, 180f, 28f, 10.5f, TextAlignmentOptions.TopLeft);
-                reachLabels[i] = FrontKit.Mono(body, "ReachLabel" + i, 0f, 0f, 70f, 14f, 10f, TextAlignmentOptions.TopLeft);
-                birdLabels[i].gameObject.SetActive(false);
-                reachLabels[i].gameObject.SetActive(false);
-            }
-            for (int i = 0; i < MaxSiteLabels; i++)
+                Tint = RoomInk.Rgb(0x597487),
+                TopInset = WatchHeight + 8f
+            };
+            watchStrip = new Rect(plate.X + 12f, plate.Y + 7f, plate.W - 24f, WatchHeight);
+            mapFooter = new Rect(plate.X + 245f, plate.Y + plate.H - 49f, Mathf.Max(90f, plate.W - 430f), 23f);
+            plate.Labels.Fixed(watchStrip);
+            plate.Labels.Fixed(mapFooter);
+            watchLabel = FrontKit.Mono(body, "MissionWatch", watchStrip.x + 10f, watchStrip.y + 5f, watchStrip.width - 20f, 20f, 12f, TextAlignmentOptions.MidlineLeft, true);
+            footLabel = FrontKit.Mono(body, "MapReadback", mapFooter.x + 7f, mapFooter.y + 3f, mapFooter.width - 14f, 18f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
+            for (int i = 0; i < mapLabels.Length; i++)
             {
-                siteLabels[i] = FrontKit.Mono(body, "SiteLabel" + i, 0f, 0f, 150f, 14f, 10f, TextAlignmentOptions.TopLeft);
-                siteLabels[i].gameObject.SetActive(false);
+                mapLabels[i] = FrontKit.Mono(body, "TrackLabel" + i, 0f, 0f, 224f, 15f, 10.5f, TextAlignmentOptions.TopLeft);
+                mapLabels[i].gameObject.SetActive(false);
             }
-            for (int i = 0; i < ghostLabels.Length; i++)
-            {
-                ghostLabels[i] = FrontKit.Mono(body, "GhostLabel" + i, 0f, 0f, 200f, 14f, 10f, TextAlignmentOptions.TopLeft);
-                ghostLabels[i].gameObject.SetActive(false);
-            }
-            for (int i = 0; i < costLabels.Length; i++)
-            {
-                costLabels[i] = FrontKit.Mono(body, "CostLabel" + i, 0f, 0f, 60f, 14f, 10f, TextAlignmentOptions.TopLeft, true);
-                costLabels[i].gameObject.SetActive(false);
-            }
-            for (int i = 0; i < burnLabels.Length; i++)
-            {
-                burnLabels[i] = FrontKit.Mono(body, "BurnLabel" + i, 0f, 0f, 90f, 14f, 10f, TextAlignmentOptions.TopLeft, true);
-                burnLabels[i].gameObject.SetActive(false);
-            }
-            focusLabel = FrontKit.Mono(body, "FocusLabel", 0f, 0f, 280f, 14f, 10f, TextAlignmentOptions.TopLeft);
-            focusLabel.gameObject.SetActive(false);
-            propLabel = FrontKit.Mono(body, "PropLabel", 0f, 0f, 250f, 14f, 10f, TextAlignmentOptions.TopLeft, true);
-            propLabel.gameObject.SetActive(false);
-            // The foot of the plate, between the cursor readout and the inset: the coverage gap, or what the armed pad pick wants.
-            footLabel = FrontKit.Mono(body, "FootLabel", plate.X + FootX, plate.Y + plate.H - 20f, plate.W - FootX - FootRight, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
             airbases = new FrontMap.AirbaseLayer(body);
-
-            // Legend card above the plate's bottom row: swatches are drawn in Paint, the words are fixed.
-            string[] words = { "OWN", "HOSTILE", "FOOTPRINT", "PAD", "BURN", "COST", "FOCUS" };
-            float ly = plate.Y + plate.H - 24f - 28f, lx = LegendX;
-            for (int i = 0; i < legend.Length; i++)
-            {
-                legendSwatch[i] = lx + 12f;
-                legend[i] = FrontKit.Mono(body, "Legend" + i, lx + 28f, ly + 5f, words[i].Length * 7f + 6f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 1f);
-                legend[i].text = words[i];
-                lx += 28f + words[i].Length * 7f + 12f;
-            }
-            legendRect[0] = new Rect(plate.X + 6f, ly, lx - LegendX + 6f, 24f);
-            fx.Fixed(legendRect[0]);
-            skin.Add(() => { for (int i = 0; i < legend.Length; i++) legend[i].color = Mc.Steel; });
         }
 
-        private AvControl Small(RectTransform p, string label, float x, float y, float w, Action click, string help)
+        private AvControl Small(RectTransform p, string label, float x, float y, float w, Action click, string help, Color? accent = null)
         {
             AvControl c = AvControl.Make(p, new AvControl.Spec(label, click, AvButtonStyle.Default));
-            c.Accent = RoomInk.Ice;
+            c.Accent = accent ?? RoomInk.Ice;
             AvLay.Place(c.Rect, x, y, w, 24f);
             c.SingleLine();
             c.Help = help;
             return c;
         }
 
-        /// <summary>The selection or a pick changed: the map and the SATELLITES tab both show it.</summary>
+        /// <summary>Updates the map and command panels after a local selection changes.</summary>
         private void Repaint()
         {
             if (last == null) return;
             PaintSituation(last);
-            PaintSatellites(last);
+            PaintLaunch(last);
+            PaintOperate(last);
         }
 
         /// <summary>A bird card clicked: the bird is inspected (cost rings on the map, the card lit). A relocation of another bird ends.</summary>
@@ -230,17 +186,19 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             actions.Touch();
             if (!TryBird(kind, out OrbitTrackView b) || !b.Alive) return;
             if (selKind != kind) { relocating = false; hasPending = false; }
+            selectedTrackId = 0;
             selKind = kind;
             Repaint();
         }
 
-        /// <summary>FEED › or a click on one of our birds on the map: select it, ask the feed for it, and show the DOWNLINK tab.</summary>
+        /// <summary>Opens the selected bird's sensor feed in OPERATE.</summary>
         private void ShowFeed(int kind)
         {
-            EndPicks(); // the column leaves SATELLITES: an armed pick would wait off screen
+            EndPicks();
+            if (!TryBird(kind, out OrbitTrackView bird) || !bird.Alive) return;
             Select(kind);
-            if (selKind != kind) return;
-            wantTab = DownlinkTab;
+            wantTab = OperateTab;
+            OpenOperateDownlink();
             Do(() => Feed.SetSource((BirdKind)kind));
         }
 
@@ -249,8 +207,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             actions.Touch();
             if (Enlarged) ToggleCamera(); // the proposal is a click on the map: it must be on screen
             if (!TryBird(kind, out OrbitTrackView b) || !b.Alive || !CanRelocate(kind)) return;
+            CloseOperateDownlink();
             selKind = kind;
-            padPick = false;
+            selectedTrackId = 0;
+            padPick = launchStationPick = false;
             relocating = true; hasPending = false;
             Repaint();
         }
@@ -261,19 +221,42 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             actions.Touch();
             if (!padPick && Enlarged) ToggleCamera();
             padPick = !padPick; padMiss = false;
-            relocating = false; hasPending = false;
+            launchStationPick = relocating = hasPending = false;
             Repaint();
         }
 
-        /// <summary>The window closed, switched rooms or the column jumped to DOWNLINK: both map picks end (nothing was sent).</summary>
-        public void EndPicks() { padPick = false; padMiss = false; relocating = false; hasPending = false; }
+        private bool Picking => padPick || launchStationPick || relocating;
+
+        private void ArmLaunchStation()
+        {
+            actions.Touch();
+            launchStationPick = !launchStationPick;
+            padPick = padMiss = relocating = hasPending = false;
+            Repaint();
+        }
+
+        public void EndPicks()
+        {
+            padPick = padMiss = launchStationPick = relocating = hasPending = false;
+            confirmTrackId = 0;
+        }
+
+        internal void CloseWatch()
+        {
+            CloseOperateDownlink();
+            launchStation = null;
+            selectedTrackId = 0;
+            selKind = -1;
+            ReleaseDownlink();
+        }
 
         public bool CancelMode()
         {
             if (Enlarged) { ToggleCamera(); return true; } // Esc docks an enlarged camera before it closes the window
-            if (padPick) { actions.Touch(); padPick = false; padMiss = false; Repaint(); return true; }
-            if (!relocating) return false;
-            Cancel();
+            if (!Picking) return false;
+            actions.Touch();
+            EndPicks();
+            Repaint();
             return true;
         }
 
@@ -338,19 +321,17 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (actions.Queue(Front.Space, ProgrammeId.UplinkSite, 0, true, uv.x, uv.y)) padPick = false; // not sent (a press still waits for the host): stays armed
         }
 
-        /// <summary>The kind of our living bird whose nadir marker lies under <paramref name="p"/> (box pixels), or -1. A hostile bird at least as close wins and
-        /// opens nothing: another faction's satellite never gives us a feed, even parked on top of ours.</summary>
-        private int BirdAt(Vector2 p)
+        private bool TryTrackAt(Vector2 p, out OrbitTrackView track)
         {
-            int best = -1;
+            track = default;
             float bestD = BirdPickPx * BirdPickPx;
             foreach (OrbitTrackView b in last.Birds)
             {
                 if (!b.Alive) continue;
                 float d = (BirdPoint(b) - p).sqrMagnitude;
-                if (d <= bestD) { bestD = d; best = b.Own ? (int)b.Kind : -1; }
+                if (d <= bestD) { bestD = d; track = b; }
             }
-            return best;
+            return track.Alive;
         }
 
         // ---- Paint ---------------------------------------------------------------------------------------------------
@@ -358,7 +339,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public void Paint(FrontRoomView v)
         {
             PaintSituation(v);
-            PaintSatellites(v);
+            PaintLaunch(v);
+            PaintOperate(v);
             // Each pane on screen paints (enlarged, the column may still show the docked one); a hidden pane paints the frame it shows again.
 #if !PUBLIC_RELEASE
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -370,572 +352,207 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 #endif
         }
 
-        // ---- Ellipse drawing: footprints and cost rings are uv distances, which are slightly flattened ovals on a theatre wider than it is tall ----
-
-        private static Vector2 EllP(Vector2 c, float rx, float ry, float th) => new Vector2(c.x + Mathf.Cos(th) * rx, c.y + Mathf.Sin(th) * ry);
-
-        private static int EllSeg(float rx, float ry) => Mathf.Clamp(Mathf.CeilToInt((rx + ry) * 0.1f), 32, 128);
-
-        private static void EllRing(FrontVector g, Vector2 c, float rx, float ry, float w, Color k, int dashSegs = 0)
-        {
-            int n = EllSeg(rx, ry);
-            Vector2 prev = EllP(c, rx, ry, 0f);
-            for (int i = 1; i <= n; i++)
-            {
-                Vector2 q = EllP(c, rx, ry, 2f * Mathf.PI * i / n);
-                if (dashSegs <= 0 || (i / dashSegs) % 2 == 0) g.Line(prev, q, w, k);
-                prev = q;
-            }
-        }
-
-        private static void EllDisc(FrontVector g, Vector2 c, float rx, float ry, Color k)
-        {
-            int n = EllSeg(rx, ry);
-            Vector2 prev = EllP(c, rx, ry, 0f);
-            for (int i = 1; i <= n; i++)
-            {
-                Vector2 q = EllP(c, rx, ry, 2f * Mathf.PI * i / n);
-                g.Tri(c, prev, q, k);
-                prev = q;
-            }
-        }
-
-        private static void EllSector(FrontVector g, Vector2 c, float rx, float ry, float a0, float a1, Color k)
-        {
-            int n = Mathf.Max(2, Mathf.CeilToInt(Mathf.Abs(a1 - a0) / (6f * Mathf.Deg2Rad)));
-            Vector2 prev = EllP(c, rx, ry, a0);
-            for (int i = 1; i <= n; i++)
-            {
-                Vector2 q = EllP(c, rx, ry, Mathf.Lerp(a0, a1, (float)i / n));
-                g.Tri(c, prev, q, k);
-                prev = q;
-            }
-        }
-
-        /// <summary>Diagonal hatching clipped to an oval (the hostile footprint's dress).</summary>
-        private static void Hatch(FrontVector g, Vector2 c, float rx, float ry, Color k, float step)
-        {
-            float a = 1f / (rx * rx) + 1f / (ry * ry), reach = rx + ry;
-            for (float d = -reach; d <= reach; d += step)
-            {
-                float bq = 2f * d / (rx * rx), cq = d * d / (rx * rx) - 1f, disc = bq * bq - 4f * a * cq;
-                if (disc <= 0f) continue;
-                float sq = Mathf.Sqrt(disc), y1 = (-bq - sq) / (2f * a), y2 = (-bq + sq) / (2f * a);
-                g.Line(new Vector2(c.x + y1 + d, c.y + y1), new Vector2(c.x + y2 + d, c.y + y2), 1f, k);
-            }
-        }
-
-        private static void DashRect(FrontVector g, Vector2 c, float hw, float hh, float w, Color k)
-        {
-            g.Dashed(new Vector2(c.x - hw, c.y - hh), new Vector2(c.x + hw, c.y - hh), w, k, 4f, 3f);
-            g.Dashed(new Vector2(c.x + hw, c.y - hh), new Vector2(c.x + hw, c.y + hh), w, k, 4f, 3f);
-            g.Dashed(new Vector2(c.x + hw, c.y + hh), new Vector2(c.x - hw, c.y + hh), w, k, 4f, 3f);
-            g.Dashed(new Vector2(c.x - hw, c.y + hh), new Vector2(c.x - hw, c.y - hh), w, k, 4f, 3f);
-        }
-
-        /// <summary>
-        /// A satellite seen from nadir: a body with solar-panel bars and a short antenna. Own birds ice, hostile red; a lost bird (or a ghost at a burn's
-        /// destination) is hollow.
-        /// </summary>
-        private static void Sat(FrontVector g, Vector2 p, Color ink, bool solid, float sc)
-        {
-            Vector2 n = new Vector2(0f, -1f), t = new Vector2(1f, 0f);
-            Color back = Mc.PlateInk;
-            for (int s = -1; s <= 1; s += 2)
-            {
-                Vector2 pc = p + t * (s * 10.5f * sc);
-                Vector2 a = pc - t * 6f * sc + n * 3.4f * sc, b = pc + t * 6f * sc + n * 3.4f * sc, c = pc + t * 6f * sc - n * 3.4f * sc, d = pc - t * 6f * sc - n * 3.4f * sc;
-                g.Quad(a + (a - pc) * 0.14f, b + (b - pc) * 0.14f, c + (c - pc) * 0.14f, d + (d - pc) * 0.14f, back);
-                if (solid)
-                {
-                    g.Quad(a, b, c, d, ink.WithAlpha(0.88f));
-                    g.Line(pc - n * 3.4f * sc, pc + n * 3.4f * sc, 0.9f, back);
-                }
-                else g.Polyline(new[] { a, b, c, d }, 1.2f, ink, true);
-                g.Line(p + t * (s * 5f * sc), p + t * (s * 5.5f * sc), 2f, ink);
-            }
-            g.Diamond(p, 7.6f * sc, back);
-            g.Diamond(p, 5.6f * sc, ink);
-            if (!solid) g.Diamond(p, 3.2f * sc, back);
-            g.Line(p + n * 5f * sc, p + n * 11f * sc, 1.3f, ink);
-            g.Disc(p + n * 11.5f * sc, 1.5f, ink, 8);
-        }
-
         private void PaintSituation(FrontRoomView v)
         {
             last = v;
-            if (selKind < 0 || !TryBird(selKind, out OrbitTrackView sb) || !sb.Alive)
+            if (!TryBird(selKind, out OrbitTrackView selected) || !selected.Alive)
             {
-                if (selKind >= 0) { relocating = false; hasPending = false; }
-                selKind = -1;   // the first living bird of ours is inspected until the pilot picks another
-                for (int i = 0; i < v.Birds.Count; i++) if (v.Birds[i].Own && v.Birds[i].Alive) { selKind = (int)v.Birds[i].Kind; break; }
+                selKind = -1;
+                relocating = hasPending = false;
+                foreach (OrbitTrackView b in v.Birds)
+                {
+                    if (!b.Own || !b.Alive) continue;
+                    selKind = (int)b.Kind;
+                    selected = b;
+                    break;
+                }
             }
-            Color own = Own, foe = AvInk.Hostile;
-            FrontMapView mv = plate.View;
-            // Centre on our own uplink sites and airbases (the operator's pan or zoom takes over afterwards).
-            Vector2 sum = Vector2.zero;
-            int n = 0;
-            for (int i = 0; i < v.Sites.Count; i++) if (v.Sites[i].Own) { sum += new Vector2(v.Sites[i].X, v.Sites[i].Y); n++; }
-            for (int i = 0; i < v.Airbases.Count; i++) if (v.Airbases[i].Side == AirbaseSide.Own) { sum += new Vector2(v.Airbases[i].U, v.Airbases[i].V); n++; }
-            if (n > 0) mv.AutoCenter(sum / n);
             plate.Begin();
-            if (mapImage == null)
-            {
-                Transform mi = situation.Rect.Find("MapClip/MapImage"), ms = situation.Rect.Find("MapInset");
-                mapImage = mi != null ? mi.GetComponent<RawImage>() : null;
-                mapInset = ms != null ? ms.GetComponent<RawImage>() : null;
-            }
-            if (mapImage != null) mapImage.color = RoomInk.Rgba(0.62f, 0.78f, 1f, 1f);   // the theatre picture, seen as a night-side view from orbit
-            if (mapInset != null) mapInset.color = RoomInk.Rgba(0.58f, 0.72f, 1f, 1f);
             FrontVector g = plate.G;
-            FrontLabels labels = plate.Labels;
-            labels.Take(new Rect(plate.X + FootX, plate.Y + plate.H - 24f, plate.W - FootX - FootRight, 24f)); // the foot words
-            Vector2 Pt(float u, float vv) => mv.P(u, vv);
-            // Pixels per theatre width across and down. GEO distances are ground km (GeoBird.Aspect scales a v step), so footprints and cost rings are circles.
-            float pxU = mv.W / mv.VW, pxV = mv.H / mv.VH / Mathf.Max(0.05f, GeoBird.Aspect);
+            FrontMapView map = plate.View;
+            Vector2 Point(float u, float y) => map.P(u, y);
+            g.Rect(map.X, map.Y, map.W, map.H, RoomInk.Rgb(0x06121F, 0.32f));
+            mapLabelCount = 0;
 
-            // The night side of Earth: a navy tint over the theatre picture (every layer under 0.2 alpha, so it reads as a tint, not a ground).
-            float px = mv.X, py = mv.Y, pw = mv.W, ph = mv.H;
-            g.Rect(px, py, pw, ph, RoomInk.Rgb(0x040B20, 0.19f));
-            g.Rect(px, py, pw, ph, RoomInk.Rgb(0x0B2C70, 0.12f));
-            g.Rect(px, py, pw, ph, RoomInk.Rgb(0x061540, 0.10f));
-            Color v0 = RoomInk.Rgb(0x030820, 0.19f), v1 = RoomInk.Rgb(0x030820, 0f);
-            const float e = 100f;
-            g.Grad(px, py, e, ph, v0, v1, v1, v0);
-            g.Grad(px + pw - e, py, e, ph, v1, v0, v0, v1);
-            g.Grad(px, py, pw, e * 0.5f, v0, v0, v1, v1);
-            g.Grad(px, py + ph - e * 0.5f, pw, e * 0.5f, v1, v1, v0, v0);
-
-            FrontMap.AirbaseLayer.Glyphs(g, v.Airbases, Pt);
-            for (int i = 0; i < v.Airbases.Count; i++) if (v.Airbases[i].Side == AirbaseSide.Own) plate.Dot(v.Airbases[i].U, v.Airbases[i].V, own);
-
-            // The selected bird's fuel-cost rings: how far a burn can go for 10, 25 and 50 % of the tank, and the reach of what is left.
-            ringAt.Clear(); ringWord.Clear(); ringInk.Clear();
-            OrbitTrackView selB = default;
-            bool haveSel = selKind >= 0 && TryBird(selKind, out selB) && selB.Alive;
-            if (haveSel) DrawCostRings(g, selB, pxU, pxV);
-
-            // Footprints (hostile first so ours sit on top; where ours overlap the fills add up), the uplink beams, then the sites.
-            int overhead = 0, up = 0;
-            for (int pass = 0; pass < 2; pass++)
-                for (int i = 0; i < v.Birds.Count; i++)
-                {
-                    OrbitTrackView b = v.Birds[i];
-                    if (b.Own != (pass == 1) || !b.Alive) continue;
-                    DrawFootprint(g, b, b.Own ? own : foe, pxU, pxV, v.Now);
-                }
-            for (int i = 0; i < v.Birds.Count; i++)
+            // Reserve glyph positions before placing labels. The same projection is used for picking and drawing.
+            bool trackFound = false;
+            foreach (OrbitTrackView b in v.Birds)
             {
-                OrbitTrackView b = v.Birds[i];
+                ReserveMarker(BirdPoint(b));
+                trackFound |= !b.Own && b.TrackId == selectedTrackId;
+            }
+            if (!trackFound) selectedTrackId = 0;
+            foreach (OrbitSiteView s in v.Sites) ReserveMarker(Point(s.X, s.Y));
+            if (v.HasFocus) ReserveMarker(Point(v.FocusU, v.FocusV));
+            if (v.IncomingLaunched) ReserveMarker(Point(v.IncomingAimU, v.IncomingAimV));
+
+            FrontMap.AirbaseLayer.Glyphs(g, v.Airbases, Point);
+            foreach (MapAirbaseView a in v.Airbases)
+            {
+                if (a.Side != AirbaseSide.Own) continue;
+                plate.Dot(a.U, a.V, Own);
+                if (padPick)
+                {
+                    Vector2 p = Point(a.U, a.V);
+                    float radius = Mathf.Max(6f, FrontRules.PadPickMetres / FrontController.Frame().W * map.Scale);
+                    g.Disc(p, radius, Own.WithAlpha(0.16f), 36);
+                    g.Ring(p, radius, 1.6f, Own, 36);
+                }
+            }
+
+            foreach (OrbitTrackView b in v.Birds)
+            {
                 if (!b.Own || !b.Alive) continue;
-                for (int j = 0; j < v.Sites.Count; j++)   // the uplink beam: a live own site inside the footprint talks to the bird
-                {
-                    OrbitSiteView s = v.Sites[j];
-                    if (!s.Own || !s.Live || GeoBird.Distance(b.U, b.V, s.X, s.Y) > b.Radius) continue;
-                    g.Dashed(Pt(s.X, s.Y) + new Vector2(0f, -7f), BirdPoint(b), 1.3f, own.WithAlpha(0.8f), 5f, 4f);
-                }
-            }
-            for (int i = 0; i < v.Sites.Count; i++)
-            {
-                OrbitSiteView s = v.Sites[i];
-                Vector2 p = Pt(s.X, s.Y);
-                Color k = s.Rebuilding ? AvInk.State(AvState.Caution) : !s.Live ? AvInk.State(AvState.Danger) : s.Own ? own : foe;
-                g.Tri(p + new Vector2(0f, -8f), p + new Vector2(8f, 6f), p + new Vector2(-8f, 6f), AvInk.Ground);
-                g.Tri(p + new Vector2(0f, -7f), p + new Vector2(7f, 5f), p + new Vector2(-7f, 5f), s.Live ? k : k.WithAlpha(0.25f));
-                if (!s.Live) g.Polyline(new[] { p + new Vector2(0f, -7f), p + new Vector2(7f, 5f), p + new Vector2(-7f, 5f) }, 1.4f, k, true);
-                g.Line(p + new Vector2(0f, 5f), p + new Vector2(0f, 10f), 1.4f, k);
-                if (s.Live) g.Ring(p, 11f, 1.1f, k.WithAlpha(0.45f), 24, 1f, 1f);   // the link's own range is not modelled: this is just the lit marker
-                if (s.Rebuilding) g.Ring(p, 12f, 1.4f, k, 24, 1f, 1f);   // dashed: under construction
-                if (s.Own) plate.Dot(s.X, s.Y, k);
-                labels.Take(new Rect(p.x - 9f, p.y - 9f, 18f, 22f));
-            }
-            // Queued pads with a point: a dashed triangle where the pad will stand (its words come with the labels).
-            for (int i = 0; i < v.Ghosts.Count; i++)
-            {
-                Vector2 p = Pt(v.Ghosts[i].U, v.Ghosts[i].V), a = p + new Vector2(0f, -8f), b = p + new Vector2(8f, 6f), c = p + new Vector2(-8f, 6f);
-                Color k = own.WithAlpha(0.85f);
-                g.Dashed(a, b, 1.4f, k, 3f, 2f); g.Dashed(b, c, 1.4f, k, 3f, 2f); g.Dashed(c, a, 1.4f, k, 3f, 2f);
-                labels.Take(new Rect(p.x - 9f, p.y - 9f, 18f, 18f));
-            }
-            // The armed pad pick: every held airbase glows with the ring a click must land in (8 km on the ground).
-            if (padPick)
-            {
-                float r = Mathf.Max(10f, FrontRules.PadPickMetres / FrontController.Frame().W * mv.Scale);
-                for (int i = 0; i < v.Airbases.Count; i++)
-                {
-                    if (v.Airbases[i].Side != AirbaseSide.Own) continue;
-                    Vector2 p = Pt(v.Airbases[i].U, v.Airbases[i].V);
-                    g.Disc(p, r, own.WithAlpha(0.14f), 40);
-                    g.Ring(p, r, 1.8f, own.WithAlpha(0.95f), 48);
-                    g.Ring(p, r + 4f, 1f, own.WithAlpha(0.4f), 48, 1f, 1f);
-                }
+                bool active = selKind == (int)b.Kind;
+                Color ink = PayloadInk[(int)b.Kind];
+                Vector2 p = BirdPoint(b);
+                Coverage(g, p, b.Radius * map.Scale, ink, active ? 1f : 0.45f);
+                if (!b.Relocating) continue;
+                Vector2 dest = Point(b.TargetU, b.TargetV);
+                g.Dashed(p, dest, active ? 2f : 1.2f, ink.WithAlpha(0.82f), 7f, 5f);
+                Coverage(g, dest, b.Radius * map.Scale, ink, active ? 0.85f : 0.45f, true);
+                g.Diamond(dest, 5f, ink);
+                MapLabel(dest, "STATION IN " + FrontKit.Clock(b.EtaSeconds), ink);
             }
 
-            // The focus pin from the rail: the real point the "over focus" readings are taken against, with a line to every own bird that covers it.
-            Vector2 fpos = Vector2.zero;
-            bool pin = false;
+            foreach (OrbitSiteView s in v.Sites)
+            {
+                Vector2 p = Point(s.X, s.Y);
+                Color ink = !s.Live ? Mc.Lost : s.Own ? Own : AvInk.Hostile;
+                g.Tri(p + new Vector2(0f, -7f), p + new Vector2(7f, 6f), p + new Vector2(-7f, 6f), ink);
+                if (s.Live) g.Ring(p, 11f, 1.1f, ink.WithAlpha(0.62f), 24);
+                plate.Dot(s.X, s.Y, ink);
+                MapLabel(p, s.Name + " · " + s.State, ink);
+            }
+            foreach (MapGhostView q in v.Ghosts)
+            {
+                Vector2 p = Point(q.U, q.V);
+                if (q.Radius > 0f) Coverage(g, p, q.Radius * map.Scale, Own, 0.45f, true);
+                g.Ring(p, 10f, 1.4f, Own, 24, 2f, 2f);
+                MapLabel(p, q.Label, Own);
+            }
+
+            foreach (OrbitTrackView b in v.Birds)
+            {
+                Vector2 p = BirdPoint(b);
+                bool picked = b.Own ? selKind == (int)b.Kind : selectedTrackId == b.TrackId;
+                Color ink = !b.Alive ? Mc.Lost : b.Own ? PayloadInk[(int)b.Kind] : AvInk.Hostile;
+                if (picked || !b.Own) g.Ring(p, 16f, picked ? 1.8f : 1.1f, ink, 36, 3f, 2f);
+                g.Diamond(p, 10f, Mc.PlateInk);
+                g.Diamond(p, 7f, ink);
+                if (!b.Alive || !b.Own) g.Diamond(p, 4f, Mc.PlateInk);
+                if (b.Own) plate.Dot(b.U, b.V, ink);
+                string state = !b.Own ? "COARSE TRACK" : !b.Alive ? "LOST" : b.Relocating ? "IN TRANSFER" : Mathf.RoundToInt(b.Fuel) + "% FUEL";
+                MapLabel(p, b.Callsign + "  ·  " + state, ink);
+            }
+
             if (v.HasFocus)
             {
-                Vector2 fp = fpos = Pt(v.FocusU, v.FocusV);
-                Color fk = AvInk.Key;
-                for (int i = 0; i < v.Birds.Count; i++)
-                    if (v.Birds[i].Own && v.Birds[i].Alive && v.Birds[i].Overhead) g.Dashed(fp, BirdPoint(v.Birds[i]), 1.1f, own.WithAlpha(0.5f), 3f, 5f);
-                g.Ring(fp, 11f, 1.6f, fk, 28);
-                g.Ring(fp, 19f, 1.2f, fk.WithAlpha(0.6f), 36, 1f, 1f);
-                g.Line(fp + new Vector2(-26f, 0f), fp + new Vector2(-15f, 0f), 1.4f, fk);
-                g.Line(fp + new Vector2(26f, 0f), fp + new Vector2(15f, 0f), 1.4f, fk);
-                g.Line(fp + new Vector2(0f, -26f), fp + new Vector2(0f, -15f), 1.4f, fk);
-                g.Line(fp + new Vector2(0f, 26f), fp + new Vector2(0f, 15f), 1.4f, fk);
-                labels.Take(new Rect(fp.x - 24f, fp.y - 24f, 48f, 48f));
-                pin = plate.Shown(fp, 24f);
+                Vector2 p = Point(v.FocusU, v.FocusV);
+                g.Ring(p, 10f, 1.4f, AvInk.Key, 28);
+                FrontKit.Cross(g, p, 5f, AvInk.Key);
+                MapLabel(p, "FOCUS " + v.FocusGrid, AvInk.Key);
             }
-
-            // A burn under way: the dashed path to a ghost footprint at the destination, chevrons along it.
-            int burns = 0;
-            Vector2[] burnTo = new Vector2[burnLabels.Length];
-            string[] burnWord = new string[burnLabels.Length];
-            for (int i = 0; i < v.Birds.Count; i++)
+            if (v.IncomingBird >= 0 && v.IncomingLaunched)
             {
-                OrbitTrackView b = v.Birds[i];
-                if (!b.Alive || !b.Relocating) continue;
-                DrawTransfer(g, b, b.Own ? own : foe, pxU, pxV);
-                if (burns < burnLabels.Length) { burnTo[burns] = plate.P(b.TargetU, b.TargetV); burnWord[burns] = "ETA " + FrontKit.Clock(b.EtaSeconds); burns++; }
+                Vector2 aim = Point(v.IncomingAimU, v.IncomingAimV);
+                Coverage(g, aim, AsatRules.Clearance * map.Scale, Mc.NoGo, 1f, true);
+                FrontKit.Cross(g, aim, 8f, Mc.NoGo);
+                MapLabel(aim, "INTERCEPT ZONE · CLEAR BY " + FrontKit.Clock(v.IncomingSeconds), Mc.NoGo);
             }
+            if (OperateDownlinkShown && HasPicture(v.Feed) && v.Feed.HasLook) DrawLook(g, v.Feed, map);
 
-            // Nadir markers.
-            for (int i = 0; i < v.Birds.Count; i++)
+            if (launchStation.HasValue && launch.Rect.gameObject.activeInHierarchy && !Fleet(v, (int)launchPreviewKind).Up &&
+                !FrontPanels.LaunchRow(v, (int)launchPreviewKind, out _))
             {
-                OrbitTrackView b = v.Birds[i];
-                if (b.Alive) up++;
-                if (b.Alive && b.Overhead) overhead++;
-                DrawNadir(g, b, b.Own ? own : foe);
-                Vector2 p = BirdPoint(b);
-                labels.Take(new Rect(p.x - 26f, p.y - 20f, 52f, 40f));
+                Vector2 p = Point(launchStation.Value.x, launchStation.Value.y);
+                Color ink = PayloadInk[(int)launchPreviewKind];
+                Coverage(g, p, GeoSpace.Footprint(launchPreviewKind, launchPreviewBus) * map.Scale, ink, 0.8f, true);
+                FrontKit.Cross(g, p, 7f, ink);
+                MapLabel(p, "INSERTION · " + GeoSpace.Names[(int)launchPreviewKind], ink);
             }
-
-            // Where the DOWNLINK points, while its tab shows a picture (over the nadir glyphs: a look at nadir must still show).
-            if (docked.Visible && HasPicture(v.Feed) && v.Feed.HasLook) DrawLook(g, v.Feed, mv);
-
-            // A proposed parked point: the dashed path from the selected bird, the ghost footprint at the pointer, the cost and the ETA.
-            string propWord = null;
-            Vector2 propAt = Vector2.zero;
-            Color propInk = AvInk.Select;
-            if (relocating && hasPending && haveSel)
+            if (relocating && hasPending && selected.Alive)
             {
-                Vector2 f0 = plate.P(selB.U, selB.V), f1 = plate.P(pending.x, pending.y);
-                Color sk = AvInk.Select;
-                float cost = PendingCost(selB), dist = PendingDistance(selB);
-                bool afford = selB.Fuel >= cost && cost > 0f;
-                g.Dashed(f0, f1, 1.8f, sk, 7f, 5f);
-                EllDisc(g, f1, selB.Radius * pxU, selB.Radius * pxV, sk.WithAlpha(0.07f));
-                EllRing(g, f1, selB.Radius * pxU, selB.Radius * pxV, 1.6f, sk.WithAlpha(0.9f), 3);
-                Sat(g, f1, sk, false, 1f);
-                g.Line(f1 + new Vector2(-12f, 0f), f1 + new Vector2(-7f, 0f), 1.2f, sk);
-                g.Line(f1 + new Vector2(12f, 0f), f1 + new Vector2(7f, 0f), 1.2f, sk);
-                propAt = f1;
-                propInk = afford ? FrontKit.Tone(AvState.Caution) : FrontKit.Tone(AvState.Danger);
-                propWord = cost <= 0f ? "ALREADY PARKED THERE" : afford ? "-" + Mathf.RoundToInt(cost) + " % FUEL · ETA " + FrontKit.Clock(dist / GeoBird.Slew) : "NOT ENOUGH FUEL · NEED " + Mathf.CeilToInt(cost) + " %";
-                labels.Take(new Rect(f1.x - 26f, f1.y - 20f, 52f, 40f));
+                Vector2 p = Point(pending.x, pending.y);
+                Color ink = CanBurn(selected) ? RoomInk.Telemetry : Mc.NoGo;
+                g.Dashed(BirdPoint(selected), p, 2f, ink, 7f, 5f);
+                Coverage(g, p, selected.Radius * map.Scale, ink, 0.95f, true);
+                FrontKit.Cross(g, p, 7f, ink);
+                float cost = PendingCost(selected);
+                string quote = cost <= 0f ? "ALREADY ON STATION" : CanBurn(selected)
+                    ? "-" + Mathf.CeilToInt(cost) + "% FUEL  ·  ETA " + FrontKit.Clock(PendingDistance(selected) / GeoBird.SpeedFor(selected.Bus))
+                    : "NEEDS " + Mathf.CeilToInt(cost) + "% FUEL";
+                MapLabel(p, quote, ink);
             }
 
-            // Words. Bird labels first (they are not optional), then the rest where room is left.
-            int bl = 0;
-            for (int i = 0; i < v.Birds.Count && bl < MaxBirdLabels; i++)
-            {
-                OrbitTrackView b = v.Birds[i];
-                Vector2 p = BirdPoint(b);
-                if (!plate.Shown(p, 14f)) continue;
-                TMP_Text t = birdLabels[bl++];
-                t.gameObject.SetActive(true);
-                Color ink = !b.Alive ? AvInk.Dim : b.Own ? Own : AvInk.Hostile;
-                string state = !b.Alive ? "LOST · NO SIGNAL" : b.Relocating ? "BURN · -" + Mathf.RoundToInt(b.BurnCost) + " % FUEL" : "ALT 35 786 KM · FUEL " + Mathf.RoundToInt(b.Fuel) + " %";
-                Color stateInk = b.Relocating && b.Alive ? FrontKit.Tone(AvState.Caution) : b.Overhead && b.Alive ? FrontKit.Tone(b.Own ? AvState.Ready : AvState.Danger) : AvInk.Dim;
-                t.text = C2Kit.Tint("<b>" + b.Callsign + "</b> · " + C2Orbit.BirdName(b.Kind), ink) + "\n" + C2Kit.Tint(state, stateInk);
-                t.color = AvInk.Ink;
-                plates.Add(labels.Place(t, p, 28f, false));
-            }
-            for (int i = bl; i < MaxBirdLabels; i++) birdLabels[i].gameObject.SetActive(false);
-
-            bool propShown = false;
-            if (propWord != null)
-            {
-                FrontKit.Set(propLabel, propWord, propInk);
-                propLabel.gameObject.SetActive(true);
-                Rect r = labels.Place(propLabel, propAt, 24f, true, true);
-                if (r.width > 0f) { plates.Add(r); propShown = true; }
-            }
-            if (!propShown) propLabel.gameObject.SetActive(false);
-
-            int rl = 0;
-            for (int i = 0; i < v.Birds.Count && rl < MaxBirdLabels; i++)
-            {
-                OrbitTrackView b = v.Birds[i];
-                if (!b.Alive) continue;
-                Vector2 c = BirdPoint(b), at = c + new Vector2(b.Radius * pxU, 0f);
-                if (!plate.Shown(at, 12f)) continue;
-                g.Line(at, at + new Vector2(6f, 0f), 1.4f, (b.Own ? own : foe).WithAlpha(0.9f));
-                TMP_Text t = reachLabels[rl];
-                FrontKit.Set(t, Mathf.RoundToInt(b.FootprintKm) + " KM", b.Own ? own : foe);
-                t.gameObject.SetActive(true);
-                Rect r = labels.Place(t, at, 8f, true, true);
-                if (r.width <= 0f) { t.gameObject.SetActive(false); continue; }
-                plates.Add(r);
-                rl++;
-            }
-            for (int i = rl; i < MaxBirdLabels; i++) reachLabels[i].gameObject.SetActive(false);
-
-            int cl = 0;
-            for (int i = 0; i < ringAt.Count && cl < costLabels.Length; i++)
-            {
-                TMP_Text t = costLabels[cl];
-                FrontKit.Set(t, ringWord[i], ringInk[i]);
-                t.gameObject.SetActive(true);
-                Rect r = labels.Place(t, ringAt[i], 3f, true, true);
-                if (r.width <= 0f) { t.gameObject.SetActive(false); continue; }
-                plates.Add(r);
-                cl++;
-            }
-            for (int i = cl; i < costLabels.Length; i++) costLabels[i].gameObject.SetActive(false);
-
-            for (int i = 0; i < burnLabels.Length; i++)
-            {
-                TMP_Text t = burnLabels[i];
-                bool shown = false;
-                if (i < burns && plate.Shown(burnTo[i], 12f))
-                {
-                    FrontKit.Set(t, burnWord[i], FrontKit.Tone(AvState.Caution));
-                    t.gameObject.SetActive(true);
-                    Rect r = labels.Place(t, burnTo[i], 10f, true, true);
-                    if (r.width > 0f) { plates.Add(r); shown = true; }
-                }
-                if (!shown) t.gameObject.SetActive(false);
-            }
-
-            // Site words where there is room (the column carries them all).
-            int siteWords = 0;
-            for (int i = 0; i < v.Sites.Count; i++)
-            {
-                OrbitSiteView s = v.Sites[i];
-                Vector2 p = Pt(s.X, s.Y);
-                if (siteWords >= MaxSiteLabels || !plate.Shown(p, 20f)) continue;
-                TMP_Text t = siteLabels[siteWords];
-                t.gameObject.SetActive(true);
-                FrontKit.Set(t, ShortSite(s.Name) + " · " + (s.Own && s.Live ? "LINK " : "") + s.State, s.Rebuilding ? FrontKit.Tone(AvState.Caution) : !s.Live ? FrontKit.Tone(AvState.Danger) : s.Own ? own : foe);
-                Rect r = labels.Place(t, p, 8f, true, true);
-                if (r.width <= 0f) { t.gameObject.SetActive(false); continue; }
-                plates.Add(r);
-                siteWords++;
-            }
-            for (int i = siteWords; i < MaxSiteLabels; i++) siteLabels[i].gameObject.SetActive(false);
-
-            // Queued pad ghosts: "PAD-2 · OPAL · 1:12" where there is room.
-            int ghostWords = 0;
-            for (int i = 0; i < v.Ghosts.Count && ghostWords < ghostLabels.Length; i++)
-            {
-                Vector2 p = Pt(v.Ghosts[i].U, v.Ghosts[i].V);
-                if (!plate.Shown(p, 20f)) continue;
-                TMP_Text t = ghostLabels[ghostWords];
-                t.gameObject.SetActive(true);
-                FrontKit.Set(t, v.Ghosts[i].Label, own);
-                Rect r = labels.Place(t, p, 8f, true, true);
-                if (r.width <= 0f) { t.gameObject.SetActive(false); continue; }
-                plates.Add(r);
-                ghostWords++;
-            }
-            for (int i = ghostWords; i < ghostLabels.Length; i++) ghostLabels[i].gameObject.SetActive(false);
-
-            // The foot: what the armed pad pick wants, else the first held airbase no footprint of ours covers.
-            string foot = padPick ? (padMiss ? FrontWords.Refusal(FrontOutcome.NotHeld, Front.Space) + " · CLICK INSIDE A RING · ESC CANCELS" : "BUILD PAD · CLICK INSIDE A RING (8 KM OF A HELD AIRBASE) · ESC CANCELS")
+            for (int i = mapLabelCount; i < mapLabels.Length; i++) mapLabels[i].gameObject.SetActive(false);
+            airbases.Names(g, v.Airbases, Point, map, (t, at) => plate.Labels.Place(t, at, 9f, true, true));
+            bool threat = v.IncomingBird >= 0;
+            string watch = threat
+                ? AsatCountdown(v)
+                : "ORBIT  /  " + v.BirdsUp + " ACTIVE  ·  " + v.PadsUp + " UPLINK" + (v.PadsUp == 1 ? "" : "S");
+            PaintMapStrip(g, watchStrip, watchLabel, watch, threat ? Mc.NoGo : Own.WithAlpha(0.95f));
+            string instruction = padPick ? (padMiss ? "CHOOSE GROUND NEAR A HELD AIRBASE" : "SELECT LAUNCH PAD SITE")
+                : launchStationPick ? "SELECT INITIAL SATELLITE STATION"
+                : relocating ? (hasPending ? CoverageTradeoff(v, selected) : "SELECT NEW STATION")
                 : v.CoverageGap;
-            FrontKit.Set(footLabel, FrontKit.Fit(footLabel, foot, 10.5f), padMiss && padPick ? FrontKit.Tone(AvState.Danger) : FrontKit.Tone(AvState.Caution));
-
-            // The focus pin's readout: which of our birds cover it (the perk gate: the aim must lie inside the right bird's footprint).
-            bool focusWord = false;
-            if (pin)
-            {
-                string cover = "";
-                for (int k = 0; k < Kinds.Length; k++)
-                {
-                    int found = -1;
-                    for (int i = 0; i < v.Birds.Count; i++) if (v.Birds[i].Own && v.Birds[i].Kind == Kinds[k] && v.Birds[i].Alive) found = i;
-                    string word = found < 0 ? "--" : v.Birds[found].Overhead ? "IN" : "OUT";
-                    Color wink = found < 0 ? AvInk.Dim : v.Birds[found].Overhead ? Mc.Go : Mc.NoGo;
-                    cover += " · " + KindTag[k] + " " + C2Kit.Tint(word, wink);
-                }
-                FrontKit.Set(focusLabel, C2Kit.Tint("FOCUS " + v.FocusGrid, AvInk.Key) + cover, AvInk.Ink);
-                focusLabel.gameObject.SetActive(true);
-                Rect r = labels.Place(focusLabel, fpos, 24f, true, true);
-                if (r.width > 0f) { plates.Add(r); focusWord = true; }
-            }
-            if (!focusWord) focusLabel.gameObject.SetActive(false);
-
-            foreach (Rect pr in plates) g.Rect(pr.x - 2f, pr.y - 1f, pr.width + 4f, pr.height + 2f, RoomInk.Plate.WithAlpha(0.88f));
-            plates.Clear();
-            airbases.Names(g, v.Airbases, Pt, mv, (t, a) => labels.Place(t, a, 9f, true, true));
+            PaintMapStrip(g, mapFooter, footLabel, instruction, RoomInk.Telemetry);
             plate.End();
+            situation.SetMeta(v.Theatre, AvInk.Dim);
+        }
 
-            // The legend over the map.
-            FrontVector c2 = side;
-            c2.Clear();
-            Slab(c2, legendRect[0].x, legendRect[0].y, legendRect[0].width, legendRect[0].height, RoomInk.Bezel);
-            float ly = legendRect[0].y + 12f;
-            c2.Diamond(new Vector2(legendSwatch[0], ly), 6f, own);
-            c2.Diamond(new Vector2(legendSwatch[1], ly), 6f, foe);
-            c2.Ring(new Vector2(legendSwatch[2], ly), 7f, 1.4f, own, 20);
-            c2.Tri(new Vector2(legendSwatch[3], ly - 6f), new Vector2(legendSwatch[3] + 6f, ly + 4f), new Vector2(legendSwatch[3] - 6f, ly + 4f), own);
-            c2.Dashed(new Vector2(legendSwatch[4] - 10f, ly), new Vector2(legendSwatch[4] + 10f, ly), 2f, Mc.Steel, 6f, 4f);
-            c2.Ring(new Vector2(legendSwatch[5], ly), 7f, 1.2f, RoomInk.Telemetry, 20, 1f, 1f);
-            c2.Ring(new Vector2(legendSwatch[6], ly), 5f, 1.4f, AvInk.Key, 16);
-            c2.Line(new Vector2(legendSwatch[6] - 10f, ly), new Vector2(legendSwatch[6] + 10f, ly), 1.2f, AvInk.Key);
-            c2.Flush();
-            string focus = v.HasFocus ? overhead + " OVER FOCUS" : "NO FOCUS PIN";
-            situation.SetMeta("TRACKING " + v.Birds.Count + " OBJECTS · " + up + " UP · " + focus + " · " + v.Theatre, overhead > 0 ? FrontKit.Tone(AvState.Caution) : AvInk.Dim);
+        private static string AsatCountdown(FrontRoomView v) =>
+            "ASAT · " + FrontViews.BirdCallsign(v.IncomingBird) + " · " +
+            (v.IncomingLaunched ? "IMPACT IN " : "LAUNCH IN ") + FrontKit.Clock(v.IncomingSeconds);
+
+        private string CoverageTradeoff(FrontRoomView v, in OrbitTrackView bird)
+        {
+            if (v.HasFocus && bird.Overhead && GeoBird.Distance(pending.x, pending.y, v.FocusU, v.FocusV) > bird.Radius)
+                return "FOCUS " + v.FocusGrid + " LEAVES " + bird.Callsign + " COVERAGE";
+            foreach (MapAirbaseView airbase in v.Airbases)
+            {
+                if (airbase.Side != AirbaseSide.Own || GeoBird.Distance(bird.U, bird.V, airbase.U, airbase.V) > bird.Radius ||
+                    GeoBird.Distance(pending.x, pending.y, airbase.U, airbase.V) <= bird.Radius) continue;
+                return airbase.Name + " LEAVES " + bird.Callsign + " COVERAGE";
+            }
+            return "REVIEW BURN IN OPERATE";
+        }
+
+        private static void PaintMapStrip(FrontVector g, Rect box, TMP_Text label, string text, Color ink)
+        {
+            label.gameObject.SetActive(!string.IsNullOrEmpty(text));
+            if (!label.gameObject.activeSelf) return;
+            g.Rect(box.x, box.y, box.width, box.height, Mc.PlateInk.WithAlpha(0.96f));
+            g.Rect(box.x, box.y, 3f, box.height, ink);
+            FrontKit.Set(label, FrontKit.Fit(label, text, label.fontSize), ink);
+        }
+
+        private void ReserveMarker(Vector2 p) => plate.Labels.Take(new Rect(p.x - 11f, p.y - 11f, 22f, 22f));
+
+        private void MapLabel(Vector2 p, string word, Color ink)
+        {
+            if (mapLabelCount >= mapLabels.Length || !plate.View.Visible(p, 8f)) return;
+            TMP_Text label = mapLabels[mapLabelCount];
+            label.gameObject.SetActive(true);
+            FrontKit.Set(label, word, ink);
+            Rect box = plate.Labels.Place(label, p, 13f, true, true);
+            if (box.width <= 0f)
+            {
+                label.gameObject.SetActive(false);
+                return;
+            }
+            plate.G.Rect(box.x - 2f, box.y, box.width + 4f, box.height, Mc.PlateInk.WithAlpha(0.91f));
+            mapLabelCount++;
+        }
+
+        private static void Coverage(FrontVector g, Vector2 p, float radius, Color ink, float opacity, bool forecast = false)
+        {
+            if (radius < 1f) return;
+            g.Disc(p, radius, ink.WithAlpha((forecast ? 0.037f : 0.11f) * opacity), 64);
+            g.Ring(p, radius, forecast ? 1.3f : 1.65f, ink.WithAlpha(opacity), 72, forecast ? 4f : 0f, forecast ? 3f : 0f);
         }
 
         private Vector2 BirdPoint(in OrbitTrackView b) => plate.P(b.U, b.V);
-
-        /// <summary>The site's name without its family word (UPLINK ALPHA reads ALPHA, HOSTILE UPL-05 reads UPL-05): the map only needs the short tag.</summary>
-        private static string ShortSite(string name)
-        {
-            name ??= "";
-            if (name.StartsWith("UPLINK ", StringComparison.Ordinal)) return name.Substring(7);
-            if (name.StartsWith("HOSTILE ", StringComparison.Ordinal)) return name.Substring(8);
-            return name;
-        }
-
-        /// <summary>
-        /// The bird's footprint, drawn exactly as the coverage gate tests it: Reach is a share of the theatre in map units (a slightly flattened oval in
-        /// kilometres), and anything inside it is covered. Each kind has its own dress: OPTICAL a camera frame, RADAR scan rings and a sweep, KINETIC strike
-        /// rings and a crosshair. Hostile footprints are red and hatched.
-        /// </summary>
-        private void DrawFootprint(FrontVector g, in OrbitTrackView b, Color k, float pxU, float pxV, float now)
-        {
-            Vector2 c = BirdPoint(b);
-            float rx = b.Radius * pxU, ry = b.Radius * pxV;
-            EllDisc(g, c, rx, ry, k.WithAlpha(b.Own ? 0.1f : 0.06f));
-            if (!b.Own) Hatch(g, c, rx, ry, k.WithAlpha(0.3f), 9f);
-            EllRing(g, c, rx, ry, 1.9f, k.WithAlpha(0.95f));
-            switch (b.Kind)
-            {
-                case BirdKind.Optical:
-                {
-                    // A camera frame: corner brackets and a dashed outline around the swath the bird looks at.
-                    float hw = rx * 0.56f, hh = ry * 0.56f, l = Mathf.Min(16f, hw * 0.5f);
-                    for (int sx = -1; sx <= 1; sx += 2)
-                        for (int sy = -1; sy <= 1; sy += 2)
-                        {
-                            Vector2 o = c + new Vector2(sx * hw, sy * hh);
-                            g.Line(o, o + new Vector2(-sx * l, 0f), 1.8f, k.WithAlpha(0.95f));
-                            g.Line(o, o + new Vector2(0f, -sy * l), 1.8f, k.WithAlpha(0.95f));
-                        }
-                    DashRect(g, c, hw, hh, 1f, k.WithAlpha(0.45f));
-                    g.Line(c + new Vector2(-7f, 0f), c + new Vector2(7f, 0f), 1f, k.WithAlpha(0.6f));
-                    g.Line(c + new Vector2(0f, -7f), c + new Vector2(0f, 7f), 1f, k.WithAlpha(0.6f));
-                    break;
-                }
-                case BirdKind.Radar:
-                {
-                    // Scan rings and a sweep wedge (its angle runs off the mission clock: flavour).
-                    EllRing(g, c, rx * 0.34f, ry * 0.34f, 1f, k.WithAlpha(0.5f), 2);
-                    EllRing(g, c, rx * 0.67f, ry * 0.67f, 1f, k.WithAlpha(0.5f), 2);
-                    float a1 = Mathf.Repeat(now * 0.9f, 2f * Mathf.PI);
-                    for (int s = 0; s < 4; s++)
-                        EllSector(g, c, rx, ry, a1 - (s + 1) * 12f * Mathf.Deg2Rad, a1 - s * 12f * Mathf.Deg2Rad, k.WithAlpha(0.16f - 0.035f * s));
-                    g.Line(c, EllP(c, rx, ry, a1), 1.5f, k.WithAlpha(0.85f));
-                    break;
-                }
-                default:
-                {
-                    // Strike rings and a crosshair.
-                    EllRing(g, c, rx * 0.38f, ry * 0.38f, 1.2f, k.WithAlpha(0.7f));
-                    EllRing(g, c, rx * 0.7f, ry * 0.7f, 1f, k.WithAlpha(0.45f));
-                    float gap = 8f;
-                    g.Line(c + new Vector2(-rx - 8f, 0f), c + new Vector2(-gap, 0f), 1.3f, k.WithAlpha(0.8f));
-                    g.Line(c + new Vector2(rx + 8f, 0f), c + new Vector2(gap, 0f), 1.3f, k.WithAlpha(0.8f));
-                    g.Line(c + new Vector2(0f, -ry - 8f), c + new Vector2(0f, -gap), 1.3f, k.WithAlpha(0.8f));
-                    g.Line(c + new Vector2(0f, ry + 8f), c + new Vector2(0f, gap), 1.3f, k.WithAlpha(0.8f));
-                    break;
-                }
-            }
-        }
-
-        /// <summary>
-        /// The selected bird's burn rings: the real cost is 1.5 + 36 per map unit of distance, so a burn for X percent reaches (X - 1.5) / 36 units: rings
-        /// at 10, 25 and 50 percent (amber while the tank pays for them, red when it does not) and a bold ring for what its remaining fuel can reach.
-        /// </summary>
-        private void DrawCostRings(FrontVector g, in OrbitTrackView b, float pxU, float pxV)
-        {
-            Vector2 c = BirdPoint(b);
-            float alpha = relocating ? 0.9f : 0.6f;
-            Color amber = RoomInk.Telemetry, red = AvInk.State(AvState.Danger);
-            for (int i = 0; i < CostLevels.Length; i++)
-            {
-                float d = (CostLevels[i] - GeoBird.BurnBase) / GeoBird.BurnPerUnit, rx = d * pxU, ry = d * pxV;
-                if (rx > 1500f) continue;
-                Color k = b.Fuel >= CostLevels[i] ? amber : red;
-                EllRing(g, c, rx, ry, 2f, k.WithAlpha(alpha), 3);
-                AddRingWord(c, rx, ry, "-" + Mathf.RoundToInt(CostLevels[i]) + " %", k);
-            }
-            if (b.Fuel > GeoBird.BurnBase + 0.5f && !b.Relocating)
-            {
-                float d = (b.Fuel - GeoBird.BurnBase) / GeoBird.BurnPerUnit, rx = d * pxU, ry = d * pxV;
-                if (rx < 1500f)
-                {
-                    EllRing(g, c, rx, ry, 2f, amber.WithAlpha(0.9f));
-                    AddRingWord(c, rx, ry, "REACH", amber);
-                }
-            }
-        }
-
-        private void AddRingWord(Vector2 c, float rx, float ry, string word, Color ink)
-        {
-            float[] ang = { -45f, -135f, 45f, 135f, -90f, 90f };
-            for (int i = 0; i < ang.Length; i++)
-            {
-                Vector2 p = EllP(c, rx, ry, ang[i] * Mathf.Deg2Rad);
-                if (!plate.Shown(p, 22f)) continue;
-                ringAt.Add(p); ringWord.Add(word); ringInk.Add(ink);
-                return;
-            }
-        }
-
-        /// <summary>A burn under way: the dashed path from where it left to the new parked point, chevrons along what is left of it, a ghost footprint and a ghost satellite at the destination.</summary>
-        private void DrawTransfer(FrontVector g, in OrbitTrackView b, Color k, float pxU, float pxV)
-        {
-            Vector2 a = plate.P(b.FromU, b.FromV), cur = BirdPoint(b), z = plate.P(b.TargetU, b.TargetV);
-            g.Dashed(a, cur, 1.2f, k.WithAlpha(0.3f), 4f, 5f);
-            g.Dashed(cur, z, 4.5f, AvInk.Ground.WithAlpha(0.45f), 7f, 5f);
-            g.Dashed(cur, z, 1.9f, k.WithAlpha(0.95f), 7f, 5f);
-            Vector2 d = z - cur;
-            float len = d.magnitude;
-            if (len > 40f)
-            {
-                Vector2 u = d / len, nrm = new Vector2(-u.y, u.x);
-                for (float s = 30f; s < len - 14f; s += 34f)
-                {
-                    Vector2 p = cur + u * s;
-                    g.Tri(p + u * 5f, p - u * 3f + nrm * 4f, p - u * 3f - nrm * 4f, k.WithAlpha(0.9f));
-                }
-            }
-            EllDisc(g, z, b.Radius * pxU, b.Radius * pxV, k.WithAlpha(0.05f));
-            EllRing(g, z, b.Radius * pxU, b.Radius * pxV, 1.4f, k.WithAlpha(0.6f), 3);
-            Sat(g, z, k.WithAlpha(0.7f), false, 0.9f);
-        }
-
-        /// <summary>The bird's nadir marker: a satellite glyph in a dashed station-keeping box (flavour); a lost bird is a hollow grey glyph with a cross.</summary>
-        private void DrawNadir(FrontVector g, in OrbitTrackView b, Color k)
-        {
-            Vector2 p = BirdPoint(b);
-            if (!b.Alive)
-            {
-                Sat(g, p, Mc.Lost, false, 1f);
-                FrontKit.Cross(g, p + new Vector2(0f, 20f), 5f, AvInk.Muted);
-                return;
-            }
-            DashRect(g, p, 26f, 16f, 1f, k.WithAlpha(0.6f));
-            Sat(g, p, k, true, 1.1f);
-            if (selKind == (int)b.Kind && b.Own) g.Ring(p, 24f, 1.6f, AvInk.Select, 32);
-        }
 
         private bool Local(Vector2 mouse, out Vector2 p)
         {
@@ -950,7 +567,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private bool OnMap(Vector2 p)
         {
             FrontMapView mv = plate.View;
-            return p.x >= mv.X && p.x <= mv.X + mv.W && p.y >= mv.Y && p.y <= mv.Y + mv.H && (padPick || relocating || !plate.Labels.Blocked(new Rect(p.x - 1f, p.y - 1f, 2f, 2f)));
+            return p.x >= mv.X && p.x <= mv.X + mv.W && p.y >= mv.Y && p.y <= mv.Y + mv.H && (Picking || !plate.Labels.Blocked(new Rect(p.x - 1f, p.y - 1f, 2f, 2f)));
         }
 
         /// <summary>
@@ -976,10 +593,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (Enlarged) { pressed = false; return false; } // the camera covers the map: no pan, zoom or placement under it
             bool changed = plate.Tick(mouse);
             if (last == null) { pressed = false; return false; }
-            if (plate.RightClick(mouse, out Vector2 ruv) && (padPick || relocating)) // an armed pick places with either button
+            if (Picking && plate.RightClick(mouse, out Vector2 ruv))
             {
-                if (padPick) PickPad(ruv);
-                else { pending = new Vector2(Mathf.Clamp(ruv.x, 0.02f, 0.98f), Mathf.Clamp(ruv.y, 0.02f, 0.98f)); hasPending = true; actions.Touch(); }
+                PickPoint(ruv);
                 return true;
             }
             if (FrontPointer.Down(0))
@@ -992,19 +608,38 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             pressed = false;
             // Only a click that stayed put on an unmoved, unzoomed map picks anything.
             if (!Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > FrontMapPlate.ClickSlop * FrontMapPlate.ClickSlop || mv.Zoom != pressZoom || (mv.Center - pressCenter).sqrMagnitude > 1e-8f) return MapOnly(changed);
-            Vector2 uv = mv.UV(p);
-            if (padPick) { PickPad(uv); return true; }
-            if (relocating)
+            if (Picking)
             {
-                pending = new Vector2(Mathf.Clamp(uv.x, 0.02f, 0.98f), Mathf.Clamp(uv.y, 0.02f, 0.98f));
-                hasPending = true;
-                actions.Touch();
+                PickPoint(mv.UV(p));
                 return true;
             }
-            int kind = BirdAt(p); // no pick armed: a click on one of our birds opens its feed
-            if (kind < 0) return MapOnly(changed);
-            ShowFeed(kind);
+            if (!TryTrackAt(p, out OrbitTrackView track)) return MapOnly(changed);
+            if (track.Own) ShowFeed((int)track.Kind);
+            else
+            {
+                actions.Touch();
+                CloseOperateDownlink();
+                selectedTrackId = track.TrackId;
+                wantTab = OperateTab;
+            }
             return true;
+        }
+
+        private void PickPoint(Vector2 uv)
+        {
+            if (padPick) { PickPad(uv); return; }
+            Vector2 station = new Vector2(GeoBird.ClampStation(uv.x), GeoBird.ClampStation(uv.y));
+            if (launchStationPick)
+            {
+                launchStation = station;
+                launchStationPick = false;
+            }
+            else
+            {
+                pending = station;
+                hasPending = true;
+            }
+            actions.Touch();
         }
 
         /// <summary>The view moved: the map repaints now, the window repaints nothing else.</summary>
@@ -1014,6 +649,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return false;
         }
 
-        public BoscaliSummer.Core.Ui.CursorShape Cursor(Vector2 mouse) => Enlarged ? BoscaliSummer.Core.Ui.CursorShape.None : plate.Cursor(mouse, padPick || relocating);
+        public BoscaliSummer.Core.Ui.CursorShape Cursor(Vector2 mouse) => Enlarged ? BoscaliSummer.Core.Ui.CursorShape.None : plate.Cursor(mouse, Picking);
     }
 }

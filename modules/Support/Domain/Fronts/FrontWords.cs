@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Domain.Fronts
 {
@@ -15,13 +16,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         /// <summary>GEO burn verdicts (Detail = seconds of burn, Charged = fuel percent spent; for NoFuel Detail = percent needed).</summary>
         Relocated = 32, NoFuel = 33, Burning = 34, NoMove = 35, BirdLost = 36, NoSite = 37,
         NoPad = 38, PadFull = 39, KindUp = 40, NoDataCenter = 41, DataCenterFull = 42, NoCamp = 43, CampFull = 44, NotHeld = 45,
-        NotOwnGround = 46, TooFar = 47, FobMax = 48, NoSpot = 49, Packing = 50, TruckBusy = 51
+        NotOwnGround = 46, TooFar = 47, FobMax = 48, NoSpot = 49, Packing = 50, TruckBusy = 51, NoEnemyTrack = 52
     }
 
     /// <summary>Every front sentence, built from a few bytes on the client (radio style, upper case). Pure.</summary>
     internal static class FrontWords
     {
-        public const byte MaxOutcome = (byte)FrontOutcome.TruckBusy;
+        public const byte MaxOutcome = (byte)FrontOutcome.NoEnemyTrack;
 
         public static bool Good(FrontOutcome o) => (o >= FrontOutcome.Ok && o <= FrontOutcome.FocusCleared) || o == FrontOutcome.Relocated;
 
@@ -29,9 +30,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         public static string Programme(ProgrammeId id) => FrontRules.Info(id).Name;
 
-        /// <summary>A queued or offered build: a satellite names its kind ("SATELLITE · OPTICAL").</summary>
-        public static string Programme(ProgrammeId id, byte kind) =>
-            id == ProgrammeId.LaunchSatellite && kind < 3 ? Programme(id) + " · " + Bird(kind) : Programme(id);
+        /// <summary>A queued or offered satellite names its payload and custom bus.</summary>
+        public static string Programme(ProgrammeId id, byte kind)
+        {
+            if (id != ProgrammeId.LaunchSatellite || !GeoSpace.TryUnpackLaunch(kind, out BirdKind bird, out SatelliteBus bus)) return Programme(id);
+            return Programme(id) + " · " + Bird((int)bird) + (bus == SatelliteBus.Balanced ? "" : " · " + bus.ToString().ToUpperInvariant());
+        }
 
         /// <summary>The verdict of a TRUCK MOVE (the host replies a front outcome).</summary>
         public static string TruckMove(FrontOutcome code) =>
@@ -68,6 +72,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case FrontOutcome.NoSpot: return "NO ROOM THERE · PICK ANOTHER SPOT";
                 case FrontOutcome.Packing: return "TRUCK IS PACKING UP";
                 case FrontOutcome.TruckBusy: return "TRUCK IS BUSY";
+                case FrontOutcome.NoEnemyTrack: return "NO CONFIRMED HOSTILE SATELLITE TRACK";
                 default: return "";
             }
         }

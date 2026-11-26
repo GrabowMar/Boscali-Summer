@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         SofRaise = 11, SofOrder = 12, SofMission = 13, SofDivert = 14, SofSync = 15,
         /// <summary>OPERATIONS verbs (protocol 35). OpFund Target = domain | tier &lt;&lt; 1 (tier 0 = 25 CR, 1 = 50 CR); OpPlan Ids = { kind, target } (a bird 0..2, a SAM C2 node id or a held building id); OpCancel Target = domain. OpSync asks for a fresh OPERATIONS state.</summary>
         OpFund = 16, OpPlan = 17, OpCancel = 18, OpSync = 19,
-        /// <summary>FRONT verbs (protocol 38). FrontDirective Target = front | directive &lt;&lt; 2; FrontPriority Ids = { space, cyber, sof } weights; FrontFocus Ids = { front | clear &lt;&lt; 2, packed point }; FrontQueue Ids = { front | programme &lt;&lt; 2 | kind &lt;&lt; 6, packed point (0 = automatic) } (protocol 44); FrontDonate Ids = { front | row &lt;&lt; 2, allocation } (protocol 44). FrontSync asks for a fresh FRONT state.</summary>
+        /// <summary>FRONT verbs. FrontDirective Target = front | directive &lt;&lt; 2; FrontPriority Ids = { space, cyber, sof } weights; FrontFocus Ids = { front | clear &lt;&lt; 2, packed point }; FrontQueue Ids = { front | programme &lt;&lt; 2 | kind &lt;&lt; 6, packed point (0 = automatic), optional ASAT track id }; FrontDonate Ids = { front | row &lt;&lt; 2, allocation }. FrontSync asks for a fresh FRONT state.</summary>
         FrontDirective = 20, FrontPriority = 21, FrontFocus = 22, FrontQueue = 23, FrontDonate = 24, FrontSync = 25,
         /// <summary>GEO verb (protocol 39). RelocateBird Ids = { bird 0..2, packed map point (<see cref="GeoSpace.Pack"/>) }; the host judges fuel, burn state and distance.</summary>
         RelocateBird = 26,
@@ -327,7 +327,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case SpaceCommandKind.RelocateBird:
                 case SpaceCommandKind.TruckMove:
                     if (!r.TryReadByte(out byte count) || count == 0 || count > SpaceCommand.MaxIds || r.Remaining < count) return default;
-                    if (kind != SpaceCommandKind.SendTasked && count != (kind == SpaceCommandKind.FrontPriority ? 3 : 2)) return default; // a SOF, OPERATIONS or FRONT command carries exactly two ints (three weights for a priority)
+                    if (kind != SpaceCommandKind.SendTasked && count != (kind == SpaceCommandKind.FrontPriority ? 3 : 2) &&
+                        !(kind == SpaceCommandKind.FrontQueue && count == 3)) return default;
                     var ids = new int[count];
                     for (int i = 0; i < count; i++) if (!ReadInt(r, out ids[i])) return default;
                     return new SpaceCommand(version, kind, request, 0, ids);

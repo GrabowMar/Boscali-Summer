@@ -168,22 +168,19 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void UpdateSpaceMirror()
         {
             while (inProcessReplies.TryDequeue(out SpaceReply queued)) ReceiveSpaceReply(queued);
-            if (GameManager.GetLocalPlayer<Player>(out Player local) && local != null && local.HQ != null)
+            int key = unchecked((int)LocalFactionWire());
+            if (key != mirrorFaction)
             {
-                int key = FactionKeyOf(local.HQ);
-                if (key != mirrorFaction)
-                {
-                    // Faction change: the old faction's rows must never outlive the switch.
-                    if (mirrorFaction != 0) { spaceMirror.Reset(); cyberMirror.Reset(); sofMirror.Reset(); opsMirror.Reset(); frontMirror.Reset(); }
-                    mirrorFaction = key;
-                }
+                // Spectators also lose the previous faction's private picture.
+                if (mirrorFaction != 0) { spaceMirror.Reset(); cyberMirror.Reset(); sofMirror.Reset(); opsMirror.Reset(); frontMirror.Reset(); }
+                mirrorFaction = key;
             }
             if (network == null) return;
             CyberFeed.Update(network);
             SofFeed.Update(network);
-            OpsFeed.Want(true); // launch cues need the live pads even while the ORBIT window is closed
+            OpsFeed.Want(key != 0); // launch cues need the live pads even while the ORBIT window is closed
             OpsFeed.Update(network);
-            FrontFeed.Want(true); // POWER scales every perk tile, so the client always wants its faction's fronts
+            FrontFeed.Want(key != 0); // POWER scales every perk tile, so the client always wants its faction's fronts
             FrontFeed.Update(network);
             Visuals.OpsFlightVisuals.Tick(opsMirror, MissionNow());
             Visuals.FrontEffectVisuals.Tick(frontMirror, opsMirror, MissionNow());

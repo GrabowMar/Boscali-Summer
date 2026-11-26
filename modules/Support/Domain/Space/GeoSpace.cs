@@ -15,6 +15,22 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public const float DirectorGap = 180f;
         private const int Grid = 16383;
 
+        public static float Footprint(BirdKind bird, SatelliteBus bus) => Reach[(int)bird] * (bus switch
+        {
+            SatelliteBus.Agile => 0.82f,
+            SatelliteBus.Wideband => 1.25f,
+            _ => 1f
+        });
+
+        public static byte PackLaunch(BirdKind bird, SatelliteBus bus) => (byte)((byte)bird | ((byte)bus << 2));
+
+        public static bool TryUnpackLaunch(byte packed, out BirdKind bird, out SatelliteBus bus)
+        {
+            bird = (BirdKind)(packed & 3);
+            bus = (SatelliteBus)(packed >> 2);
+            return (byte)bird < SpaceRules.BirdCount && bus <= SatelliteBus.Wideband;
+        }
+
         public static float U(float x, float width) => Scalar.Clamp01(x / Math.Max(1000f, width) + 0.5f);
         public static float V(float z, float height) => Scalar.Clamp01(0.5f - z / Math.Max(1000f, height));
 
@@ -36,7 +52,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (!alive) return Refusal.Dead;
             if (bird.Moving(now)) return Refusal.Moving;
-            float cost = GeoBird.Cost(GeoBird.Distance(bird.U(now), bird.V(now), u, v));
+            float cost = GeoBird.Cost(GeoBird.Distance(bird.U(now), bird.V(now), GeoBird.ClampStation(u), GeoBird.ClampStation(v)));
             if (cost <= 0f) return Refusal.NoMove;
             return bird.Fuel < cost ? Refusal.NoFuel : Refusal.None;
         }
@@ -52,7 +68,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             {
                 var kind = (BirdKind)i;
                 GeoBird g = state.Geo(kind);
-                if (!state.HasBird(kind) || g.Moving(now) || g.Fuel <= DirectorMinFuel || now < restUntil[i] || g.Covers(now, u, v, Reach[i])) continue;
+                if (!state.HasBird(kind) || g.Moving(now) || g.Fuel <= DirectorMinFuel || now < restUntil[i] || state.Covers(kind, now, u, v)) continue;
                 float d = GeoBird.Distance(g.U(now), g.V(now), u, v);
                 if (d < bestD && GeoBird.Cost(d) < g.Fuel - DirectorMinFuel * 0.5f) { bestD = d; best = i; }
             }

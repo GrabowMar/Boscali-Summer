@@ -381,6 +381,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         // The default look, cached per bird and parked point (a burn moves it): its search casts up to ~180 rays once.
         private const float DefaultLookMove = 500f;
         private BirdKind lookBird;
+        private SatelliteBus lookBus;
         private float lookKeyX = float.NaN, lookKeyZ, lookX, lookZ;
         private int lookKind;
         private readonly float[] airX = new float[32], airZ = new float[32];
@@ -392,10 +393,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
         /// </summary>
         private bool TryDefaultLook(BirdKind bird, FactionHQ hq, float now, out GlobalPosition aim)
         {
-            if (!TryNadir(bird, hq, now, out GlobalPosition nadir)) { aim = default; return false; }
-            if (bird != lookBird || !(Mathf.Abs(nadir.x - lookKeyX) <= DefaultLookMove && Mathf.Abs(nadir.z - lookKeyZ) <= DefaultLookMove))
+            aim = default;
+            if (hq == null || !manager.TryOwnGeo(hq, (int)bird, out GeoBird geo)) return false;
+            Fronts.MapFrame frame = Fronts.FrontController.Frame();
+            var nadir = new GlobalPosition(frame.X(geo.U(now)), 0f, frame.Z(geo.V(now)));
+            if (bird != lookBird || geo.Bus != lookBus || !(Mathf.Abs(nadir.x - lookKeyX) <= DefaultLookMove && Mathf.Abs(nadir.z - lookKeyZ) <= DefaultLookMove))
             {
-                lookBird = bird; lookKeyX = nadir.x; lookKeyZ = nadir.z;
+                lookBird = bird; lookBus = geo.Bus; lookKeyX = nadir.x; lookKeyZ = nadir.z;
                 int n = 0;
                 if (FactionRegistry.airbaseLookup != null)
                     foreach (Airbase a in FactionRegistry.airbaseLookup.Values)
@@ -404,7 +408,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                         GlobalPosition p = (a.center != null ? a.center : a.transform).GlobalPosition();
                         airX[n] = p.x; airZ[n] = p.z; n++;
                     }
-                float radius = GeoSpace.Reach[(int)bird] * Fronts.FrontController.Frame().W;
+                float radius = GeoSpace.Footprint(bird, geo.Bus) * frame.W;
                 (lookX, lookZ, lookKind) = SpaceFeedRules.DefaultLook(nadir.x, nadir.z, radius, airX, airZ, n, IsLand);
             }
             aimNote = lookKind == SpaceFeedRules.LookAirbase ? "NEAREST AIRBASE" : lookKind == SpaceFeedRules.LookLand ? "NEAREST LAND"
@@ -419,16 +423,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Vector3 local = new GlobalPosition(x, 0f, z).ToLocalPosition();
             var origin = new Vector3(local.x, Datum.LocalSeaY + 8000f, local.z);
             return Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 16000f, (int)PhysicsLayers.StaticsMask) && hit.point.y > Datum.LocalSeaY + 1f;
-        }
-
-        /// <summary>The ground point under one of our birds (its footprint centre), from the same geostationary slot the map draws.</summary>
-        private bool TryNadir(BirdKind bird, FactionHQ hq, float now, out GlobalPosition aim)
-        {
-            aim = default;
-            if (hq == null || !manager.TryOwnGeo(hq, (int)bird, out GeoBird geo)) return false;
-            Fronts.MapFrame frame = Fronts.FrontController.Frame();
-            aim = new GlobalPosition(frame.X(geo.U(now)), 0f, frame.Z(geo.V(now)));
-            return true;
         }
 
         /// <summary>The newest own rod (ORBITAL ROD or STARFALL) still in the air or inside its hold after impact.</summary>

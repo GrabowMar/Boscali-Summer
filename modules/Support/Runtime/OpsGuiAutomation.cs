@@ -61,6 +61,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private static Dictionary<string, object> Press(FrontController fronts, OpsFrontWindow window, string label, int nth)
         {
+            if (Room(window) is OrbitRoom)
+            {
+                // Older nomodkit tours name the original ORBIT controls. Keep the pointer going through the current clickable controls.
+                switch (label)
+                {
+                    case "SATELLITES": label = "LAUNCH"; break;
+                    case "DOWNLINK": window.ShowOrbitOperateForAutomation(); label = "OPEN DOWNLINK"; break;
+                    case "RELOCATE": window.ShowOrbitOperateForAutomation(); label = "PLAN BURN"; break;
+                    case "CONFIRM BURN": label = "EXECUTE BURN"; break;
+                }
+            }
             List<AvHit> hits = Hits(window);
             AvHit target = null;
             int seen = 0;

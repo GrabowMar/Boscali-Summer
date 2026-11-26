@@ -370,14 +370,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
             bool ok = false;
             string why = null;
             FrontOutcome failure = FrontOutcome.Unavailable; // what the log names if the service refuses
-            var bird = (BirdKind)e.Kind;
+            BirdKind bird = default;
             try
             {
                 switch (e.Id)
                 {
                     case ProgrammeId.LaunchSatellite:
-                        ok = space != null && space.TryLaunchBird(owner, bird);
-                        if (!ok && space != null) failure = space.CheckLaunch(owner, bird); // the real cause: NO PAD, PAD FULL, KIND UP
+                        if (space != null && GeoSpace.TryUnpackLaunch(e.Kind, out bird, out SatelliteBus bus))
+                        {
+                            ok = space.TryLaunchBird(owner, bird, bus, e.HasPoint, e.X, e.Z);
+                            if (!ok) failure = space.CheckLaunch(owner, bird); // NO PAD, PAD FULL, KIND UP
+                        }
                         break;
                     case ProgrammeId.UplinkSite: ok = space != null && space.TryBuildPad(owner, e.HasPoint, e.X, e.Z, out failure); break;
                     case ProgrammeId.DataCenter: ok = cyber != null && cyber.TryBuildDataCenter(owner, e.HasPoint, e.X, e.Z, out failure); break;
@@ -395,7 +398,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         ok = ops != null && ops.RunProgramme(owner, ProgrammeId.Fob, e.HasPoint && sof != null ? sof.HeldNear(owner, e.X, e.Z, FrontRules.FobPickMetres) : 0);
                         failure = FrontOutcome.NoHeldBuilding;
                         break;
-                    case ProgrammeId.Asat: ok = ops != null && ops.RunProgramme(owner, e.Id); break;
+                    case ProgrammeId.Asat:
+                        failure = ops != null ? ops.RunAsatProgramme(owner, e.TargetTrack) : FrontOutcome.Unavailable;
+                        ok = failure == FrontOutcome.None;
+                        break;
                 }
             }
             catch (Exception ex)
@@ -575,26 +581,30 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (ids == null || ids.Length != 2 || ids[0] < 0 || ids[0] >= SpaceRules.BirdCount || !GeoSpace.TryUnpack(ids[1], out float u, out float v)) return new FrontResult(FrontOutcome.BadAmount);
             if (space == null) return new FrontResult(FrontOutcome.Unavailable);
             var before = space.TryGetStateCoarse(f.Owner, out SpaceState state) ? state.Geo((BirdKind)ids[0]) : default;
-            switch (space.TryRelocate(f.Owner, ids[0], u, v, now, out GeoBird after))
+            switch (space.TryRelocate(f.Owner, ids[0], u, v, now, out GeoBird after, holdStation: true))
             {
                 case GeoSpace.Refusal.None: return new FrontResult(FrontOutcome.Relocated, Mathf.CeilToInt(after.Duration), Mathf.RoundToInt(before.Fuel - after.Fuel));
                 case GeoSpace.Refusal.Moving: return new FrontResult(FrontOutcome.Burning);
                 case GeoSpace.Refusal.NoMove: return new FrontResult(FrontOutcome.NoMove);
-                case GeoSpace.Refusal.NoFuel: return new FrontResult(FrontOutcome.NoFuel, Mathf.CeilToInt(GeoBird.Cost(GeoBird.Distance(before.U(now), before.V(now), u, v))));
+                case GeoSpace.Refusal.NoFuel: return new FrontResult(FrontOutcome.NoFuel, Mathf.CeilToInt(GeoBird.Cost(GeoBird.Distance(before.U(now), before.V(now), GeoBird.ClampStation(u), GeoBird.ClampStation(v)))));
                 default: return new FrontResult(FrontOutcome.BirdLost);
             }
         }
 
-        /// <summary>QUEUE: Ids = { front | programme &lt;&lt; 2 | kind &lt;&lt; 6, packed point (0 = automatic placement) }.</summary>
+        /// <summary>QUEUE takes a front/programme/loadout, an optional packed point, and for ASAT an optional track ID.</summary>
         private FrontResult Queue(FactionFront f, int[] ids, bool human, float now)
         {
-            if (ids == null || ids.Length != 2 || !Unpack(ids[0], out Front front, out int packed)) return new FrontResult(FrontOutcome.BadFront);
-            int programme = packed & 15; byte kind = (byte)((packed >> 4) & 3);
-            if (programme >= FrontRules.Programmes.Length) return new FrontResult(FrontOutcome.NotAProgramme);
+            if (ids == null || ids.Length < 2 || ids.Length > 3 || !Unpack(ids[0], out Front front, out int packed)) return new FrontResult(FrontOutcome.BadFront);
+            var id = (ProgrammeId)(packed & 15);
+            if (!FrontRules.BelongsTo(front, id)) return new FrontResult(FrontOutcome.NotAProgramme);
+            if ((ids.Length == 3 && (id != ProgrammeId.Asat || ids[2] <= 0)) || (id == ProgrammeId.Asat && ids[1] != 0)) return new FrontResult(FrontOutcome.BadAmount);
+            int loadout = packed >> 4;
+            if (id == ProgrammeId.LaunchSatellite && (loadout > byte.MaxValue || !GeoSpace.TryUnpackLaunch((byte)loadout, out _, out _)))
+                return new FrontResult(FrontOutcome.KindUp);
             float px = 0f, pz = 0f;
             bool hasPoint = ids[1] != 0;
             if (hasPoint && !SofCodes.TryUnpackPoint(ids[1], out px, out pz)) return new FrontResult(FrontOutcome.NoSpot);
-            return new FrontResult(Queue(f, front, (ProgrammeId)programme, kind, hasPoint, px, pz, human, now));
+            return new FrontResult(Queue(f, front, id, (byte)loadout, hasPoint, px, pz, human, now, ids.Length == 3 ? ids[2] : 0));
         }
 
         /// <summary>
@@ -602,7 +612,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// service's placement rule, then the book takes it. Owner 0: the faction pool. <paramref name="human"/> restarts the front's quartermaster clock. An automatic (quartermaster / AI)
         /// build the service finds no room for now backs off <see cref="BlockedSeconds"/> like one that failed at completion; a human queue never does.
         /// </summary>
-        private FrontOutcome Queue(FactionFront f, Front front, ProgrammeId id, byte kind, bool hasPoint, float x, float z, bool human, float now)
+        private FrontOutcome Queue(FactionFront f, Front front, ProgrammeId id, byte kind, bool hasPoint, float x, float z, bool human, float now, int requestedTrack = 0)
         {
             if (human)
             {
@@ -615,16 +625,19 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 foreach (var item in pending)
                 {
                     if (item.Side != f) continue;
-                    if (item.Event.Id == ProgrammeId.LaunchSatellite) world.BirdsUp |= (byte)(1 << item.Event.Kind);
+                    if (item.Event.Id == ProgrammeId.LaunchSatellite && GeoSpace.TryUnpackLaunch(item.Event.Kind, out BirdKind bird, out _)) world.BirdsUp |= (byte)(1 << (int)bird);
                     else if (item.Event.Id == ProgrammeId.UplinkSite) world.PadsLive++;
                 }
             if (id != ProgrammeId.LaunchSatellite) kind = 0; // a client's kind bits on any other row would ride the mirror and fail every reader's kind check
             // A pick for a build the quartermaster already queued places that build (the automatic row was built first elsewhere, and its cap refused the pick).
-            if (human && hasPoint && Placement(f.Owner, f.Book.Side(front), id, true, x, z) == FrontOutcome.None && f.Book.AdoptPick(front, id, x, z, now))
+            if (human && hasPoint && id != ProgrammeId.LaunchSatellite && Placement(f.Owner, f.Book.Side(front), id, true, x, z) == FrontOutcome.None && f.Book.AdoptPick(front, id, x, z, now))
                 return FrontOutcome.Queued;
             FrontOutcome r = f.Book.RefusalCode(front, id, kind, world);
+            int targetTrack = 0;
+            if (r == FrontOutcome.None && id == ProgrammeId.Asat && (ops == null || !ops.TryResolveAsatQueueTrack(f.Owner, requestedTrack, out targetTrack)))
+                r = FrontOutcome.NoEnemyTrack;
             if (r == FrontOutcome.None) r = Placement(f.Owner, f.Book.Side(front), id, hasPoint, x, z);
-            if (r == FrontOutcome.None) r = f.Book.Enqueue(front, id, kind, hasPoint, x, z, 0, human, world, now);
+            if (r == FrontOutcome.None) r = f.Book.Enqueue(front, id, kind, hasPoint, x, z, 0, human, world, now, targetTrack);
             if (!human && (r == FrontOutcome.NoSpot || r == FrontOutcome.NoSite || r == FrontOutcome.NotHeld)) f.BlockedUntil[(int)front, (int)id] = now + BlockedSeconds;
             if (hasPoint && r != FrontOutcome.None)
                 Plugin.Logger?.LogInfo("[Support.Fronts] " + f.Owner.name + " " + FrontWords.Programme(id) + " at " + Mathf.RoundToInt(x) + ", " + Mathf.RoundToInt(z) + " refused: " + r + ".");

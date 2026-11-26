@@ -37,8 +37,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         /// <summary>What the programme captured while it was funded (its cost when it was queued): the exact amount a refused effect gives back.</summary>
         public float Cost;
         public bool Settled;
-        /// <summary>Where the programme was placed (kind = satellite bird kind; owner 0 = faction pool).</summary>
+        /// <summary>Where the programme was placed (kind = satellite loadout; owner 0 = faction pool).</summary>
         public byte Kind, Owner;
+        public int TargetTrack;
         public bool HasPoint;
         public float X, Z;
         public ushort Row;
@@ -50,6 +51,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public float Cost, Build, Funded;
         public ushort Row;
         public byte Kind, Owner;
+        public int TargetTrack;
         public bool HasPoint;
         public float X, Z;
         /// <summary>Not started and its prerequisite is not live yet (set at Enqueue, refreshed by Tick).</summary>
@@ -161,8 +163,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public FrontOutcome RefusalCode(Front f, ProgrammeId id, byte kind, in FrontWorld w)
         {
             if (sides[(int)f].Queue.Count >= FrontRules.MaxQueue) return FrontOutcome.QueueFull;
-            FrontOutcome r = FrontLadder.Check(f, id, kind, w, Queued(f));
-            return r == FrontOutcome.None && id == ProgrammeId.LaunchSatellite && kind > 2 ? FrontOutcome.KindUp : r;
+            return FrontLadder.Check(f, id, kind, w, Queued(f));
         }
 
         /// <summary>What this side already has queued (started or not), as the ladder counts it.</summary>
@@ -176,16 +177,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         }
 
         /// <summary>Queues a programme (None) or says why not. <paramref name="human"/> restarts the quartermaster's idle clock.</summary>
-        public FrontOutcome Enqueue(Front f, ProgrammeId id, byte kind, bool hasPoint, float x, float z, byte owner, bool human, in FrontWorld w, float now)
+        public FrontOutcome Enqueue(Front f, ProgrammeId id, byte kind, bool hasPoint, float x, float z, byte owner, bool human, in FrontWorld w, float now, int targetTrack = 0)
         {
             FrontOutcome r = RefusalCode(f, id, kind, w);
             if (r != FrontOutcome.None) return r;
             FrontSide s = sides[(int)f];
             s.Queue.Add(new FrontProgrammeEntry
             {
-                // Kind means something only on a satellite (RefusalCode bounds it to 0..2 there); anything else stores 0, so the mirror's kind bits always read back.
                 Id = id, Cost = FrontRules.Cost(id, CostScale), Build = FrontRules.BuildSeconds(id), Row = nextRow, Kind = id == ProgrammeId.LaunchSatellite ? kind : (byte)0, Owner = owner,
-                HasPoint = hasPoint && float.IsFinite(x) && float.IsFinite(z), X = x, Z = z,
+                HasPoint = hasPoint && float.IsFinite(x) && float.IsFinite(z), X = x, Z = z, TargetTrack = id == ProgrammeId.Asat ? targetTrack : 0,
                 Waiting = !FrontLadder.Ready(id, w) // the mirror shows WAITS from the first snapshot, not from the next Tick
             });
             if (++nextRow == 0) nextRow = 1;
@@ -276,7 +276,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 {
                     FrontProgrammeEntry done = s.Queue[0];
                     s.Queue.RemoveAt(0);
-                    events.Add(new FrontEvent { Front = (Front)i, Id = done.Id, Cost = done.Cost, Kind = done.Kind, Owner = done.Owner, HasPoint = done.HasPoint, X = done.X, Z = done.Z, Row = done.Row });
+                    events.Add(new FrontEvent { Front = (Front)i, Id = done.Id, Cost = done.Cost, Kind = done.Kind, Owner = done.Owner, HasPoint = done.HasPoint, X = done.X, Z = done.Z, Row = done.Row, TargetTrack = done.TargetTrack });
                     Advance(now, w);
                 }
             }
@@ -412,7 +412,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                         // 100 means paid in full (the build is, or is about to be, running): a bar 99.6 % funded must not round up into BUILDING, or the card claims a build the host has not started.
                         Id = e.Id, Percent = (byte)(e.Started || e.Remaining <= 0.0001f ? 100 : Math.Clamp(Math.Floor(e.Funded / e.Cost * 100f), 0, 99)),
                         BuildLeft = (ushort)Math.Clamp(Math.Round(e.Started ? e.BuildEnd - now : e.Build), 0, ushort.MaxValue),
-                        Row = e.Row, Kind = e.Kind, Owner = e.Owner, HasPoint = e.HasPoint, X = e.X, Z = e.Z, Waiting = e.Waiting
+                        Row = e.Row, Kind = e.Kind, Owner = e.Owner, HasPoint = e.HasPoint, X = e.X, Z = e.Z, Waiting = e.Waiting, TargetTrack = e.TargetTrack
                     });
                 r.Log.AddRange(s.Log);
             }

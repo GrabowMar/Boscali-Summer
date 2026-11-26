@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// a map pick then stays armed for another click.
         /// </summary>
         bool Queue(Front front, ProgrammeId id, byte kind, bool hasPoint = false, float u = 0f, float v = 0f);
+        bool QueueAsat(int trackId) => false;
         /// <summary>CHIP IN: allocation into one queued row, by the host's row id.</summary>
         void Donate(Front front, ushort row, int amount);
         /// <summary>Packs up one of our EW trucks (its anchor ordinal) and redeploys it at a map point; the host judges the 20 km data center reach. False when not sent.</summary>
@@ -52,8 +53,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     {
         public readonly string Label;
         public readonly AvIcon Icon;
-        public readonly RectTransform Panel;
-        public ColumnTab(string label, AvIcon icon, RectTransform panel) { Label = label; Icon = icon; Panel = panel; }
+        public readonly RectTransform Panel, ArtTarget;
+        public ColumnTab(string label, AvIcon icon, RectTransform panel, RectTransform artTarget = null)
+        {
+            Label = label; Icon = icon; Panel = panel; ArtTarget = artTarget != null ? artTarget : panel;
+        }
     }
 
     /// <summary>One room: its map fills the left of the window; its management panels are tabs of the column on the right (spec 6).</summary>

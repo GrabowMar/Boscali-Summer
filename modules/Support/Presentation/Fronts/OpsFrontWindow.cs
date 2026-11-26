@@ -124,13 +124,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 infos[i] = new FrontInfoPanel(columnRoots[i], skin, (Front)i, cw, ch, panels.Count > 0 ? panels[0].Label : "THE FIRST TAB");
                 // Every panel sits on its room's painted ground: ORBIT's orbit-chart glass, NETWORK's glass over circuit, SHADOW's olive map-table canvas.
                 string ground = i == (int)Front.Space ? "ops_bg_orbit" : i == (int)Front.Cyber ? "ops_bg_network" : "ops_bg_shadow";
-                for (int k = 0; k < panels.Count; k++) FrontArt.Ground(panels[k].Panel, ground, GroundTint);
+                for (int k = 0; k < panels.Count; k++) FrontArt.Ground(panels[k].ArtTarget, ground, GroundTint);
                 FrontArt.Ground(infos[i].Rect, ground, GroundTint);
                 var items = new (AvIcon, string)[panels.Count + 1];
                 for (int k = 0; k < panels.Count; k++) items[k] = (panels[k].Icon, panels[k].Label);
                 items[panels.Count] = (AvIcon.Stack2, "FRONT");
                 int room = i;
-                bars[i] = new AvTabBar(r, items, k => { actions.Touch(); ShowTab(room, k); if (k != 0) LeaveFirstTab(room); });
+                bars[i] = new AvTabBar(r, items, k =>
+                {
+                    actions.Touch();
+                    int previous = tabOf[room];
+                    ShowTab(room, k);
+                    if (room == (int)Front.Space && previous != k)
+                    {
+                        Orbit?.CloseOperateDownlink();
+                        LeaveFirstTab(room);
+                    }
+                    else if (room != (int)Front.Space && k != 0) LeaveFirstTab(room);
+                });
                 bars[i].SetAccent(i == (int)Front.Space ? RoomInk.Ice : i == (int)Front.Cyber ? RoomInk.Phosphor : RoomInk.Gold);
                 bars[i].Place(new AvSlot(cx, my, cw, AvGridTokens.Tab));
                 skin.Add(bars[i].Restyle);
@@ -195,7 +206,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 columnRoots[i].gameObject.SetActive(i == front);
                 bars[i].Rect.gameObject.SetActive(i == front);
             }
-            if (shownFront != front) { shownFront = front; EndPicks(); ShowTab(front, tabOf[front]); } // a map pick never waits behind another room
+            if (shownFront != front) { Orbit?.CloseOperateDownlink(); shownFront = front; EndPicks(); ShowTab(front, tabOf[front]); } // a map pick never waits behind another room
             infos[front].Paint(v);
             rooms[front]?.Paint(v);
             int want = rooms[front] != null ? rooms[front].TakeTab() : -1;
@@ -267,13 +278,21 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private OrbitRoom Orbit => rooms[(int)Front.Space] as OrbitRoom;
 
         /// <summary>The SPACE room shows the DOWNLINK picture (its column tab, or enlarged over the map): only then does the feed hold its lease and render.</summary>
-        internal bool DownlinkShown => IsOpen && shownFront == (int)Front.Space && Orbit != null && (tabOf[shownFront] == OrbitRoom.DownlinkTab || Orbit.Enlarged);
+        internal bool DownlinkShown => IsOpen && shownFront == (int)Front.Space && Orbit != null && tabOf[shownFront] == OrbitRoom.OperateTab && Orbit.OperateDownlinkShown;
+
+#if !PUBLIC_RELEASE
+        internal void ShowOrbitOperateForAutomation()
+        {
+            if (shownFront != (int)Front.Space || tabOf[shownFront] == OrbitRoom.OperateTab) return;
+            ShowTab(shownFront, OrbitRoom.OperateTab);
+            LeaveFirstTab(shownFront);
+        }
+#endif
 
         /// <summary>A hand click on a room's later tab: an armed map pick of its first tab ends (it would wait off screen) and the map drops its rings now.</summary>
         private void LeaveFirstTab(int room)
         {
             rooms[room].EndPicks();
-            if (room == (int)Front.Space && Orbit != null && tabOf[room] == OrbitRoom.DownlinkTab) Orbit.DownlinkOpened();
             if (lastView != null && (int)lastView.Front == room) rooms[room].Paint(lastView);
         }
 
@@ -282,9 +301,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void OnWindowClosed()
         {
             EndPicks(); // a reopened window starts with no pick armed
-            Orbit?.Dock(); // a reopened window starts docked, and NODES auto-picks again
+            Orbit?.CloseWatch();
             (rooms[(int)Front.Cyber] as NetworkRoom)?.ForgetPick();
-            Orbit?.ReleaseDownlink(); // the resolve's small targets go back to the budget
             if (backdrop != null) backdrop.SetActive(false);
             ReleaseCursor();
             input.GiveBack();

@@ -95,16 +95,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             seenMode = f.Mode; seenSel = f.SelectedId; seenPkt = f.Packets;
         }
 
-        /// <summary>The DOWNLINK tab clicked by hand: a feed whose bird is not on station moves to the first one that is (a picture beats an empty panel).</summary>
-        internal void DownlinkOpened()
-        {
-            if (last == null || last.Feed == null || Feed == null) return;
-            int source = (int)last.Feed.Source;
-            if (source < last.Fleet.Count && last.Fleet[source].Up) return;
-            for (int k = 0; k < last.Fleet.Count; k++)
-                if (last.Fleet[k].Up) { Feed.SetSource((BirdKind)k); return; }
-        }
-
         /// <summary>A bird button: the map rings it too, and the feed switches to it (its own modes: EO for OPTICAL, SAR, STRIKE).</summary>
         private void PickBird(int kind)
         {
@@ -123,6 +113,58 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             g.Rect(c.x - w * 0.5f, c.y - h * 0.5f, w, h, k.WithAlpha(0.14f));
             g.Frame(c.x - w * 0.5f, c.y - h * 0.5f, w, h, 1.8f, k);
             plate.Labels.Take(new Rect(c.x - w * 0.5f - 10f, c.y - h * 0.5f - 10f, w + 20f, h + 20f));
+        }
+
+        private static Vector2 EllP(Vector2 c, float rx, float ry, float th) => new Vector2(c.x + Mathf.Cos(th) * rx, c.y + Mathf.Sin(th) * ry);
+
+        private static int EllSeg(float rx, float ry) => Mathf.Clamp(Mathf.CeilToInt((rx + ry) * 0.1f), 32, 128);
+
+        private static void EllRing(FrontVector g, Vector2 c, float rx, float ry, float w, Color k, int dashSegs = 0)
+        {
+            int n = EllSeg(rx, ry);
+            Vector2 prev = EllP(c, rx, ry, 0f);
+            for (int i = 1; i <= n; i++)
+            {
+                Vector2 q = EllP(c, rx, ry, 2f * Mathf.PI * i / n);
+                if (dashSegs <= 0 || (i / dashSegs) % 2 == 0) g.Line(prev, q, w, k);
+                prev = q;
+            }
+        }
+
+        private static void EllDisc(FrontVector g, Vector2 c, float rx, float ry, Color k)
+        {
+            int n = EllSeg(rx, ry);
+            Vector2 prev = EllP(c, rx, ry, 0f);
+            for (int i = 1; i <= n; i++)
+            {
+                Vector2 q = EllP(c, rx, ry, 2f * Mathf.PI * i / n);
+                g.Tri(c, prev, q, k);
+                prev = q;
+            }
+        }
+
+        private static void Sat(FrontVector g, Vector2 p, Color ink, bool solid, float sc)
+        {
+            Vector2 n = new Vector2(0f, -1f), t = new Vector2(1f, 0f);
+            Color back = Mc.PlateInk;
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Vector2 pc = p + t * (s * 10.5f * sc);
+                Vector2 a = pc - t * 6f * sc + n * 3.4f * sc, b = pc + t * 6f * sc + n * 3.4f * sc, c = pc + t * 6f * sc - n * 3.4f * sc, d = pc - t * 6f * sc - n * 3.4f * sc;
+                g.Quad(a + (a - pc) * 0.14f, b + (b - pc) * 0.14f, c + (c - pc) * 0.14f, d + (d - pc) * 0.14f, back);
+                if (solid)
+                {
+                    g.Quad(a, b, c, d, ink.WithAlpha(0.88f));
+                    g.Line(pc - n * 3.4f * sc, pc + n * 3.4f * sc, 0.9f, back);
+                }
+                else g.Polyline(new[] { a, b, c, d }, 1.2f, ink, true);
+                g.Line(p + t * (s * 5f * sc), p + t * (s * 5.5f * sc), 2f, ink);
+            }
+            g.Diamond(p, 7.6f * sc, back);
+            g.Diamond(p, 5.6f * sc, ink);
+            if (!solid) g.Diamond(p, 3.2f * sc, back);
+            g.Line(p + n * 5f * sc, p + n * 11f * sc, 1.3f, ink);
+            g.Disc(p + n * 11.5f * sc, 1.5f, ink, 8);
         }
 
         private static float TextW(string s, float size) => (s ?? "").Length * size * 0.6f;
@@ -221,7 +263,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 AvLay.Place(body, 0f, 0f, w, h);
                 RectTransform b = body;
                 pw = big ? w - 24f - Strip : w - 16f;
-                ph = big ? h - 36f : 416f;
+                ph = big ? h - 36f : Mathf.Min(416f, h - 458f);
                 float px = 8f, py = big ? 28f : 88f, cx = big ? w - 8f - Strip : 8f, cw = big ? Strip : w - 16f;
                 panel = FrontVector.Add(b, "Panel");
                 AvLay.Place(panel.rectTransform, 0f, 0f, w, h);
@@ -597,7 +639,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 SpaceFeedView f = v.Feed;
                 if (f == null) return;
-                // Birds on station (a feed whose bird is not up moves to one that is when the tab is opened: OrbitRoom.DownlinkOpened, never from a paint).
+                // The operator picks the source. Painting the feed never switches satellites.
                 int firstUp = -1;
                 bool sourceUp = false;
                 for (int k = 0; k < birds.Length; k++)
@@ -627,6 +669,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 }
 
                 if (f.ThreatActive) Box.SetMeta(C2Words.Fit(f.Threat, 58), FrontKit.Tone(AvState.Danger)); // a cockpit warning outranks the station line
+                else if (v.IncomingBird >= 0) Box.SetMeta(AsatCountdown(v), FrontKit.Tone(AvState.Danger));
                 else Box.SetMeta(f.Status, f.StatusTone == AvState.Danger || f.StatusTone == AvState.Caution ? FrontKit.Tone(f.StatusTone) : AvInk.Dim);
 
                 live = !noBird && HasPicture(f);
