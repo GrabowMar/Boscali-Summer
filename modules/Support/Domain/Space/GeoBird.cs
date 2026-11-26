@@ -3,6 +3,8 @@ using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
+    internal enum SatelliteBus : byte { Balanced, Agile, Wideband }
+
     /// <summary>
     /// One geostationary station-keeping satellite over the theatre (map u,v in 0..1). It sits parked at a point and covers a circular footprint (in ground km) around it.
     /// A burn moves it: it slews to a new parked point at a fixed speed and the fuel is spent up front, in proportion to the distance (plus a small fixed burn cost).
@@ -19,12 +21,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public readonly float DepartAt;
         /// <summary>Fuel left after the burn that is under way (0..100).</summary>
         public readonly float Fuel;
+        public readonly SatelliteBus Bus;
 
-        public GeoBird(float u, float v, float fuel) : this(u, v, u, v, 0f, fuel) { }
+        public GeoBird(float u, float v, float fuel, SatelliteBus bus = SatelliteBus.Balanced) : this(u, v, u, v, 0f, fuel, bus) { }
 
-        public GeoBird(float fromU, float fromV, float toU, float toV, float departAt, float fuel)
+        public GeoBird(float fromU, float fromV, float toU, float toV, float departAt, float fuel, SatelliteBus bus = SatelliteBus.Balanced)
         {
-            FromU = fromU; FromV = fromV; ToU = toU; ToV = toV; DepartAt = departAt; Fuel = Math.Clamp(fuel, 0f, 100f);
+            FromU = fromU; FromV = fromV; ToU = toU; ToV = toV; DepartAt = departAt; Fuel = Math.Clamp(fuel, 0f, 100f); Bus = bus;
         }
 
         /// <summary>
@@ -39,8 +42,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Fuel percent a burn over <paramref name="distance"/> costs (0 for no move).</summary>
         public static float Cost(float distance) => distance < 0.005f ? 0f : BurnBase + BurnPerUnit * distance;
 
+        public static float SpeedFor(SatelliteBus bus) => Slew * (bus switch
+        {
+            SatelliteBus.Agile => 1.35f,
+            SatelliteBus.Wideband => 0.75f,
+            _ => 1f
+        });
+
+        public float Speed => SpeedFor(Bus);
         public float Length => Distance(FromU, FromV, ToU, ToV);
-        public float Duration => Length / Slew;
+        public float Duration => Length / Speed;
         public bool Moving(float now) => Length > 0f && now - DepartAt < Duration;
         public float Eta(float now) => Moving(now) ? Math.Max(0f, Duration - (now - DepartAt)) : 0f;
         /// <summary>Progress of the burn, 0..1 (1 once parked).</summary>
@@ -55,22 +66,22 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public bool CanBurn(float now, float u, float v)
         {
             if (Moving(now)) return false;
-            float cost = Cost(Distance(U(now), V(now), Clamp(u), Clamp(v)));
+            float cost = Cost(Distance(U(now), V(now), ClampStation(u), ClampStation(v)));
             return Fuel >= cost && cost > 0f;
         }
 
         /// <summary>Starts a burn to (u,v) and returns the new state; the same state back when it is refused (already moving, no move, not enough fuel).</summary>
         public GeoBird Relocate(float now, float u, float v)
         {
-            u = Clamp(u); v = Clamp(v);
+            u = ClampStation(u); v = ClampStation(v);
             if (!CanBurn(now, u, v)) return this;
             float fu = U(now), fv = V(now);
-            return new GeoBird(fu, fv, u, v, now, Fuel - Cost(Distance(fu, fv, u, v)));
+            return new GeoBird(fu, fv, u, v, now, Fuel - Cost(Distance(fu, fv, u, v)), Bus);
         }
 
         /// <summary>The footprint covers (u,v): the gate for a perk or a reveal that needs a satellite over the target.</summary>
         public bool Covers(float now, float u, float v, float radius) => Distance(U(now), V(now), u, v) <= radius;
 
-        private static float Clamp(float x) => Scalar.Clamp(x, 0.02f, 0.98f);
+        public static float ClampStation(float coordinate) => Scalar.Clamp(coordinate, 0.02f, 0.98f);
     }
 }

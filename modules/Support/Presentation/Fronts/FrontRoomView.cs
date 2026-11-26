@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public float Cost;
         /// <summary>Funding share 0..1 while the bar fills; build progress 0..1 once <see cref="Building"/>.</summary>
         public float Progress;
-        public bool Building;
+        public bool Building, Waiting;
         public int BuildLeft;
         /// <summary>The whole build clock in seconds (the second phase, after the funding bar is full).</summary>
         public int BuildTotal;
@@ -51,6 +51,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal struct OrbitTrackView
     {
         public BirdKind Kind;
+        public SatelliteBus Bus;
+        public int TrackId;
         public bool Own, Alive;
         /// <summary>Where the bird is now, map u,v (0..1, v down): its parked point, or a point on the transfer while it relocates.</summary>
         public float U, V;
@@ -110,6 +112,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal struct FleetCardView
     {
         public int Kind;
+        public SatelliteBus Bus;
         public string Callsign;
         /// <summary>NOT LAUNCHED / ON STATION / BURNING m:ss / LOST / LAUNCHING m:ss (QUEUED · n % or WAITS FOR A PAD before the build starts).</summary>
         public string State;
@@ -129,19 +132,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// <summary>An enemy bird the OPS mirror carries (up and known only).</summary>
     internal struct HostileBirdView
     {
-        public int Kind;
+        public int Kind, Id;
         /// <summary>OPTICAL / RADAR / KINETIC.</summary>
         public string Word;
-        /// <summary>Its footprint covers at least one of our airbases.</summary>
-        public bool OverOwn;
-        /// <summary>The nearest of our airbases under its footprint ("" when none).</summary>
-        public string Nearest;
     }
 
     /// <summary>A queued build with a map point: a ghost on the plate with its label ("PAD-2 · OPAL · 1:12"); Kind says what it builds where a room has more than one (CYBER: the AnchorKind).</summary>
     internal struct MapGhostView
     {
-        public float U, V;
+        public float U, V, Radius;
         public string Label;
         public byte Kind;
     }
@@ -199,6 +198,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         // ORBIT payload.
         public SpaceFeedView Feed = new SpaceFeedView();
+        public int IncomingBird = -1;
+        public float IncomingSeconds, IncomingAimU, IncomingAimV;
+        public bool IncomingLaunched;
         public readonly List<OrbitTrackView> Birds = new List<OrbitTrackView>(6);
         public readonly List<OrbitSiteView> Sites = new List<OrbitSiteView>(6);
         public string Theatre = "";
@@ -208,7 +210,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>Airbases on the theatre plate (all three rooms draw them).</summary>
         public readonly List<MapAirbaseView> Airbases = new List<MapAirbaseView>(MaxAirbases);
         public const int MaxAirbases = 24;
-        // SATELLITES tab (FrontViews.Orbit).
+        // Launch and operate panels.
         public readonly List<PadView> Pads = new List<PadView>(FrontRules.PadCap);
         public readonly List<FleetCardView> Fleet = new List<FleetCardView>(FrontRules.BirdCap);
         public readonly List<HostileBirdView> Hostile = new List<HostileBirdView>(FrontRules.BirdCap);

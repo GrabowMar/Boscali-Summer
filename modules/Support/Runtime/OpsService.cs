@@ -128,7 +128,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (FactionHQ hq in hqs)
             {
                 if (hq == null || factions.ContainsKey(hq) || factions.Count >= MaximumFactions) continue;
-                if ((cyber != null && cyber.HasCyber(hq)) || (sof != null && sof.HasSof(hq))) Establish(hq);
+                if ((space != null && space.TryGetStateCoarse(hq, out _)) || (cyber != null && cyber.HasCyber(hq)) || (sof != null && sof.HasSof(hq))) Establish(hq);
             }
             foreach (var pair in factions) pair.Value.Desk.Tick();
             TickEffects(now);
@@ -223,10 +223,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             switch (kind)
             {
                 case OpKind.Asat:
-                    // A satellite class, not a unit: the enemy constellation is never listed, so every valid class is accepted and a strike on a dead one fizzles.
                     if (id < 0 || id >= SpaceRules.BirdCount) return false;
-                    FactionHQ victim = ChooseVictim(f, (BirdKind)id);
-                    target = new OpTarget(id, 0f, 0f, victim != null ? manager.FactionKeyOf(victim) : 0);
+                    FactionOps enemy = TrackedEnemy(f.Owner, out SpaceState state);
+                    int track = enemy != null ? TrackId(enemy, state, (BirdKind)id) : 0;
+                    if (track == 0) return false;
+                    target = new OpTarget(track, 0f, 0f, enemy.Key);
                     return true;
                 case OpKind.ZeroDay: return cyber != null && cyber.TryNodeTarget(f.Owner, id, out target);
                 case OpKind.Fob: return sof != null && sof.TryHeldTarget(f.Owner, id, out target);
@@ -242,10 +243,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// </summary>
         internal bool FillState(Player viewer, OpsStateData into)
         {
-            into.Active = false; into.CyberOps = false; into.SofOps = false; into.BirdsDown = 0; into.EnemyBirdsDown = 0; into.BirdsLaunched = 0;
+            into.Active = false; into.CyberOps = false; into.SofOps = false; into.BirdsDown = 0; into.EnemyBirdsDown = 7; into.BirdsLaunched = 0;
+            into.IncomingBird = -1; into.IncomingLaunched = false; into.IncomingDeadline = into.IncomingAimU = into.IncomingAimV = 0f;
             Array.Clear(into.BirdPercent, 0, into.BirdPercent.Length);
             Array.Clear(into.Geo, 0, into.Geo.Length);
-            into.Rows.Clear(); into.Pings.Clear(); into.Events.Clear(); into.Flights.Clear(); into.Log.Clear();
+            Array.Clear(into.EnemyTrackIds, 0, into.EnemyTrackIds.Length);
+            into.Rows.Clear(); into.Pings.Clear(); into.Events.Clear(); into.Flights.Clear(); into.Sites.Clear(); into.Log.Clear();
             if (viewer == null || viewer.HQ == null || !Enabled || !factions.TryGetValue(viewer.HQ, out FactionOps f))
             {
                 if (viewer != null && viewer.HQ != null) manager.CopyOverlordLog(viewer.HQ, into.Log); // OVERLORD still talks to its own console when OPERATIONS is off

@@ -66,13 +66,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public bool Active, CyberOps, SofOps;
         /// <summary>Bit i set while the faction's satellite i (OPTICAL, RADAR, KINETIC) is dead; <see cref="BirdPercent"/> is its rebuild progress.</summary>
         public byte BirdsDown;
-        /// <summary>Same bits for the strongest enemy's constellation (alive or dead is public: its launches are visible); rides in the BirdsDown byte's bits 3..5.</summary>
+        /// <summary>Bits for untracked classes in the strongest observed opponent's constellation.</summary>
         public byte EnemyBirdsDown;
         /// <summary>Bit i set once the faction's own satellite i has been launched at least once this scene (protocol 44; own birds only).</summary>
         public byte BirdsLaunched;
         public readonly byte[] BirdPercent = new byte[SpaceRules.BirdCount];
-        /// <summary>Each satellite's geostationary state: indices 0..2 the viewer's own birds, 3..5 the strongest enemy's (public: a geostationary bird is visible to all).</summary>
+        /// <summary>Exact own telemetry at indices 0..2 and stationary enemy sector estimates at 3..5.</summary>
         public readonly GeoBird[] Geo = new GeoBird[OpsWire.GeoCount];
+        public readonly int[] EnemyTrackIds = new int[SpaceRules.BirdCount];
+        public int IncomingBird = -1;
+        public bool IncomingLaunched;
+        public float IncomingDeadline, IncomingAimU, IncomingAimV;
         public readonly List<OpsRow> Rows = new List<OpsRow>();
         public readonly List<OpsPingRow> Pings = new List<OpsPingRow>();
         public readonly List<OpsEventRow> Events = new List<OpsEventRow>();
@@ -87,6 +91,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             var c = new OpsStateData { Protocol = Protocol, Faction = Faction, Epoch = Epoch, Active = Active, CyberOps = CyberOps, SofOps = SofOps, Seq = Seq, Now = Now, BirdsDown = BirdsDown, EnemyBirdsDown = EnemyBirdsDown, BirdsLaunched = BirdsLaunched };
             Array.Copy(BirdPercent, c.BirdPercent, BirdPercent.Length);
             Array.Copy(Geo, c.Geo, Geo.Length);
+            Array.Copy(EnemyTrackIds, c.EnemyTrackIds, EnemyTrackIds.Length);
+            c.IncomingBird = IncomingBird; c.IncomingLaunched = IncomingLaunched; c.IncomingDeadline = IncomingDeadline;
+            c.IncomingAimU = IncomingAimU; c.IncomingAimV = IncomingAimV;
             c.Rows.AddRange(Rows); c.Pings.AddRange(Pings); c.Events.AddRange(Events); c.Flights.AddRange(Flights); c.Sites.AddRange(Sites); c.Log.AddRange(Log);
             return c;
         }
@@ -97,7 +104,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             if (o == null || Active != o.Active || CyberOps != o.CyberOps || SofOps != o.SofOps || BirdsDown != o.BirdsDown || EnemyBirdsDown != o.EnemyBirdsDown || BirdsLaunched != o.BirdsLaunched ||
                 Rows.Count != o.Rows.Count || Pings.Count != o.Pings.Count || Events.Count != o.Events.Count || Flights.Count != o.Flights.Count || Sites.Count != o.Sites.Count || Log.Count != o.Log.Count) return false;
             for (int i = 0; i < BirdPercent.Length; i++) if (BirdPercent[i] != o.BirdPercent[i]) return false;
-            for (int i = 0; i < Geo.Length; i++) if (!OpsWire.SameGeo(Geo[i], o.Geo[i])) return false;
+            for (int i = 0; i < SpaceRules.BirdCount; i++)
+            {
+                if (!OpsWire.SameGeo(Geo[i], o.Geo[i]) || EnemyTrackIds[i] != o.EnemyTrackIds[i]) return false;
+                if (EnemyTrackIds[i] != 0 && !OpsWire.SameSector(Geo[SpaceRules.BirdCount + i], o.Geo[SpaceRules.BirdCount + i])) return false;
+            }
+            if (IncomingBird != o.IncomingBird || IncomingLaunched != o.IncomingLaunched || !SpaceMirror.SameExpiry(IncomingDeadline, o.IncomingDeadline) ||
+                (IncomingLaunched && (!OpsWire.SameCell(IncomingAimU, o.IncomingAimU) || !OpsWire.SameCell(IncomingAimV, o.IncomingAimV)))) return false;
             for (int i = 0; i < Rows.Count; i++)
             {
                 OpsRow a = Rows[i], b = o.Rows[i];
@@ -118,28 +131,41 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         }
     }
 
-    /// <summary>Engine-free OPERATIONS state codec (protocol 36). Every reader returns an inert value (Protocol 0 or the foreign byte alone) instead of throwing.</summary>
+    /// <summary>Engine-free OPERATIONS state codec. Every reader returns an inert value (Protocol 0 or the foreign byte alone) instead of throwing.</summary>
     internal static class OpsWire
     {
-        public const int MaxRows = OpsDesk.Slots, MaxPings = 4, MaxEvents = 8, MaxFlights = 1, MaxSites = 2, MaxName = 12, MaxLog = WatchLogRing.Capacity;
+        public const int MaxRows = OpsDesk.Slots, MaxPings = 4, MaxEvents = 8, MaxFlights = 4, MaxSites = 2, MaxName = 12, MaxLog = WatchLogRing.Capacity;
         private const int MinRowBytes = 10, MinPingBytes = 5, MinEventBytes = 2, MinFlightBytes = 8, MinSiteBytes = 7, MinLogBytes = 4;
         private const byte FlagActive = 1, FlagCyber = 2, FlagSof = 4;
         public const int GeoCount = SpaceRules.BirdCount * 2;
-        private const int GeoBytes = 11;
+        private const int GeoBytes = 12;
 
         private static int Cell(float x) => (int)Math.Round(Math.Clamp(x, 0f, 1f) * 65535f);
         private static void Put16(ISpaceWriter w, int v) { w.WriteByte((byte)v); w.WriteByte((byte)(v >> 8)); }
+        private static bool ReadCell(ISpaceReader r, out float value)
+        {
+            value = 0f;
+            if (!r.TryReadByte(out byte lo) || !r.TryReadByte(out byte hi)) return false;
+            value = (lo | (hi << 8)) / 65535f;
+            return true;
+        }
+
+        public static bool SameCell(float a, float b) => Cell(a) == Cell(b);
+
+        public static bool SameSector(in GeoBird a, in GeoBird b) =>
+            AsatRules.TrackSector(a.ToU) == AsatRules.TrackSector(b.ToU) && AsatRules.TrackSector(a.ToV) == AsatRules.TrackSector(b.ToV);
 
         /// <summary>The same wire image: positions to 1/65535, the burn start to the second, the fuel to a percent.</summary>
         public static bool SameGeo(in GeoBird a, in GeoBird b) =>
             Cell(a.FromU) == Cell(b.FromU) && Cell(a.FromV) == Cell(b.FromV) && Cell(a.ToU) == Cell(b.ToU) && Cell(a.ToV) == Cell(b.ToV) &&
-            Math.Round(a.Fuel) == Math.Round(b.Fuel) && (a.Length <= 0f || SpaceMirror.SameExpiry(a.DepartAt, b.DepartAt));
+            Math.Round(a.Fuel) == Math.Round(b.Fuel) && a.Bus == b.Bus && (a.Length <= 0f || SpaceMirror.SameExpiry(a.DepartAt, b.DepartAt));
 
         private static void WriteGeo(ISpaceWriter w, in GeoBird g, float now)
         {
             Put16(w, Cell(g.FromU)); Put16(w, Cell(g.FromV)); Put16(w, Cell(g.ToU)); Put16(w, Cell(g.ToV));
             Put16(w, g.Length > 0f ? (int)Math.Clamp(Math.Round(now - g.DepartAt), 0d, ushort.MaxValue) : 0); // seconds since the burn began
             w.WriteByte((byte)Math.Clamp((int)Math.Round(g.Fuel), 0, 100));
+            w.WriteByte((byte)g.Bus);
         }
 
         private static bool ReadGeo(ISpaceReader r, float now, out GeoBird g)
@@ -147,8 +173,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             g = default;
             var v = new int[5];
             for (int i = 0; i < 5; i++) { if (!r.TryReadByte(out byte lo) || !r.TryReadByte(out byte hi)) return false; v[i] = lo | (hi << 8); }
-            if (!r.TryReadByte(out byte fuel) || fuel > 100) return false;
-            g = new GeoBird(v[0] / 65535f, v[1] / 65535f, v[2] / 65535f, v[3] / 65535f, now - v[4], fuel);
+            if (!r.TryReadByte(out byte fuel) || fuel > 100 || !r.TryReadByte(out byte bus) || bus > (byte)SatelliteBus.Wideband) return false;
+            g = new GeoBird(v[0] / 65535f, v[1] / 65535f, v[2] / 65535f, v[3] / 65535f, now - v[4], fuel, (SatelliteBus)bus);
             return true;
         }
 
@@ -161,7 +187,22 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             w.WriteByte((byte)((s.BirdsDown & 7) | ((s.EnemyBirdsDown & 7) << 3)));
             w.WriteByte(s.BirdsLaunched);
             for (int i = 0; i < s.BirdPercent.Length; i++) w.WriteByte(s.BirdPercent[i]);
-            for (int i = 0; i < GeoCount; i++) WriteGeo(w, s.Geo[i], s.Now);
+            for (int i = 0; i < SpaceRules.BirdCount; i++) WriteGeo(w, s.Geo[i], s.Now);
+            for (int i = 0; i < SpaceRules.BirdCount; i++)
+            {
+                int id = s.EnemyTrackIds[i];
+                SpaceWire.WriteVar(w, (uint)Math.Max(0, id));
+                if (id <= 0) continue;
+                GeoBird track = s.Geo[SpaceRules.BirdCount + i];
+                Put16(w, Cell(AsatRules.TrackSector(track.ToU))); Put16(w, Cell(AsatRules.TrackSector(track.ToV)));
+            }
+            bool incoming = s.IncomingBird >= 0 && s.IncomingBird < SpaceRules.BirdCount;
+            w.WriteByte(incoming ? (byte)((s.IncomingBird + 1) | (s.IncomingLaunched ? 4 : 0)) : (byte)0);
+            if (incoming)
+            {
+                SpaceWire.WriteExpiry(w, s.IncomingDeadline, s.Now);
+                if (s.IncomingLaunched) { Put16(w, Cell(s.IncomingAimU)); Put16(w, Cell(s.IncomingAimV)); }
+            }
             int n = Math.Min(s.Rows.Count, MaxRows);
             w.WriteByte((byte)n);
             for (int i = 0; i < n; i++)
@@ -252,8 +293,23 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             s.BirdsDown = (byte)(birds & 7); s.EnemyBirdsDown = (byte)(birds >> 3);
             if (!r.TryReadByte(out s.BirdsLaunched) || (s.BirdsLaunched & ~7) != 0) return Bad();
             for (int i = 0; i < s.BirdPercent.Length; i++) if (!r.TryReadByte(out s.BirdPercent[i]) || s.BirdPercent[i] > 100) return Bad();
-            if (r.Remaining < GeoCount * GeoBytes) return Bad();
-            for (int i = 0; i < GeoCount; i++) if (!ReadGeo(r, now, out s.Geo[i])) return Bad();
+            if (r.Remaining < SpaceRules.BirdCount * (GeoBytes + 1) + 1) return Bad();
+            for (int i = 0; i < SpaceRules.BirdCount; i++) if (!ReadGeo(r, now, out s.Geo[i])) return Bad();
+            for (int i = 0; i < SpaceRules.BirdCount; i++)
+            {
+                if (!SpaceWire.ReadInt(r, out s.EnemyTrackIds[i])) return Bad();
+                if (s.EnemyTrackIds[i] == 0) continue;
+                if (!ReadCell(r, out float u) || !ReadCell(r, out float v)) return Bad();
+                s.Geo[SpaceRules.BirdCount + i] = new GeoBird(u, v, 0f);
+            }
+            if (!r.TryReadByte(out byte incoming) || incoming > 7 || incoming == 4) return Bad();
+            if (incoming > 0)
+            {
+                s.IncomingBird = (incoming & 3) - 1;
+                s.IncomingLaunched = (incoming & 4) != 0;
+                if (!SpaceWire.ReadExpiry(r, now, out s.IncomingDeadline) ||
+                    (s.IncomingLaunched && (!ReadCell(r, out s.IncomingAimU) || !ReadCell(r, out s.IncomingAimV)))) return Bad();
+            }
             if (!r.TryReadByte(out byte n) || n > MaxRows || r.Remaining < n * MinRowBytes) return Bad();
             for (int i = 0; i < n; i++)
             {
@@ -314,7 +370,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             for (int i = 0; i < copy.Rows.Count; i++) { OpsRow r = copy.Rows[i]; if (r.EndsAt > 0f) r.EndsAt += offset; copy.Rows[i] = r; }
             for (int i = 0; i < copy.Pings.Count; i++) { OpsPingRow p = copy.Pings[i]; if (p.Until > 0f) p.Until += offset; copy.Pings[i] = p; }
             for (int i = 0; i < copy.Flights.Count; i++) { OpsFlightRow f = copy.Flights[i]; if (f.EndsAt > 0f) f.EndsAt += offset; copy.Flights[i] = f; }
-            for (int i = 0; i < copy.Geo.Length; i++) { GeoBird g = copy.Geo[i]; copy.Geo[i] = new GeoBird(g.FromU, g.FromV, g.ToU, g.ToV, g.DepartAt + offset, g.Fuel); }
+            if (copy.IncomingBird >= 0) copy.IncomingDeadline += offset;
+            for (int i = 0; i < SpaceRules.BirdCount; i++) { GeoBird g = copy.Geo[i]; copy.Geo[i] = new GeoBird(g.FromU, g.FromV, g.ToU, g.ToV, g.DepartAt + offset, g.Fuel, g.Bus); }
             return copy;
         }
 

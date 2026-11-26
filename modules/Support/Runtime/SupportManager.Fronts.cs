@@ -41,10 +41,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal int FrontSetFocus(Front front, float x, float z) =>
             SendSpace(SpaceCommandKind.FrontFocus, 0, new[] { Pack(front, 0), SofCodes.PackPoint(x, z) });
 
-        /// <summary>Queue a build on a front (protocol 44: Ids = { front | programme &lt;&lt; 2 | kind &lt;&lt; 6, packed point or 0 for automatic placement }). <paramref name="kind"/> is the satellite kind.</summary>
+        /// <summary>Queue a build on a front. For a satellite, <paramref name="kind"/> packs its payload and bus.</summary>
         internal int FrontQueue(Front front, ProgrammeId programme, byte kind = 0, bool hasPoint = false, float x = 0f, float z = 0f) =>
-            FrontRules.BelongsTo(front, programme) && kind <= 3
+            FrontRules.BelongsTo(front, programme) && (programme == ProgrammeId.LaunchSatellite ? GeoSpace.TryUnpackLaunch(kind, out _, out _) : kind <= 3)
                 ? SendSpace(SpaceCommandKind.FrontQueue, 0, new[] { Pack(front, (int)programme | (kind << 4)), hasPoint ? SofCodes.PackPoint(x, z) : 0 }) : 0;
+
+        internal int FrontQueueAsat(int trackId) => trackId > 0
+            ? SendSpace(SpaceCommandKind.FrontQueue, 0, new[] { Pack(Front.Space, (int)ProgrammeId.Asat), 0, trackId }) : 0;
 
         /// <summary>Donate allocation to one queued row by its row id (the host takes only what the bar still needs and your balance allows).</summary>
         internal int FrontDonate(Front front, ushort row, int amount) =>

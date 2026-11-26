@@ -1,3 +1,5 @@
+using BoscaliSummer.Modules.Support.Domain.Space;
+
 namespace BoscaliSummer.Modules.Support.Domain.Fronts
 {
     /// <summary>Builds a front has already queued, counted as coming by the ladder (Birds is a kind mask).</summary>
@@ -23,7 +25,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             switch (id)
             {
                 case ProgrammeId.UplinkSite: q.Pads++; break;
-                case ProgrammeId.LaunchSatellite: if (kind < 8) q.Birds |= (byte)(1 << kind); break;
+                case ProgrammeId.LaunchSatellite:
+                    if (GeoSpace.TryUnpackLaunch(kind, out BirdKind bird, out _)) q.Birds |= (byte)(1 << (int)bird);
+                    break;
                 case ProgrammeId.DataCenter: q.DataCenters++; break;
                 case ProgrammeId.EwTruck: q.Trucks++; break;
                 case ProgrammeId.Camp: q.Camps++; break;
@@ -51,7 +55,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case ProgrammeId.LaunchSatellite:
                     int up = w.BirdsUp | q.Birds;
                     if (Bits(up) >= FrontRules.BirdCap) return FrontOutcome.BirdsUp;
-                    if (kind < 8 && (up & (1 << kind)) != 0) return FrontOutcome.KindUp;
+                    if (!GeoSpace.TryUnpackLaunch(kind, out BirdKind bird, out _) || (up & (1 << (int)bird)) != 0) return FrontOutcome.KindUp;
                     if (pads == 0) return FrontOutcome.NoPad;
                     return Bits(up) + 1 > FrontRules.BirdsPerPad * pads ? FrontOutcome.PadFull : FrontOutcome.None;
                 case ProgrammeId.DataCenter: return dcs >= FrontRules.DataCenterCap ? FrontOutcome.DataCentersMax : FrontOutcome.None;

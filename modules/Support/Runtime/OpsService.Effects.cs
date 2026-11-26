@@ -7,43 +7,54 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
-    /// What a finished countdown does. ZERO-DAY: a SAM NET FAIL on one revealed SAM cluster through the launch block a held SAM C2 node uses (3 minutes, halved when an enemy EW truck stands
-    /// within 18 km of the cluster). ASAT: a real launcher vehicle beside the data center for the countdown (the vulnerable anchor with the data center), then a scripted ascent of 60 s that
-    /// every client plays from the mirror, then the host-timed kill of one chosen enemy satellite through <see cref="Domain.Space.SpaceState.KillBird"/>.
+    /// Applies completed operations. ASAT puts a real launcher on the ground, then contests one tracked satellite's position at impact.
     /// </summary>
     internal sealed partial class OpsService
     {
         private sealed class Flight
         {
-            public int Id, Bird;
+            public int Id;
             public FactionOps Attacker;
-            public FactionHQ Victim;
-            public float X, Z, EndsAt, LaunchedAt;
+            public AsatTarget Target;
+            public float X, Z, EndsAt, AimU, AimV;
+        }
+
+        private readonly struct AsatTarget
+        {
+            public readonly FactionHQ Owner;
+            public readonly BirdKind Kind;
+            public readonly int Instance;
+            public readonly SpaceState Origin;
+
+            public AsatTarget(FactionHQ owner, BirdKind kind, int instance, SpaceState origin)
+            { Owner = owner; Kind = kind; Instance = instance; Origin = origin; }
         }
 
         private sealed partial class FactionOps
         {
             public Unit Launcher;
             public bool LauncherSpawned;
-            /// <summary>A finished ASAT programme waits on its launcher: the satellite class it will fire at (-1 = none pending), when it launches, and the next reveal pulse.</summary>
-            public int PendingBird = -1;
+            public AsatTarget PendingTarget;
             public float LaunchAt, NextReveal;
+            public readonly int[] TrackIds = new int[SpaceRules.BirdCount];
+            public readonly int[] TrackInstances = new int[SpaceRules.BirdCount];
+            public SpaceState TrackedState;
         }
 
-        private readonly List<Flight> flights = new List<Flight>(2);
-        private int flightSerial;
+        private readonly List<Flight> flights = new List<Flight>(OpsWire.MaxFlights);
+        private int flightSerial, trackSerial;
 
         partial void ResetEffects()
         {
-            foreach (var pair in factions) { DiscardLauncher(pair.Value); pair.Value.PendingBird = -1; }
+            foreach (var pair in factions) DiscardLauncher(pair.Value);
             flights.Clear();
-            flightSerial = 0;
+            flightSerial = trackSerial = 0;
         }
 
         partial void TickEffects(float now)
         {
-            TickLaunchers(now);
             TickFlights(now);
+            TickLaunchers(now);
             // A FOB that ended early (the building was retaken) stops showing as up.
             foreach (var pair in factions)
             {
@@ -53,8 +64,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>
-        /// OPS FRONTS S1b: a finished ZERO-DAY, ASAT or FOB programme runs its effect directly, with no operation bar behind it (the programme was the bar). ZERO-DAY takes the faction's nearest
-        /// revealed SAM C2 node, ASAT the first satellite class (RADAR, OPTICAL, KINETIC) an enemy still has up, FOB the picked building (<paramref name="heldId"/>) while it is still held, else the
+        /// A finished programme runs its effect directly. ZERO-DAY takes the faction's nearest revealed SAM C2 node and FOB uses the picked building while it is still held, else the
         /// first building the faction holds. False when there is nothing to hit.
         /// </summary>
         internal bool RunProgramme(FactionHQ owner, ProgrammeId id, int heldId = 0)
@@ -66,16 +76,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     return cyber != null && cyber.TryBestSamNode(owner, out int node) && cyber.TryNodeTarget(owner, node, out OpTarget sam) && FireZeroDay(f, sam);
                 case ProgrammeId.Fob:
                     return sof != null && ((heldId != 0 && sof.TryHeldTarget(owner, heldId, out OpTarget spot)) || sof.TryHeldTarget(owner, sof.FirstHeldId(owner), out spot)) && FireFob(f, spot);
-                case ProgrammeId.Asat:
-                    if (f.PendingBird >= 0) return false; // one launcher on the pad at a time
-                    foreach (int cls in new[] { 1, 0, 2 })
-                    {
-                        FactionHQ victim = ChooseVictim(f, (BirdKind)cls);
-                        if (victim == null) continue;
-                        ArmLauncher(f, cls, victim);
-                        return true;
-                    }
-                    return false;
+                case ProgrammeId.Asat: return RunAsatProgramme(owner, 0) == FrontOutcome.None;
                 default:
                     return false;
             }
@@ -95,7 +96,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             switch (e.Op)
             {
                 case OpKind.ZeroDay: FireZeroDay(f, e.Target); break;
-                case OpKind.Asat: FireAsat(f, e.Target); break;
+                case OpKind.Asat:
+                    if (TryFindTrack(e.Target.Id, out AsatTarget target)) FireAsat(f, target, SupportManager.MissionNow());
+                    break;
                 case OpKind.Fob: FireFob(f, e.Target); break;
             }
         }
@@ -130,164 +133,247 @@ namespace BoscaliSummer.Modules.Support.Runtime
             f.Launcher = null; f.LauncherSpawned = false;
         }
 
-        /// <summary>One real launcher beside the data center. With no legal site the countdown still runs: the data center is then the only vulnerable anchor (logged).</summary>
-        private void SpawnLauncher(FactionOps f)
+        private bool SpawnLauncher(FactionOps f)
         {
             DiscardLauncher(f);
-            if (cyber == null || !cyber.TryDataCenterSpot(f.Owner, out GlobalPosition spot, out Airbase parent)) return;
-            if (cyber.Spawner.TryCreateLauncher(f.Owner, 0, spot, parent, out Unit unit))
+            if (cyber == null) return false;
+            if (cyber.TryDataCenterSpot(f.Owner, out GlobalPosition spot, out Airbase parent) &&
+                cyber.Spawner.TryCreateLauncher(f.Owner, 0, spot, parent, out f.Launcher)) return f.LauncherSpawned = true;
+            if (space == null) return false;
+            foreach (Unit pad in space.UplinksFor(f.Owner))
             {
-                f.Launcher = unit; f.LauncherSpawned = true;
-                Plugin.Logger?.LogInfo("[Support.Ops] " + f.Owner.name + " ASAT launcher up (" + CyberAnchorSpawner.DescribeLauncher() + "): kill it within 60 s to break the strike.");
+                if (pad == null || UplinkSpawner.Down(pad, f.Owner)) continue;
+                spot = pad.transform.position.ToGlobalPosition();
+                if (cyber.Spawner.TryCreateLauncher(f.Owner, 0, spot, null, out f.Launcher)) return f.LauncherSpawned = true;
             }
-            else Plugin.Logger?.LogWarning("[Support.Ops] " + f.Owner.name + " ASAT launcher found no legal site: the countdown runs with the data center as its only vulnerable anchor.");
+            return false;
         }
 
-        /// <summary>
-        /// A finished ASAT programme puts its launcher on the pad beside the data center for <see cref="OpsRules.CountdownSeconds"/> before it fires (core: killing it in the countdown aborts
-        /// the strike). The victim is warned at once and sees the launcher (a native sighting every few seconds), so it can be hunted.
-        /// </summary>
-        private void ArmLauncher(FactionOps f, int bird, FactionHQ victim)
+        private FactionOps TrackedEnemy(FactionHQ owner, out SpaceState enemyState)
         {
-            float now = SupportManager.MissionNow();
-            SpawnLauncher(f);
-            f.PendingBird = bird; f.LaunchAt = now + OpsRules.CountdownSeconds; f.NextReveal = now;
-            int victimKey = manager != null ? manager.FactionKeyOf(victim) : 0;
-            f.Desk.AddPing(OpKind.Asat, OpPingPhase.Execute, OpsRules.CountdownSeconds + 5f, 0, victimKey);
-            RodGuard.Tell(victim, "ENEMY ASAT LAUNCHER ON THE PAD — KILL IT WITHIN " + (int)OpsRules.CountdownSeconds + " S TO STOP THE STRIKE ON OUR " + OpsWords.Bird(bird) + " BIRD");
-            Plugin.Logger?.LogInfo("[Support.Ops] " + f.Owner.name + " ASAT armed at the " + OpsWords.Bird(bird) + " bird of " + victim.name + ": launch in " + (int)OpsRules.CountdownSeconds + " s unless the launcher dies.");
-        }
-
-        /// <summary>The launcher countdown: a dead launcher aborts the strike, a live one is shown to every enemy, and the strike fires when the countdown ends.</summary>
-        private void TickLaunchers(float now)
-        {
-            foreach (var pair in factions)
+            enemyState = null;
+            if (space == null) return null;
+            FactionOps best = null;
+            float share = -1f;
+            foreach (FactionOps side in factions.Values)
             {
-                FactionOps f = pair.Value;
-                if (f.PendingBird < 0) continue;
-                if (f.LauncherSpawned && !LauncherUp(f))
-                {
-                    f.PendingBird = -1;
-                    DiscardLauncher(f);
-                    RodGuard.Tell(f.Owner, "ASAT LAUNCHER DESTROYED — STRIKE ABORTED");
-                    RodGuard.Warn(f.Owner, "ENEMY ASAT LAUNCHER DESTROYED — STRIKE ABORTED");
-                    Plugin.Logger?.LogInfo("[Support.Ops] " + f.Owner.name + " ASAT aborted: the launcher was destroyed in its countdown.");
-                    continue;
-                }
-                if (now >= f.LaunchAt)
-                {
-                    int bird = f.PendingBird;
-                    f.PendingBird = -1;
-                    FactionHQ victim = ChooseVictim(f, (BirdKind)bird);
-                    FireAsat(f, new OpTarget(bird, 0f, 0f, victim != null && manager != null ? manager.FactionKeyOf(victim) : 0));
-                    continue;
-                }
-                if (now < f.NextReveal || !LauncherUp(f)) continue;
-                f.NextReveal = now + 5f;
-                var hqs = FactionRegistry.GetAllHQs();
-                if (hqs == null) continue;
-                foreach (FactionHQ enemy in hqs)
-                {
-                    if (enemy == null || enemy == f.Owner) continue;
-                    try { enemy.RpcUpdateTrackingInfo(f.Launcher.persistentID); } // a real sighting: the launcher is a target
-                    catch (System.Exception e) { Plugin.Logger?.LogDebug("[Support.Ops] Launcher reveal refused: " + e.Message); }
-                }
-            }
-        }
-
-        /// <summary>
-        /// The launch: the ascent starts (60 s, played by every client from the flight row), the victim is warned (ASAT LAUNCH DETECTED), and the hit is host-timed in <see cref="TickFlights"/>.
-        /// The victim is the other faction with the chosen satellite class up and the highest objective share; with none the strike flies and fizzles (logged).
-        /// </summary>
-        private void FireAsat(FactionOps f, in OpTarget target)
-        {
-            float now = SupportManager.MissionNow();
-            var bird = (BirdKind)Mathf.Clamp(target.Id, 0, SpaceRules.BirdCount - 1);
-            FactionHQ victim = ChooseVictim(f, bird);
-            int victimKey = victim != null && manager != null ? manager.FactionKeyOf(victim) : 0;
-            GlobalPosition at = default;
-            bool placed = f.Launcher != null && !f.Launcher.disabled;
-            if (placed) at = f.Launcher.transform.position.ToGlobalPosition();
-            else if (cyber != null && cyber.TryDataCenterSpot(f.Owner, out GlobalPosition dc, out _)) { at = dc; placed = true; }
-            float end = now + OpsRules.AsatFlightSeconds;
-            if (flights.Count < 4)
-                flights.Add(new Flight { Id = ++flightSerial, Attacker = f, Victim = victim, Bird = (int)bird, X = placed ? (float)at.x : 0f, Z = placed ? (float)at.z : 0f, EndsAt = end, LaunchedAt = now });
-            if (victim != null)
-                RodGuard.Tell(victim, "ASAT LAUNCH DETECTED — IMPACT ON OUR " + OpsWords.Bird((int)bird) + " BIRD IN " + (int)OpsRules.AsatFlightSeconds + " S · RELOCATE IT OR SET SPACE TO DEFEND TO DODGE");
-            f.Desk.SetEffectEnd(OpDomain.Cyber, end);
-            f.Desk.AddPing(OpKind.Asat, OpPingPhase.Launch, OpsRules.AsatFlightSeconds + 5f, 0, victimKey);
-            Plugin.Logger?.LogInfo("[Support.Ops] " + f.Owner.name + " ASAT launched at the " + OpsWords.Bird((int)bird) + " bird of " + (victim != null ? victim.name : "nobody (no such bird is up)") + ", impact in " + (int)OpsRules.AsatFlightSeconds + " s.");
-        }
-
-        /// <summary>The victim of an ASAT on <paramref name="bird"/>: the other faction that still has that class up and the highest objective share (with two factions, simply the enemy).</summary>
-        private FactionHQ ChooseVictim(FactionOps f, BirdKind bird)
-        {
-            FactionHQ best = null;
-            float bestShare = -1f;
-            var hqs = FactionRegistry.GetAllHQs();
-            if (hqs == null || space == null) return null;
-            foreach (FactionHQ hq in hqs)
-            {
-                if (hq == null || hq == f.Owner || !space.TryGetStateCoarse(hq, out SpaceState state) || !state.HasBird(bird)) continue;
-                float share = manager != null ? manager.ObjectiveShare(hq) : 0f;
-                if (share > bestShare) { best = hq; bestShare = share; }
+                if (side.Owner == null || side.Owner == owner || !space.TryGetStateCoarse(side.Owner, out SpaceState state) || state.DownMask == 7) continue;
+                float rank = manager.ObjectiveShare(side.Owner);
+                if (rank <= share) continue;
+                best = side;
+                enemyState = state;
+                share = rank;
             }
             return best;
         }
 
-        /// <summary>The ascent ended: the chosen bird dies through the SPACE state's own loss and rebuild path, the victim is told SAT LOST, and the launcher is removed.</summary>
+        private int TrackId(FactionOps side, SpaceState state, BirdKind kind)
+        {
+            if (!ReferenceEquals(side.TrackedState, state))
+            {
+                side.TrackedState = state;
+                System.Array.Clear(side.TrackInstances, 0, side.TrackInstances.Length);
+            }
+            int instance = state.BirdInstance(kind), index = (int)kind;
+            if (instance == 0) return 0;
+            if (side.TrackInstances[index] != instance)
+            {
+                side.TrackInstances[index] = instance;
+                side.TrackIds[index] = ++trackSerial;
+            }
+            return side.TrackIds[index];
+        }
+
+        internal bool TryResolveAsatQueueTrack(FactionHQ owner, int requestedTrackId, out int targetTrack)
+        {
+            targetTrack = 0;
+            if (!Enabled || owner == null || !factions.ContainsKey(owner)) return false;
+            FactionOps enemy = TrackedEnemy(owner, out SpaceState state);
+            if (enemy == null) return false;
+            for (int i = 0; i < SpaceRules.BirdCount; i++)
+            {
+                var kind = (BirdKind)(i < 2 ? 1 - i : i); // prefer radar in automatic doctrine
+                int id = TrackId(enemy, state, kind);
+                if (id == 0 || (requestedTrackId != 0 && id != requestedTrackId)) continue;
+                targetTrack = id;
+                return true;
+            }
+            return false;
+        }
+
+        private bool TryFindTrack(int id, out AsatTarget target)
+        {
+            target = default;
+            if (id <= 0 || space == null) return false;
+            foreach (FactionOps side in factions.Values)
+            {
+                if (!space.TryGetStateCoarse(side.Owner, out SpaceState state) || !ReferenceEquals(side.TrackedState, state)) continue;
+                for (int i = 0; i < SpaceRules.BirdCount; i++)
+                {
+                    var kind = (BirdKind)i;
+                    int instance = state.BirdInstance(kind);
+                    if (side.TrackIds[i] != id || instance == 0 || instance != side.TrackInstances[i]) continue;
+                    target = new AsatTarget(side.Owner, kind, instance, state);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool TrackLive(in AsatTarget target, out SpaceState state)
+        {
+            state = null;
+            return target.Instance > 0 && space != null && space.TryGetStateCoarse(target.Owner, out state) &&
+                ReferenceEquals(state, target.Origin) && state.BirdInstance(target.Kind) == target.Instance;
+        }
+
+        internal FrontOutcome RunAsatProgramme(FactionHQ owner, int trackId)
+        {
+            if (!Enabled || owner == null || !factions.TryGetValue(owner, out FactionOps side) || side.PendingTarget.Instance > 0 ||
+                flights.Exists(flight => flight.Attacker == side)) return FrontOutcome.Unavailable;
+            int reserved = flights.Count;
+            foreach (FactionOps faction in factions.Values) if (faction.PendingTarget.Instance > 0) reserved++;
+            if (reserved >= OpsWire.MaxFlights) return FrontOutcome.Unavailable;
+            if (trackId == 0 && !TryResolveAsatQueueTrack(owner, 0, out trackId)) return FrontOutcome.NoEnemyTrack;
+            if (!TryFindTrack(trackId, out AsatTarget target) || target.Owner == owner) return FrontOutcome.NoEnemyTrack;
+            if (!SpawnLauncher(side)) return FrontOutcome.NoSite;
+
+            float now = SupportManager.MissionNow();
+            side.PendingTarget = target;
+            side.LaunchAt = now + OpsRules.CountdownSeconds;
+            side.NextReveal = now;
+            side.Desk.AddPing(OpKind.Asat, OpPingPhase.Execute, OpsRules.CountdownSeconds + 5f, 0, manager.FactionKeyOf(target.Owner));
+            RodGuard.Tell(owner, "ASAT LAUNCHER STAGED — " + OpsWords.Bird((int)target.Kind) + " TRACK · T-" + (int)OpsRules.CountdownSeconds + " S");
+            RodGuard.Tell(target.Owner, "ENEMY ASAT LAUNCHER ON THE PAD — KILL IT WITHIN " + (int)OpsRules.CountdownSeconds + " S TO STOP THE STRIKE ON OUR " + OpsWords.Bird((int)target.Kind) + " BIRD");
+            return FrontOutcome.None;
+        }
+
+        private void TickLaunchers(float now)
+        {
+            foreach (FactionOps f in factions.Values)
+            {
+                AsatTarget target = f.PendingTarget;
+                if (target.Instance == 0) continue;
+                bool launcherUp = LauncherUp(f);
+                if (!launcherUp || !TrackLive(target, out _))
+                {
+                    f.PendingTarget = default;
+                    f.Desk.RemovePing(OpKind.Asat, OpPingPhase.Execute);
+                    DiscardLauncher(f);
+                    string reason = launcherUp ? "TARGET TRACK LOST" : "ASAT LAUNCHER DESTROYED";
+                    RodGuard.Tell(f.Owner, reason + " — STRIKE ABORTED");
+                    RodGuard.Tell(target.Owner, reason + " — STRIKE ABORTED");
+                    continue;
+                }
+                if (now >= f.LaunchAt)
+                {
+                    f.PendingTarget = default;
+                    f.Desk.RemovePing(OpKind.Asat, OpPingPhase.Execute);
+                    if (!FireAsat(f, target, now))
+                    {
+                        RodGuard.Tell(f.Owner, "ASAT LAUNCH ABORTED");
+                        DiscardLauncher(f);
+                    }
+                    continue;
+                }
+                if (now < f.NextReveal) continue;
+                f.NextReveal = now + 5f;
+                try { target.Owner.RpcUpdateTrackingInfo(f.Launcher.persistentID); }
+                catch (System.Exception e) { Plugin.Logger?.LogDebug("[Support.Ops] Launcher reveal refused: " + e.Message); }
+            }
+        }
+
+        private bool FireAsat(FactionOps f, in AsatTarget target, float now)
+        {
+            if (flights.Count >= OpsWire.MaxFlights || !LauncherUp(f) || !TrackLive(target, out SpaceState state)) return false;
+            GlobalPosition at = f.Launcher.transform.position.ToGlobalPosition();
+            float end = now + OpsRules.AsatFlightSeconds;
+            GeoBird bird = state.Geo(target.Kind);
+            flights.Add(new Flight { Id = ++flightSerial, Attacker = f, Target = target, X = (float)at.x, Z = (float)at.z,
+                EndsAt = end, AimU = bird.U(end), AimV = bird.V(end) });
+            RodGuard.Tell(f.Owner, "ASAT AWAY — " + (int)OpsRules.AsatFlightSeconds + " S TO INTERCEPT");
+            RodGuard.Tell(target.Owner, "ASAT LAUNCH DETECTED — IMPACT ON OUR " + OpsWords.Bird((int)target.Kind) + " BIRD IN " + (int)OpsRules.AsatFlightSeconds + " S · BURN CLEAR OF THE THREAT RING");
+            f.Desk.SetEffectEnd(OpDomain.Cyber, end);
+            f.Desk.AddPing(OpKind.Asat, OpPingPhase.Launch, OpsRules.AsatFlightSeconds + 5f, 0, manager.FactionKeyOf(target.Owner));
+            return true;
+        }
+
         private void TickFlights(float now)
         {
             for (int i = flights.Count - 1; i >= 0; i--)
             {
-                Flight fl = flights[i];
-                if (now < fl.EndsAt) continue;
-                flights.RemoveAt(i);
-                bool dodged = fl.Victim != null && Dodges(fl);
-                bool hit = !dodged && fl.Victim != null && space != null && space.TryGetStateCoarse(fl.Victim, out SpaceState state) && state.KillBird((BirdKind)fl.Bird, now);
-                if (dodged)
+                Flight flight = flights[i];
+                AsatTarget target = flight.Target;
+                bool live = TrackLive(target, out SpaceState state);
+                if (now < flight.EndsAt)
                 {
-                    RodGuard.Tell(fl.Victim, "ASAT EVADED — OUR " + OpsWords.Bird(fl.Bird) + " BIRD REPHASED IN TIME");
-                    RodGuard.Tell(fl.Attacker.Owner, "ASAT MISSED — THE TARGET BIRD REPHASED");
+                    if (live && manager.Fronts != null && manager.Fronts.BiasFor(target.Owner, Front.Space).Directive == FrontDirective.Defend &&
+                        AsatRules.TryEvade(state.Geo(target.Kind), now, flight.EndsAt, flight.AimU, flight.AimV, out float u, out float v) &&
+                        space.TryRelocate(target.Owner, (int)target.Kind, u, v, now, out _, holdStation: true) == GeoSpace.Refusal.None)
+                        RodGuard.Tell(target.Owner, "OVERLORD — EVASIVE BURN IN PROGRESS");
+                    continue;
                 }
-                if (hit) fl.Attacker.Desk.AddPing(OpKind.Asat, OpPingPhase.Loss, OpsRules.LossPingSeconds, fl.Bird, manager != null ? manager.FactionKeyOf(fl.Victim) : 0);
-                Plugin.Logger?.LogInfo("[Support.Ops] " + fl.Attacker.Owner.name + " ASAT " + (hit ? "HIT: SAT LOST " + OpsWords.Bird(fl.Bird) + " of " + fl.Victim.name : "fizzled: nothing to hit") + ".");
-                DiscardLauncher(fl.Attacker);
+                flights.RemoveAt(i);
+                flight.Attacker.Desk.RemovePing(OpKind.Asat, OpPingPhase.Launch);
+                bool dodged = live && AsatRules.Clears(state.Geo(target.Kind), flight.EndsAt, flight.AimU, flight.AimV);
+                bool hit = live && !dodged && state.KillBird(target.Kind, now);
+                if (hit)
+                {
+                    flight.Attacker.Desk.AddPing(OpKind.Asat, OpPingPhase.Loss, OpsRules.LossPingSeconds, (int)target.Kind, manager.FactionKeyOf(target.Owner));
+                    RodGuard.Tell(target.Owner, "ASAT IMPACT — " + OpsWords.Bird((int)target.Kind) + " BIRD LOST");
+                    RodGuard.Tell(flight.Attacker.Owner, "ASAT HIT — ENEMY BIRD LOST");
+                }
+                else if (dodged)
+                {
+                    RodGuard.Tell(target.Owner, "ASAT EVADED — OUR " + OpsWords.Bird((int)target.Kind) + " BIRD CLEARED THE THREAT RING");
+                    RodGuard.Tell(flight.Attacker.Owner, "ASAT MISSED — TARGET MANEUVERED CLEAR");
+                }
+                else RodGuard.Tell(flight.Attacker.Owner, "ASAT MISSED — TARGET TRACK LOST");
+                DiscardLauncher(flight.Attacker);
             }
         }
 
-        /// <summary>
-        /// The two-sided rule for ASAT: the victim dodges when its SPACE front stands on DEFEND (the bird rephases on the launch warning), or when someone burned that bird to a new
-        /// station after the launch (a manual rephase from the ORBIT room).
-        /// </summary>
-        private bool Dodges(Flight fl)
-        {
-            if (manager?.Fronts != null && manager.Fronts.BiasFor(fl.Victim, Front.Space).Directive == FrontDirective.Defend) return true;
-            return space != null && space.TryGetStateCoarse(fl.Victim, out SpaceState s) && s.HasBird((BirdKind)fl.Bird) && s.Geo((BirdKind)fl.Bird).DepartAt >= fl.LaunchedAt;
-        }
-
-        /// <summary>The viewer's own satellites (down, ever launched), its own pads, and every faction's ASAT in flight (a smoke column and a rising light all clients play from this row). No bird rebuilds itself: BirdPercent stays 0.</summary>
         partial void FillBirdsAndFlights(FactionHQ viewer, float now, OpsStateData into)
         {
-            into.Sites.Clear();
-            if (space != null) space.CopySites(viewer, into.Sites); // the viewer's own pads: where they stand and how
+            if (space != null) space.CopySites(viewer, into.Sites);
             if (space != null && space.TryGetStateCoarse(viewer, out SpaceState state))
             {
                 into.BirdsDown = state.DownMask;
                 into.BirdsLaunched = state.LaunchedMask;
                 for (int i = 0; i < SpaceRules.BirdCount; i++) into.Geo[i] = state.Geo((BirdKind)i);
             }
-            var hqs = FactionRegistry.GetAllHQs();
-            if (hqs != null)
-                foreach (FactionHQ enemy in hqs)
-                    if (enemy != null && enemy != viewer && space != null && space.TryGetStateCoarse(enemy, out SpaceState theirs)) { into.EnemyBirdsDown = theirs.DownMask; for (int i = 0; i < SpaceRules.BirdCount; i++) into.Geo[SpaceRules.BirdCount + i] = theirs.Geo((BirdKind)i); break; }
-            foreach (Flight fl in flights)
-                if (into.Flights.Count < OpsWire.MaxFlights && now < fl.EndsAt)
+            FactionOps enemy = TrackedEnemy(viewer, out SpaceState theirs);
+            if (enemy != null)
+            {
+                into.EnemyBirdsDown = theirs.DownMask;
+                for (int i = 0; i < SpaceRules.BirdCount; i++)
                 {
-                    // The launching faction sees the exact point; everyone else sees it on a 5 km grid (a launch is visible in the sky, the site stays unknown).
-                    bool own = fl.Attacker != null && fl.Attacker.Owner == viewer;
-                    into.Flights.Add(new OpsFlightRow { Id = fl.Id, X = own ? fl.X : Mathf.Round(fl.X / 5000f) * 5000f, Z = own ? fl.Z : Mathf.Round(fl.Z / 5000f) * 5000f, EndsAt = fl.EndsAt, Seconds = (byte)OpsRules.AsatFlightSeconds });
+                    into.EnemyTrackIds[i] = TrackId(enemy, theirs, (BirdKind)i);
+                    if (into.EnemyTrackIds[i] == 0) continue;
+                    GeoBird bird = theirs.Geo((BirdKind)i);
+                    into.Geo[SpaceRules.BirdCount + i] = new GeoBird(AsatRules.TrackSector(bird.U(now)), AsatRules.TrackSector(bird.V(now)), 0f);
                 }
+            }
+            foreach (FactionOps side in factions.Values)
+                if (side.PendingTarget.Owner == viewer && side.PendingTarget.Instance > 0 && now < side.LaunchAt &&
+                    (into.IncomingBird < 0 || side.LaunchAt < into.IncomingDeadline))
+                {
+                    into.IncomingBird = (int)side.PendingTarget.Kind;
+                    into.IncomingDeadline = side.LaunchAt;
+                }
+            foreach (Flight flight in flights)
+            {
+                if (now >= flight.EndsAt) continue;
+                bool own = flight.Attacker.Owner == viewer;
+                into.Flights.Add(new OpsFlightRow { Id = flight.Id, X = own ? flight.X : Mathf.Round(flight.X / 5000f) * 5000f,
+                    Z = own ? flight.Z : Mathf.Round(flight.Z / 5000f) * 5000f, EndsAt = flight.EndsAt, Seconds = (byte)OpsRules.AsatFlightSeconds });
+                if (flight.Target.Owner != viewer || (into.IncomingLaunched && flight.EndsAt >= into.IncomingDeadline) || !TrackLive(flight.Target, out _)) continue;
+                into.IncomingBird = (int)flight.Target.Kind;
+                into.IncomingDeadline = flight.EndsAt;
+                into.IncomingLaunched = true;
+                into.IncomingAimU = flight.AimU;
+                into.IncomingAimV = flight.AimV;
+            }
         }
 
         private FactionHQ HqOfKey(int key)
