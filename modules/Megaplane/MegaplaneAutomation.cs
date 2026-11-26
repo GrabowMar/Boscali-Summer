@@ -6,6 +6,7 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using NuclearOption.SavedMission;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
@@ -317,6 +318,9 @@ namespace BoscaliSummer.Modules.Megaplane
             if (!(args.TryGetValue("idUnit", out object unit) && unit is Aircraft a) || !MegaplaneModule.Is(a)) return new { ok = false };
             var islands = a.GetComponentsInChildren<LODGroup>().Select(g => new { island = g.name, levels = g.GetLODs() })
                 .Where(g => g.levels.Length == 2 && g.levels[1].renderers.Any(r => r != null && r.name.StartsWith("GrozaLOD_"))).ToArray();
+            Mesh[] nearMeshes = islands.SelectMany(g => g.levels[0].renderers).OfType<MeshRenderer>()
+                .Where(r => r != null).Select(r => r.GetComponent<MeshFilter>())
+                .Where(f => f != null && f.sharedMesh != null).Select(f => f.sharedMesh).ToArray();
             Renderer display = a.GetComponentsInChildren<Renderer>(true).FirstOrDefault(r => r.name == "GrozaTacticalDisplay");
             var systems = a.GetComponentInChildren<MegaplaneSystemsDisplay>(true);
             var crewDisplays = a.GetComponentInChildren<MegaplaneCrewDisplays>(true);
@@ -326,6 +330,9 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 ok = true, width = a.definition.width, length = a.definition.length, height = a.definition.height, lodBias = QualitySettings.lodBias,
                 groups = islands.Length, near = islands.Sum(g => g.levels[0].renderers.Length), far = islands.Sum(g => g.levels[1].renderers.Length),
+                nearMaterialSlots = nearMeshes.Sum(m => m.subMeshCount),
+                nearIndexBytes = nearMeshes.Distinct().Sum(m => Enumerable.Range(0, m.subMeshCount)
+                    .Sum(s => (long)m.GetIndexCount(s)) * (m.indexFormat == IndexFormat.UInt16 ? 2 : 4)),
                 nearVisible = islands.Sum(g => g.levels[0].renderers.Count(r => r != null && r.isVisible)),
                 farVisible = islands.Sum(g => g.levels[1].renderers.Count(r => r != null && r.isVisible)),
                 flap = a.GetComponent<MegaplaneSurfaces>().InnerFlapAngle, display = display != null && display.enabled,

@@ -48,7 +48,12 @@ namespace BoscaliSummer.Modules.Megaplane
                         normals[i] = new Vector3(input.ReadSingle(), input.ReadSingle(), input.ReadSingle());
                         uv[i] = new Vector2(input.ReadSingle(), input.ReadSingle());
                     }
-                    var mesh = new Mesh { name = "BS_Megaplane_" + go.name, indexFormat = IndexFormat.UInt32, vertices = points, normals = normals, uv = uv };
+                    var mesh = new Mesh
+                    {
+                        name = "BS_Megaplane_" + go.name,
+                        indexFormat = vertices <= ushort.MaxValue ? IndexFormat.UInt16 : IndexFormat.UInt32,
+                        vertices = points, normals = normals, uv = uv
+                    };
                     int subs = input.ReadInt32();
                     mesh.subMeshCount = subs;
                     var used = new Material[subs];
@@ -57,7 +62,7 @@ namespace BoscaliSummer.Modules.Megaplane
                         used[s] = materials[input.ReadInt32()];
                         var tris = new int[input.ReadInt32()];
                         for (int i = 0; i < tris.Length; i++) tris[i] = input.ReadInt32();
-                        mesh.SetTriangles(tris, s);
+                        mesh.SetTriangles(tris, s, calculateBounds: false);
                     }
                     mesh.RecalculateBounds();
                     mesh.RecalculateTangents();
