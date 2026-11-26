@@ -148,6 +148,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                     MapManifest.Structure s = manifest.structures[n];
                     if (s == null || string.IsNullOrEmpty(s.type)) continue;
                     Quaternion turn = Quaternion.Euler(0f, s.yaw, 0f);
+                    Vector3 position = StructurePosition(manifest, s);
                     // "loose": the owner of everything that belongs to no airfield (a mode with no ground war stands its guns down)
                     string owner = sides != null && s.airbase < 0 && sides.TryGetValue("loose", out string free) ? free :
                         sides != null && sides.TryGetValue(s.side ?? "", out string named) ? named : s.side == "red" ? "Primeva" : s.side == "blue" ? "Boscali" : "";
@@ -156,7 +157,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                         ["type"] = s.type,
                         ["faction"] = !string.IsNullOrEmpty(owner) ? owner : s.scenery ? "" : "Neutral",
                         ["UniqueName"] = "bs_" + s.type + "_" + n,
-                        ["globalPosition"] = new JObject { ["x"] = s.x, ["y"] = s.y, ["z"] = s.z },
+                        ["globalPosition"] = new JObject { ["x"] = position.x, ["y"] = position.y, ["z"] = position.z },
                         ["rotation"] = new JObject { ["x"] = turn.x, ["y"] = turn.y, ["z"] = turn.z, ["w"] = turn.w },
                         ["CaptureStrength"] = new JObject { ["IsOverride"] = false, ["Value"] = 0f },
                         ["CaptureDefense"] = new JObject { ["IsOverride"] = false, ["Value"] = 25f },
@@ -176,6 +177,22 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                     unit["factoryOptions"] = new JObject { ["productionType"] = "", ["productionTime"] = 900f };
                     buildings.Add(unit);
                 }
+            }
+
+            /// <summary>Give depot walls and vehicle exits clearance from the parallel taxiway in older layouts.</summary>
+            private static Vector3 StructurePosition(MapManifest manifest, MapManifest.Structure structure)
+            {
+                var position = new Vector3(structure.x, structure.y, structure.z);
+                if (structure.type != "VehicleDepot1" || structure.airbase < 0 || structure.airbase >= manifest.strips.Length)
+                    return position;
+
+                MapManifest.Strip strip = manifest.strips[structure.airbase];
+                if (strip == null || strip.padWidth < 400f) return position;
+                var center = new Vector3(strip.x, strip.y, strip.z);
+                Vector3 right = Quaternion.Euler(0f, strip.heading, 0f) * Vector3.right;
+                float across = Vector3.Dot(position - center, right);
+                if (across <= 0f || across >= 180f) return position;
+                return position + right * (180f - across);
             }
 
             public override UniTask<Sprite> GetPreview(string key, CancellationToken token = default) =>

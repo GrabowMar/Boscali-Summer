@@ -2,7 +2,54 @@ id = "marisol"
 name = "Marisol Islands"
 biome = "tropical"
 seed = 7
+worldgen_seed = 700
 cell = 20
+bathymetry = true
+natural_terrain = true
+runtime_airfields = true
+
+[preset]
+sea_ramp = [[0, [205, 238, 212]], [3, [60, 207, 190]], [9, [25, 167, 174]], [18, [15, 116, 153]], [33, [10, 69, 114]], [200, [6, 36, 69]]]
+
+[preset.stages.gullies]
+amp = 40
+
+# Keep the two island airfields and their forward strips in the existing layout.
+[[preset.strips]]
+name = "Marisol Main"
+role = "coastal"
+length = 1306
+surface = "asphalt"
+x = 14600
+z = 25160
+heading = 4
+
+[[preset.strips]]
+name = "Isla Brava"
+role = "coastal"
+length = 1306
+surface = "asphalt"
+x = -5560
+z = -18040
+heading = 184
+
+[[preset.strips]]
+name = "Punta Ceniza"
+role = "forward"
+length = 1000
+surface = "gravel"
+x = -120
+z = 25800
+heading = 0
+
+[[preset.strips]]
+name = "Cayo Largo"
+role = "forward"
+length = 1000
+surface = "gravel"
+x = -440
+z = -28920
+heading = 120
 
 # ---- hand work (nomod map edit / paint / prop)
 
@@ -321,3 +368,72 @@ z = 31700
 to = [5520, 31690, 5680, 31708, 6160, 31775]
 radius = 420
 amount = 320
+
+# The volcanic cinder apron grades into jungle gullies rather than ending at the summit.
+[[paint]]
+layer = "ash"
+at = "Summit"
+x = 620
+z = -380
+to = [1170, -920, 1770, -1470]
+radius = 730
+amount = 0.7
+
+[[paint]]
+layer = "forest"
+at = "Summit"
+x = -1960
+z = -2100
+to = [-1380, -2880, -820, -3370]
+radius = 600
+amount = 0.59
+
+[[paint]]
+layer = "forest"
+at = "Isla Brava"
+x = -1710
+z = 600
+to = [-2260, 1090, -2510, 1660]
+radius = 680
+amount = 0.69
+
+[[prop]]
+kind = "chapel"
+at = "Puerto Brava"
+x = -235
+z = 195
+yaw = 110
+variant = 1
+
+[[prop]]
+kind = "warehouse"
+at = "Puerto Brava Harbour"
+x = 290
+z = 310
+yaw = 27
+variant = 1
+
+[[prop]]
+kind = "boat"
+at = "Puerto Brava Harbour"
+x = 20
+z = 60
+yaw = 35
+variant = 1
+sea = true
+
+[[prop]]
+kind = "lighthouse"
+at = "Punta Marisol Harbour"
+x = 220
+z = 440
+yaw = 120
+variant = 1
+
+[[prop]]
+kind = "ruins"
+at = "Fort Alfa"
+x = 138
+z = 31
+yaw = 22
+variant = 1

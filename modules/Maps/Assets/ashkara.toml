@@ -2,10 +2,17 @@ id = "ashkara"
 name = "Ashkara"
 biome = "desert"
 seed = 7
+worldgen_seed = 700
 cell = 20
+bathymetry = true
+natural_terrain = true
+runtime_airfields = true
 
 [preset]
 lakes = 0       # no crater lake in the caldera: the array's ruin keeps the summit
+
+[preset.stages.gullies]
+amp = 37
 
 # ---- hand work (nomod map edit / paint / prop): the lie of a battered volcanic island
 
@@ -225,4 +232,63 @@ z = -7640
 yaw = 280
 scale = 1.6
 sea = true
+
+# Basalt ledges break up the south-west plateau, with paler sediment on the wadi floor.
+[[edit]]
+op = "roughen"
+x = -6850
+z = -5080
+to = [-5480, -4670, -4300, -3840]
+radius = 930
+amount = 8
+size = 155
+
+[[paint]]
+layer = "ash"
+x = -6850
+z = -5080
+to = [-5480, -4670, -4300, -3840]
+radius = 900
+amount = 0.72
+
+[[paint]]
+layer = "sand"
+x = 980
+z = -3120
+to = [-820, -4550, -2480, -6090]
+radius = 170
+amount = 0.57
+
+[[paint]]
+layer = "ash"
+at = "Helios Array"
+x = -1280
+z = -670
+to = [-740, -431, -180, -240]
+radius = 520
+amount = 0.7
+
+[[prop]]
+kind = "capacitor"
+at = "Helios Array"
+x = -110
+z = 176
+variant = 1
+yaw = 40
+
+[[prop]]
+kind = "pylon"
+at = "Helios Array"
+x = -465
+z = 250
+yaw = 42
+
+[[prop]]
+kind = "debris"
+at = "Helios Array"
+x = -500
+z = -210
+radius = 230
+count = 10
+scale = 1.15
 

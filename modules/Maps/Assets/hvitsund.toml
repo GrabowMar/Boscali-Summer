@@ -2,14 +2,57 @@ id = "hvitsund"
 name = "Hvitsund"
 biome = "arctic"
 seed = 7
+worldgen_seed = 700
 cell = 20
+bathymetry = true
+natural_terrain = true
+runtime_airfields = true
+
+[airfield_sides]
+"Polaris Field" = "red"
+Breen = "blue"
+Nordkapp = "blue"
+
+[preset.stages.icefield]
+coast = 0.02
+
+[preset.stages.glaciate]
+ela = -8
+
+# Carry the coastal fields north with the rock pocket and keep Breen on the inland ice sheet.
+[[preset.strips]]
+name = "Polaris Field"
+role = "coastal"
+length = 1306
+surface = "asphalt"
+x = 8320
+z = 2540
+heading = 184
+
+[[preset.strips]]
+name = "Breen"
+role = "icecap"
+length = 1500
+surface = "ice"
+x = -12920
+z = 35140
+heading = 150
+
+[[preset.strips]]
+name = "Nordkapp"
+role = "forward"
+length = 1000
+surface = "gravel"
+x = -3640
+z = 3220
+heading = 90
 
 # ---- hand work (nomod map edit / paint / prop): rock through the ice, and a camp on it
 
 [[edit]]            # the rock pocket: crags, not slopes
 op = "roughen"
 x = 6000
-z = -17000
+z = 2660
 radius = 13000
 amount = 6
 size = 220
@@ -17,81 +60,81 @@ size = 220
 [[edit]]
 op = "cliff"
 x = -500
-z = -10000
+z = 9660
 radius = 7000
 amount = 1.1
 
 [[edit]]            # a chain of nunataks across the west of the sheet
 op = "ridge"
 x = -25000
-z = 5000
-to = [-18000, 9000, -12000, 8000]
+z = 19440
+to = [-18000, 21840, -12000, 21240]
 radius = 1500
 amount = 360
 
 [[edit]]
 op = "cliff"
 x = -25000
-z = 5000
-to = [-18000, 9000, -12000, 8000]
+z = 19440
+to = [-18000, 21840, -12000, 21240]
 radius = 2200
 amount = 0.9
 
 [[edit]]            # a lone horn in the east
 op = "raise"
 x = 22000
-z = 12000
+z = 23620
 radius = 2100
 amount = 380
 
 [[edit]]
 op = "cliff"
 x = 22000
-z = 12000
+z = 23620
 radius = 2400
 amount = 1.0
 
 [[edit]]            # twin teeth mid-sheet
 op = "ridge"
 x = -4200
-z = 15600
-to = [-1800, 14400]
+z = 25780
+to = [-1800, 25060]
 radius = 1100
 amount = 330
 
 [[edit]]            # an ice stream draws the sheet down toward the sea
 op = "lower"
 x = 16000
-z = 22000
-to = [17500, 8000, 19000, -4000]
+z = 29620
+to = [17500, 21240, 19000, 14060]
 radius = 3200
 amount = 70
 
 [[edit]]            # a dome to the north-east
 op = "raise"
 x = 26000
-z = 30000
+z = 34400
 radius = 11000
 amount = 110
 
 [[paint]]
 layer = "rock"
 x = -25000
-z = 5000
-to = [-18000, 9000, -12000, 8000]
+z = 19440
+to = [-18000, 21840, -12000, 21240]
 radius = 1150
 
 [[paint]]
 layer = "rock"
 x = 22000
-z = 12000
+z = 23620
 radius = 1500
 
 [[paint]]
 layer = "rock"
 x = -4200
-z = 15600
-to = [-1800, 14400]
+z = 25780
+to = [-1800, 25060]
 radius = 800
 
 [[prop]]            # Camp Breen, the drill site on the ice
@@ -142,8 +185,8 @@ variant = 1
 [[edit]]            # wind-carved snow: sastrugi in long ridges across the sheet, all one way
 op = "roughen"
 x = -3000
-z = 8000
-to = [6000, 26000, 2000, 38000]
+z = 21240
+to = [6000, 32000, 2000, 39180]
 radius = 5000
 amount = 1.6
 size = 70
@@ -151,8 +194,8 @@ size = 70
 [[edit]]
 op = "roughen"
 x = 16000
-z = 6000
-to = [12000, 28000, 8000, 38000]
+z = 20040
+to = [12000, 33200, 8000, 39180]
 radius = 5000
 amount = 1.4
 size = 70
@@ -176,7 +219,65 @@ variant = 1
 [[prop]]            # the sealer that stayed too long: frozen into the fast ice, listed over
 kind = "wreck"
 x = -6980
-z = -17760
+z = 1900
 yaw = 70
 y = -2
 scale = 1.8
+
+# Crevassed blue-ice channels and exposed dark ledges frame the coastal rock pocket.
+[[edit]]
+op = "roughen"
+x = 620
+z = 8540
+to = [1680, 7520, 2720, 6740]
+radius = 1150
+amount = 5.2
+size = 185
+
+[[paint]]
+layer = "ice"
+x = -950
+z = 9380
+to = [450, 8270, 1740, 7340, 2670, 6560]
+radius = 1060
+amount = 0.78
+
+[[paint]]
+layer = "rock"
+at = "Polaris Station"
+x = -820
+z = 290
+to = [-760, 780, -880, 1280]
+radius = 440
+amount = 0.58
+
+[[paint]]
+layer = "gravel"
+at = "Breen"
+x = 1080
+z = -820
+radius = 275
+amount = 0.65
+
+[[prop]]
+kind = "station_module"
+at = "Polaris Station"
+x = -185
+z = -170
+yaw = 65
+variant = 2
+
+[[prop]]
+kind = "dish"
+at = "Polaris Station"
+x = -246
+z = 140
+yaw = 138
+variant = 1
+
+[[prop]]
+kind = "silo"
+at = "Breen"
+x = 1100
+z = -1020
+yaw = 60
