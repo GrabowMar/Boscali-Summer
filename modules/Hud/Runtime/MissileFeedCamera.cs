@@ -11,9 +11,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
     /// </summary>
     internal sealed class MissileFeedCamera
     {
-        // A seeker video link, not a camera: a small picture at a choppy rate, graded by its own post stack (160x90 point-filtered read as blocks, 2026-10-27).
-        private const int Width = 256, Height = 144;
-        private const float Fps = 15f, FieldOfView = 40f, HoldSeconds = 1.5f;
+        // Clean nose-mounted seeker feed: legible resolution at 15 Hz, graded with ACES only (no bloom/grain/vignette/aberration passes).
+        private const int Width = 384, Height = 216;
+        private const float Fps = 15f, FieldOfView = 45f, HoldSeconds = 1.5f;
 
         private readonly FeedCamera feed = new FeedCamera("BoscaliMissileFeed", Width, Height, FeedLook.Seeker, pointFilter: false) { Fps = Fps, FieldOfView = FieldOfView };
         private Missile riding;

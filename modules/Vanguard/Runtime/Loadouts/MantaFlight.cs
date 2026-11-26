@@ -6,8 +6,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
     /// <summary>
     /// XQ-90 MANTA, the ground striker (host only): its scan and its round; the rest of the pipeline is the REMORA's (RemoraFlight).
-    /// Targets rank the pilot's ground designation, a ground launcher whose missile homes on the launcher (SEAD), then, when sent to a
-    /// point, the nearest hostile vehicle or ship around it (<see cref="GroundCue"/>). Rounds are a vanilla fire-and-forget AGM.
+    /// Targets rank the pilot's ground designation above a ground launcher whose missile is inbound.
     /// </summary>
     internal sealed partial class VanguardFlight
     {
@@ -15,8 +14,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private const string StrikeRoundKey = "AGM1";
         private static MissileDefinition strikeRound;
 
-        // 2 Hz ground picture: ground launchers whose missiles home on the launcher, and hostile vehicles / ships near the sent point.
-        private void ScanGround(GlobalPosition pos, GlobalPosition? area)
+        private void ScanGround(GlobalPosition pos)
         {
             droneScan.Clear();
             FactionHQ mine = missile.NetworkHQ;
@@ -28,11 +26,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 float range = FastMath.Distance(shooter.GlobalPosition(), pos);
                 if (range <= MantaRules.ShooterRange) droneScan.Add(new DroneTarget { Unit = shooter, Cue = (byte)GroundCue.Shooter, Range = range });
             }
-            if (!area.HasValue) return;
-            BattlefieldGrid.GetUnitsInRangeNonAlloc(area.Value, MantaRules.AreaRange, droneGrid);
-            for (int i = 0; i < droneGrid.Count; i++)
-                if (IsGroundTarget(droneGrid[i]) && Hostile(droneGrid[i], mine))
-                    droneScan.Add(new DroneTarget { Unit = droneGrid[i], Cue = (byte)GroundCue.Area, Range = FastMath.Distance(droneGrid[i].GlobalPosition(), pos) });
         }
 
         // A MANTA target: anything on the ground or the sea that is not an aircraft or a missile (vehicles, SAM sites, ships, buildings).

@@ -1,6 +1,5 @@
 using BoscaliSummer.Core.Game;
 using NOAvionics;
-using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -84,7 +83,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             PlayerAutopilot ap = PlayerAutopilot.Instance;
             // The TAC BOARD's WING page already lists the roster: the strip keeps only the autopilot line and the Call Ladder then (Hud module off: no board, no page).
             boardShowsWing = ModuleServices.TryGet(out IHudBoard board) && board.ShowsWing;
-            bool show = hud != null && WingHudShow.ShouldShow(hud.isActiveAndEnabled, wing != null ? wing.Members.Count : 0, boardShowsWing,
+            bool show = !BoscaliSummer.Core.Game.ForeignMods.HudOverlaysYielded && hud != null &&
+                WingHudShow.ShouldShow(hud.isActiveAndEnabled, wing != null ? wing.Members.Count : 0, boardShowsWing,
                 ap != null && ap.Session.Engaged, WingChordInput.Held);
             if (!show)
             {
@@ -188,11 +188,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return image;
         }
 
-        private static ColorTheme Theme => ThemeManager.Active != null ? ThemeManager.Active.ColorTheme : null;
-        private static Color Ink => Theme != null ? VanillaHudStyle.Ink : AvTheme.Accent;
+        private static Color Ink => VanillaHudStyle.Ink;
         private static Color InkDim => VanillaHudStyle.InkDim;
-        private static Color Caution => Theme != null ? Theme.Warning : AvTheme.Warning;
-        private static Color Danger => Theme != null ? Theme.Alert : AvTheme.Alert;
+        private static Color Caution => VanillaHudStyle.Caution;
+        private static Color Danger => VanillaHudStyle.WarningRed;
 
         /// <summary>0 normal, 1 caution, 2 danger, from what the row says.</summary>
         private static int Severity(string phase, string binding, float bingoSeconds)
@@ -363,29 +362,21 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         /// <summary>
-        /// The strip's chrome in the board's language, drawn with the vector kit: four corner brackets (arm 8) round the box and, on the title's line, a hairline shelf from the end of the title to the right edge ending in a 4 unit node and
-        /// a 45 degree stub up and to the right. Rebuilt only when the box, the shelf or the ink changes.
+        /// The strip's chrome in the board's language: the HUD's standard caption shelf hairline under the title. Rebuilt only when the box, the shelf or the ink changes.
         /// </summary>
         private void PaintChrome(float w, float height)
         {
             TMP_Text caption = ladderShown ? ladder[0] : title;
             bool shelf = caption != null && caption.gameObject.activeSelf && !string.IsNullOrEmpty(caption.text);
-            float cy = height - 3f - LineHeight * 0.5f, from = shelf ? Pad + Mathf.Ceil(caption.preferredWidth) + 6f : 0f, to = w - 12f;
-            shelf = shelf && to - from >= 8f;
+            float shelfY = height - 3f - LineHeight;
             Color ink = Ink;
-            int key = (int)(w * 2f) * 7919 + (int)(height * 2f) * 31 + (shelf ? (int)from * 104729 : 0) + ((Color32)ink).GetHashCode();
+            int key = (int)(w * 2f) * 7919 + (int)(height * 2f) * 31 + (shelf ? 104729 : 0) + ((Color32)ink).GetHashCode();
             if (key == chromeKey) return;
             chromeKey = key;
             var white = new Rgba(1f, 1f, 1f, 1f);
             AvQuadBuffer b = chrome.Buffer;
             b.Clear();
-            AvStrokes.Bracket(b, 0f, 0f, w, height, BracketArm, ChromeStroke, white);
-            if (shelf)
-            {
-                AvStrokes.Line(b, from, cy, to, cy, 1f, white);
-                AvStrokes.Fill(b, to - 2f, cy - 2f, 4f, 4f, white);
-                AvStrokes.Line(b, to + 2f, cy + 2f, to + 8f, cy + 8f, 1f, white);
-            }
+            if (shelf && w > Pad * 2f) AvStrokes.Line(b, Pad, shelfY, w - Pad, shelfY, HudStroke.Hairline, white);
             chrome.color = ink.WithAlpha(HudInk.LineMid);
             chrome.Commit();
         }

@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal float Yaw;
         internal float Pitch = DefaultPitch;
         internal float Zoom = MinZoom;
+        private float focusBoundX, focusBoundZ;
 
         /// <summary>Sheet half extents and highest terrain point, in model units.</summary>
         internal float HalfX = 1f, HalfZ = 1f, Top;
@@ -123,13 +124,29 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         internal void ClampFocus()
         {
-            FocusX = Scalar.Clamp(FocusX, -HalfX, HalfX);
-            FocusZ = Scalar.Clamp(FocusZ, -HalfZ, HalfZ);
+            FocusX = Scalar.Clamp(FocusX, Math.Min(-HalfX, focusBoundX), Math.Max(HalfX, focusBoundX));
+            FocusZ = Scalar.Clamp(FocusZ, Math.Min(-HalfZ, focusBoundZ), Math.Max(HalfZ, focusBoundZ));
+        }
+
+        /// <summary>The plane focus that centres a raised point in the current view.</summary>
+        internal void FocusFor(float x, float height, float z, out float focusX, out float focusZ)
+        {
+            Unproject(.5f, .5f, height, out float centreX, out float centreZ);
+            focusX = FocusX + x - centreX;
+            focusZ = FocusZ + z - centreZ;
+        }
+
+        /// <summary>Allow panning between the sheet and an explicitly located track beyond its edges.</summary>
+        internal void AllowFocus(float x, float z)
+        {
+            focusBoundX = x;
+            focusBoundZ = z;
         }
 
         internal void Reset()
         {
             FocusX = FocusZ = Yaw = 0f;
+            AllowFocus(0f, 0f);
             Pitch = DefaultPitch;
             Zoom = MinZoom;
         }

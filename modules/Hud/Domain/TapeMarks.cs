@@ -2,7 +2,7 @@ using System;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
-    /// <summary>The ink of a mark on the heading tape: WARNING (an inbound missile: a solid triangle), CAUTION (a lock, a radar spike, the ace: an open amber triangle) and INK-HI (the navigation marks: a diamond, the word in regular Ink). A threat word is bold in its tone.</summary>
+    /// <summary>The ink of a mark on the heading tape: WARNING (an inbound missile: a filled chevron), CAUTION (a lock, a radar spike, the ace: an open amber diamond) and INK-HI (the navigation marks: an open caret, the word in regular Ink). A threat word is bold in its tone.</summary>
     internal enum TapeTone : byte { Warning, Caution, Hi }
 
     /// <summary>

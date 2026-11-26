@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     internal sealed class ArLayer
     {
         private const int LabelMax = 12, SpinMax = 6, InboundMax = 6;
-        private const float Wire = 1.2f, Bold = 2.2f, PillarM = 800f, InboundLeadS = 2f, BoxHalf = 14f;
+        private const float Wire = HudStroke.Hairline, Standard = HudStroke.Standard, Bold = HudStroke.Heavy, PillarM = 800f, InboundLeadS = 2f, BoxHalf = 14f;
         /// <summary>The missile's private guidance target, as the shot book reads it (set from the synced target id; a seeker drops it when it loses the target).</summary>
         private static readonly HarmonyLib.AccessTools.FieldRef<Missile, Unit> TargetRef = NativeRefs.Field<Missile, Unit>("target");
 
@@ -86,6 +86,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly Missile[] inbound = new Missile[InboundMax];
         private readonly int[] inboundNumbers = new int[InboundMax];
 
+        /// <summary>The layer's holder (the visor glitch shader's material goes onto the graphics under it; null until built).</summary>
+        internal Transform Root => root;
+
         /// <summary>The glitch's sideways jitter at <paramref name="now"/> in reference pixels (the TAC BOARD shakes with the layer; a pure function of the clock, so the board reads it in LateUpdate before the layer paints).</summary>
         internal float Jitter(float now) => on && showFx && !AvFxDriver.ReducedMotion ? ArRules.Jitter(now - glitchAt, glitchSeed) : 0f;
 
@@ -128,7 +131,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             root = Holder(HudLayer.Under, "BoscaliArLayer");      // the layer's Under root: its own batch, under the game's own symbology (the world is behind the HUD)
             lines = AvVector.Create(root, "World", 1600, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
-            fx = AvVector.Create(root, "Fx", 96);
+            fx = AvVector.Create(root, "Fx", 96, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             for (int i = 0; i < LabelMax; i++)
             {
                 TextMeshProUGUI t = HudText.Make(root, "Label", font, fontMaterial, TextAlignmentOptions.Center, TopCentre.LabelPt);
@@ -466,9 +469,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>A pillar's height: about 2.5 degrees tall from far out, never under <see cref="PillarM"/> nor over 6 km.</summary>
         private static float PillarHeight(float distance) => Mathf.Clamp(distance * 0.045f, PillarM, 6000f);
 
-        /// <summary>A beam of light from the ground: the line, three ticks up it, a diamond (home) or a ring (objective) on top; <paramref name="ink"/> comes range-inked.</summary>
+        /// <summary>A beam of light from the ground: a subtle base ring, the line, three ticks up it, and a diamond on top (double for home, pipped for objective); <paramref name="ink"/> comes range-inked.</summary>
         private void Pillar(AvQuadBuffer b, Vector3 foot, Rgba ink, float far, bool diamond)
         {
+            Ring(b, foot, Mathf.Clamp(far * 0.008f, 35f, 300f), Wire, ink.WithAlpha(ink.A * HudInk.LineLow));
             float height = PillarHeight(far);
             Vector3 top = foot + Vector3.up * height;
             Seg(b, foot, top, Bold, ink);
@@ -476,16 +480,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (Project(foot + Vector3.up * (height * t / 4f), out float x, out float y))
                     AvStrokes.Line(b, x - 5f, y, x + 5f, y, Wire, ink.WithAlpha(ink.A * 0.7f));
             if (!Project(top, out float tx, out float ty)) return;
-            if (diamond)
-            {
-                AvStrokes.Diamond(b, tx, ty, 7f, 1.6f, ink);
-                AvStrokes.Diamond(b, tx, ty, 2.5f, 2.5f, ink);
-            }
-            else
-            {
-                AvStrokes.Ring(b, tx, ty, 6f, 16, 1.6f, ink);
-                AvStrokes.Fill(b, tx - 2f, ty - 2f, 4f, 4f, ink);
-            }
+            AvStrokes.Diamond(b, tx, ty, 7f, Standard, ink);
+            if (diamond) AvStrokes.Diamond(b, tx, ty, 2.5f, Bold, ink);
+            else AvStrokes.Fill(b, tx - 1.5f, ty - 1.5f, 3f, 3f, ink);
         }
 
         // ------------------------------------------------------------------ MISSILES
@@ -519,11 +516,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     if (first && boxed)
                     {
                         float r = half + 4f;
-                        AvStrokes.Ring(b, tx, ty, r, 32, HudStroke.Standard, near);
+                        AvStrokes.Ring(b, tx, ty, r, 32, Standard, near);
+                        AvStrokes.Line(b, tx + r, ty, tx + r + 4f, ty, Wire, near);
+                        AvStrokes.Line(b, tx - r, ty, tx - r - 4f, ty, Wire, near);
+                        AvStrokes.Line(b, tx, ty + r, tx, ty + r + 4f, Wire, near);
+                        AvStrokes.Line(b, tx, ty - r, tx, ty - r - 4f, Wire, near);
                         if (closure > 5f)
                         {
                             int seconds = Mathf.Clamp(Mathf.CeilToInt(range / closure), 0, 99);
-                            Label(tx + r + 44f, ty - 7f, 6_000_000 + i * 1000 + seconds, near, "IMPACT ", seconds, "S");      // right of the ring: the game writes the name above the box, the range under it
+                            Label(tx + r + 48f, ty - 7f, 6_000_000 + i * 1000 + seconds, near, "IMPACT ", seconds, "S");      // right of the ring: the game writes the name above the box, the range under it
                         }
                     }
                 }
@@ -531,6 +532,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
 
             Rgba alert = palette.Alert.ToRgba();
+            Vector3 ownPos = aircraft.transform.position;
+            Vector3 ownVel = aircraft.rb != null ? aircraft.rb.velocity : Vector3.zero;
             int n = threats.LiveMissiles(inbound, inboundNumbers);
             for (int i = 0; i < n && i < InboundMax; i++)
             {
@@ -539,11 +542,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Vector3 pos = m.transform.position;
                 if (!Project(pos, out float x, out float y)) continue;
                 Vector3 velocity = m.rb != null ? m.rb.velocity : Vector3.zero;
-                Seg(b, pos, pos + velocity * InboundLeadS, Bold, alert.WithAlpha(0.8f));
-                // A diamond turning on the missile (still under REDUCED MOTION), and its number from the threat ring.
-                float spin = calm ? 0f : now * 240f;
-                RotatedSquare(b, x, y, 11f, spin + 45f, 1.8f, alert);
-                Label(x, y + 14f, 7_000_000 + inboundNumbers[i], alert, "M", inboundNumbers[i], null);
+                Vector3 leadEnd = pos + velocity * InboundLeadS;
+                Seg(b, pos, leadEnd, Standard, alert.WithAlpha(HudInk.LineMid));
+                if (Project(leadEnd, out float lx, out float ly))
+                    AvStrokes.Chevron(b, lx, ly, 7f, Mathf.Atan2(ly - y, lx - x) * Mathf.Rad2Deg, Standard, alert);
+                AvStrokes.Diamond(b, x, y, 10f, Standard, alert);
+                Vector3 rel = pos - ownPos;
+                float range = rel.magnitude;
+                float closure = range > 1f ? -Vector3.Dot(velocity - ownVel, rel / range) : float.NaN;
+                float tti = ThreatWatch.Tti(range, closure, velocity.magnitude);
+                int seconds = float.IsFinite(tti) ? Mathf.Clamp(Mathf.CeilToInt(tti), 0, 999) : -1;
+                LabelMissile(x, y + 14f, inboundNumbers[i], seconds, alert);
                 InboundShown++;
             }
             System.Array.Clear(inbound, 0, inbound.Length);
@@ -661,18 +670,25 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < n; i++) Seg(b, ringPoints[i], ringPoints[(i + 1) % n], width, ink);
         }
 
-        private static void RotatedSquare(AvQuadBuffer b, float x, float y, float r, float angleDeg, float width, Rgba ink)
-        {
-            float a = angleDeg * Mathf.Deg2Rad;
-            float px = Mathf.Cos(a) * r, py = Mathf.Sin(a) * r;
-            // Corners at a, a+90, a+180, a+270 degrees.
-            AvStrokes.Line(b, x + px, y + py, x - py, y + px, width, ink);
-            AvStrokes.Line(b, x - py, y + px, x - px, y - py, width, ink);
-            AvStrokes.Line(b, x - px, y - py, x + py, y - px, width, ink);
-            AvStrokes.Line(b, x + py, y - px, x + px, y + py, width, ink);
-        }
-
         // ------------------------------------------------------------------ labels
+
+        /// <summary>An inbound missile label at (x, y): "M{number} {seconds}S" (or "M{number}" without a finite TTI), written only when changed.</summary>
+        private void LabelMissile(float x, float y, int number, int seconds, Rgba ink)
+        {
+            TextMeshProUGUI t = NextLabel(x, y, ink, TopCentre.LabelPt);
+            int key = 7_000_000 + number * 1024 + (seconds >= 0 ? seconds + 1 : 0);
+            if (t == null || labelKeys[labelsUsed - 1] == key) return;
+            labelKeys[labelsUsed - 1] = key;
+            int n = AvNumFormat.Append(buf, 0, "M");
+            n = AvNumFormat.Write(buf, n, number, 0);
+            if (seconds >= 0)
+            {
+                n = AvNumFormat.Append(buf, n, " ");
+                n = AvNumFormat.Write(buf, n, seconds, 0);
+                n = AvNumFormat.Append(buf, n, "S");
+            }
+            t.SetText(buf, 0, n);
+        }
 
         /// <summary>A label at (x, y): "<paramref name="head"/><paramref name="number"/><paramref name="tail"/>" (just the head for a negative number), written only when <paramref name="key"/> changed.</summary>
         private void Label(float x, float y, int key, Rgba ink, string head, int number, string tail, float size = TopCentre.LabelPt)

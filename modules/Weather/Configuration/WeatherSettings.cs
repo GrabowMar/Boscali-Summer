@@ -44,6 +44,7 @@ namespace BoscaliSummer.Modules.Weather.Configuration
 
         public ConfigEntry<KeyCode> ConsoleKey { get; }
         public ConfigEntry<bool> ConsoleKeyRequiresCtrl { get; }
+        public ConfigEntry<float> AtmosphericHaze { get; }
 
         public WeatherSettings(ConfigFile config)
         {
@@ -191,6 +192,11 @@ namespace BoscaliSummer.Modules.Weather.Configuration
             ConsoleKeyRequiresCtrl = config.Bind(section, "ConsoleKeyRequiresCtrl", true,
                 "Require holding Ctrl with the weather console key (Ctrl+O by default).");
 
+            AtmosphericHaze = config.Bind(section, "AtmosphericHaze", 0.45f,
+                new ConfigDescription(
+                    "Low-altitude aerial mist, depth haze and warm golden-hour horizon scatter (0 = native haze). " +
+                    "Thins smoothly with altitude and boosts dawn/dusk sun shafts. Client-local; applies now.",
+                    new AcceptableValueRange<float>(0.0f, 1.0f)));
         }
 
         // LOW .. ULTRA in WeatherQuality order. HIGH is the 2026-10-26 default look; ULTRA marches every half-res texel each frame.

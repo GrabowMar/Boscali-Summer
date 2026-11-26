@@ -222,14 +222,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 "LOAD SELECTION AND DROP-ZONE CONTROLS", "CARGO / AIRDROP", "LOADS", kids);
         }
 
-        /// <summary>
-        /// DRONES (2026-10-27, one home for drone control; DEFENCE's strike/screen toggle moved here): the VANGUARD drones flying.
-        /// Two kinds of order. ATTACK MY TARGET sends every drone at the pilot's selected target, each by its trade (REMORA the air,
-        /// MANTA the ground, the rest as their loadout reads a designation) until CALL OFF. The rest go to the linked drone: SEND
-        /// WHERE I LOOK flies it to the ground at the view centre, where it hunts its kind of target and circles; FLY MY HEADING
-        /// holds the pilot's heading and height; BACK ON TASK (only with an order) clears it. NEXT moves the link (orders stay with
-        /// their drones), then the HUD feed card, the UAV terminal and a pick list. Only while a linkable drone is in the air.
-        /// </summary>
+        /// <summary>Shortcuts for drone orders, the HUD feed and the map roster.</summary>
         private static MenuRow DroneLink(MenuWorld w)
         {
             int n = w.DroneNames.Count;
@@ -237,35 +230,34 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             int linked = w.DroneLinked >= 0 && w.DroneLinked < n ? w.DroneLinked : -1;
             string name = linked >= 0 ? w.DroneNames[linked] : w.DroneNames[0];
             var kids = new List<MenuRow>();
-            MenuRow attack = MenuRow.Toggle("weapons/drones/attack", "drone-strike", w.DronesStriking,
-                F("ATTACK MY TARGET", "ALL DRONES: ESCORTING", "EVERY DRONE GOES AFTER YOUR TARGET: REMORAS TAKE AIR, MANTAS TAKE GROUND", "DRONES ATTACKING"),
-                F("CALL OFF ATTACK", "ALL DRONES: ATTACKING", "EVERY DRONE COMES BACK TO ESCORT YOU", "DRONES ESCORTING", MenuTone.Caution), checkbox: false);
-            attack.IconOn = "drone-screen";
-            if (!w.DronesStriking && !w.DronesCanStrike) attack.Blocked = "NO TARGET SELECTED";
-            kids.Add(attack);
-            if (w.DroneRamMode || w.DroneNames.Exists(d => d.StartsWith("REMORA", StringComparison.Ordinal)))
+            if (w.OwnDrones || w.DronesStriking)
+            {
+                MenuRow attack = MenuRow.Toggle("weapons/drones/attack", "drone-strike", w.DronesStriking,
+                    F("ATTACK MY TARGET", "DRONES ESCORTING", "DIRECT YOUR DRONES TO YOUR SELECTED TARGET", "DRONES ATTACKING"),
+                    F("CALL OFF ATTACK", "DRONES ATTACKING", "RETURN YOUR DRONES TO ESCORT", "DRONES ESCORTING", MenuTone.Caution), checkbox: false);
+                attack.IconOn = "drone-screen";
+                if (!w.DronesStriking && !w.DronesCanStrike) attack.Blocked = "NO TARGET SELECTED";
+                kids.Add(attack);
+            }
+            if (w.DroneRamMode || w.OwnRemora)
                 kids.Add(MenuRow.Toggle("weapons/drones/ram", "drone-strike", w.DroneRamMode,
                     F("REMORA RAM MODE", "REMORAS: MISSILES", "REMORAS KEEP THEIR AAMS AND RAM AIRCRAFT AND INBOUND MISSILES WITH THE AIRFRAME", "REMORAS RAMMING"),
                     F("REMORA MISSILE MODE", "REMORAS: RAMMING", "REMORAS GO BACK TO FIRING THEIR AAMS FIRST", "REMORAS ON MISSILES", MenuTone.Caution), checkbox: false));
-            kids.Add(MenuRow.Action("weapons/drones/look", "map", "SEND WHERE I LOOK", "LINK: " + name,
-                "IT FLIES TO THE GROUND YOU ARE LOOKING AT, HUNTS ITS KIND OF TARGET THERE AND CIRCLES", "SENT: " + name));
-            kids.Add(MenuRow.Action("weapons/drones/nose", "station-next", "FLY MY HEADING", "LINK: " + name,
-                "THE DRONE TAKES YOUR HEADING AND HEIGHT AND HOLDS THEM", "COURSE SET: " + name));
-            if (w.DroneOrdered)
-                kids.Add(MenuRow.Action("weapons/drones/auto", "drone-screen", "BACK ON TASK", "ORDERED: " + name,
-                    "CLEAR ITS ORDER: THE DRONE GOES BACK TO ITS OWN JOB", "BACK ON TASK: " + name, MenuTone.Caution));
+            if (w.DronePiloting)
+                kids.Add(MenuRow.Action("weapons/drones/return", "drone-screen", "RETURN TO AIRCRAFT", "REMOTE PILOT",
+                    "HAND THE DRONE BACK TO AUTONOMOUS FLIGHT", "AIRCRAFT CONTROL", MenuTone.Caution));
             kids.Add(MenuRow.Toggle("weapons/drones/feed", "missile-view", w.DroneFeed,
                 F("SHOW DRONE FEED", "HUD FEED: OFF", "THE LINKED DRONE'S CAMERA ON YOUR HUD", "DRONE FEED ON"),
-                F("HIDE DRONE FEED", "HUD FEED: ON", "FEED CARD OFF THE HUD; IT STAYS WHILE THE DRONE HOLDS YOUR HEADING", "DRONE FEED OFF")));
-            kids.Add(MenuRow.Action("weapons/drones/terminal", "map", "OPEN UAV TERMINAL", "ON LINK: " + MenuText.Plural(n, "DRONE", "DRONES"),
-                "EVERY DRONE, ITS FEED, THE PLOT AND WAYPOINTS", "UAV TERMINAL"));
+                F("HIDE DRONE FEED", "HUD FEED: ON", "HIDE THE FEED CARD", "DRONE FEED OFF")));
+            kids.Add(MenuRow.Action("weapons/drones/map", "map", "OPEN DRONES PANEL", MenuText.Plural(n, "DRONE", "DRONES"),
+                "LOCATE, PILOT AND SHARE DRONES ON THE TACTICAL MAP", "DRONES"));
             if (n > 1)
             {
                 var picks = new List<MenuRow>(n);
                 for (int i = 0; i < n; i++)
                 {
                     MenuRow pick = MenuRow.Pick("weapons/drones/pick/d" + (i + 1), "drone-strike", w.DroneNames[i], w.DroneStates[i], "LINKED" + D + w.DroneStates[i],
-                        i == linked, "LINK THIS DRONE: THE FEED, THE TERMINAL AND YOUR ORDERS GO TO IT", "LINK: " + w.DroneNames[i]);
+                        i == linked, "WATCH THIS DRONE'S FEED", "LINK: " + w.DroneNames[i]);
                     pick.Index = i;
                     picks.Add(pick);
                 }
@@ -275,7 +267,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             return MenuRow.Submenu("weapons/drones", "drone-strike", "DRONES",
                 w.DronesStriking ? "ATTACKING" + D + MenuText.Plural(n, "DRONE", "DRONES")
                     : linked >= 0 && linked < w.DroneStates.Count ? name + D + w.DroneStates[linked] : "ON LINK: " + n,
-                "ATTACK, SEND, SWITCH AND WATCH YOUR VANGUARD DRONES", "DRONES", "DRONES", kids);
+                "WATCH, PILOT AND SHARE YOUR VANGUARD DRONES", "DRONES", "DRONES", kids);
         }
 
         // ------------------------------------------------------------------ HUD (the AR visor: the TAC BOARD in the top right)
@@ -302,8 +294,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             return kids;
         }
 
-        public static readonly string[] SkylarkDrives = { "AUTO", "EV", "HYBRID" }, SkylarkVectors = { "AUTO", "DRONE", "PLANE", "MANUAL" };
-        private const int SkylarkPlane = 2; // SkylarkVectors index
+        public static readonly string[] SkylarkDrives = { "AUTO", "EV", "HYBRID" }, SkylarkVectors = { "DRONE", "PLANE" };
+        private const int SkylarkPlane = 1; // SkylarkVectors index
 
         private static int Clamp(int index, string[] values) => Math.Max(0, Math.Min(values.Length - 1, index));
 
@@ -361,15 +353,15 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 MenuRow hover = MenuRow.Toggle("flight/hover", "auto-hover", w.Hover,
                     F("ENABLE AUTO-HOVER", "AUTO-HOVER: OFF", "HOLD POSITION AND ALTITUDE", "AUTO-HOVER ON"),
                     F("DISABLE AUTO-HOVER", "AUTO-HOVER: ON", "RETURN VTOL CONTROL TO THE STICK", "AUTO-HOVER OFF"));
-                // VS-4 PLANE holds the fans aft and cancels auto-hover every physics tick (SkylarkFlightMode): say so instead of a toggle that undoes itself.
-                if (w.SkylarkActive && w.SkylarkVector == SkylarkPlane && !w.Hover) hover.Blocked = "VS-4 PLANE: SET VECTOR DRONE OR AUTO";
+                // SkylarkFlightMode disables auto-hover in PLANE, where the pilot flies the wing and approach vectoring.
+                if (w.SkylarkActive && w.SkylarkVector == SkylarkPlane && !w.Hover) hover.Blocked = "VS-4 PLANE: SWITCH TO DRONE MODE";
                 c.Rows.Add(b.Reg(hover));
             }
             if (w.SkylarkActive)
             {
                 string battery = string.IsNullOrEmpty(w.SkylarkBattery) ? "DRIVE: " : w.SkylarkBattery + D + "DRIVE: ";
                 c.Rows.Add(b.Reg(MenuRow.Cycle("flight/sk/drive", "engine", "SET DRIVE", battery, SkylarkDrives, Clamp(w.SkylarkDrive, SkylarkDrives), "DRIVE: ")));
-                c.Rows.Add(b.Reg(MenuRow.Cycle("flight/sk/vector", "auto-hover", "SET VECTOR", "VECTOR: ", SkylarkVectors, Clamp(w.SkylarkVector, SkylarkVectors), "VECTOR: ")));
+                c.Rows.Add(b.Reg(MenuRow.Cycle("flight/sk/vector", "auto-hover", "FLIGHT MODE", "MODE: ", SkylarkVectors, Clamp(w.SkylarkVector, SkylarkVectors), "MODE: ")));
                 c.Rows.Add(b.Reg(MenuRow.Toggle("flight/sk/mast", "radar", w.SkylarkMast,
                     F("DEPLOY C2 MAST", "C2: OFFLINE", "STRIKE REACH X1.5 AND CHEAPER CALLS, BIGGER RADAR RETURN", "C2 MAST OUT"),
                     F("STOW C2 MAST", "C2: ONLINE" + D + "REACH X1.5", "FOLD THE MAST AWAY: STEALTHIER, NO C2 BONUS", "C2 MAST STOWED", MenuTone.Active), checkbox: false)));
@@ -640,20 +632,10 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             var c = Cat("view", "VIEW", 270f, "8", "CAMERA");
             if (w.MissileViewActive)
             {
-                string cam = "CAMERA: " + (w.MissileCurrent.Length > 0 ? w.MissileCurrent : "MISSILE"), next = cam, prev = cam;
-                string[] now = w.MissileCurrent.Split(' ');
-                string[] slot = now.Length >= 2 && now[0] == "MSL" ? now[1].Split('/') : null;
-                if (slot != null && slot.Length == 2 && int.TryParse(slot[0], out int k) && int.TryParse(slot[1], out int n) && k >= 1 && n >= 1)
-                {
-                    next = "NEXT: MSL " + (k % n + 1) + "/" + n;
-                    prev = "PREV: MSL " + ((k + n - 2) % n + 1) + "/" + n;
-                }
-                c.Rows.Add(b.Reg(MenuRow.Action("view/mslnext", "missile-next", "FOLLOW NEXT MISSILE", next, "SWITCH CAMERA TO THE NEXT MISSILE", "MISSILE CHANGED")));
-                c.Rows.Add(b.Reg(MenuRow.Action("view/mslprev", "missile-prev", "FOLLOW PREV MISSILE", prev, "SWITCH CAMERA TO THE PREVIOUS ONE", "MISSILE CHANGED")));
-                c.Rows.Add(b.Reg(MenuRow.Action("view/mslexit", "missile-exit", "EXIT MISSILE VIEW", cam, "LEAVE MISSILE VIEW, RESUME CAMERA", "MISSILE VIEW OFF")));
-                if (w.MapAvailable) c.Rows.Add(b.Reg(MenuRow.Action("view/map", "map", "OPEN MAP", "MAP: CLOSED", "FULL-SCREEN TACTICAL MAP", "MAP OPEN")));
+                string cam = "CAMERA: " + (w.MissileCurrent.Length > 0 ? w.MissileCurrent : "MISSILE POV");
+                c.Rows.Add(b.Reg(MenuRow.Action("view/mslexit", "missile-exit", "BACK TO PLANE", cam, "RETURN CAMERA TO YOUR AIRCRAFT", "BACK TO PLANE")));
                 string[] words = w.MissileCurrent.Split(' ');
-                Badge(c, words.Length >= 2 ? words[0] + " " + words[1] : "MISSILE", show: true);
+                Badge(c, words.Length >= 2 ? words[0] + " " + words[1] : "MISSILE POV", show: true);
                 return c;
             }
             if (w.CameraFollowing)
@@ -672,7 +654,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (w.MissileViewAvailable)
             {
                 // no missile in flight is transient: the row keeps its place and number, dimmed
-                MenuRow view = MenuRow.Action("view/mslview", "missile-view", "ENTER MISSILE VIEW", Cut(w.MissileStatus, MaxState), "FOLLOW YOUR MISSILES IN FLIGHT", "MISSILE VIEW");
+                MenuRow view = MenuRow.Action("view/mslview", "missile-view", "MISSILE POV", Cut(w.MissileStatus, MaxState), "RIDE THE MISSILE NOSE CAMERA", "MISSILE POV");
                 if (!w.CanEnterMissileView) view.Blocked = "NO MISSILE IN FLIGHT";
                 c.Rows.Add(b.Reg(view));
             }

@@ -1,52 +1,94 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using BoscaliSummer.Core.Fx;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Runtime;
+using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
-    /// <summary>The burned land after the blast: map-scale fire plumes, dense smoke columns, a high soot deck and
-    /// embers, for the rest of the mission. Poses come from site age, so late snapshots and age jumps show the same picture.</summary>
+    /// <summary>Affected-zone charring and simplified vanilla burns/smoke after the SA-74N burst.
+    /// Ground charring touches only the affected blast zone; fires clone vanilla DamageParticles and
+    /// Fuel Depot smoke systems over a bounded camera-nearest pool.</summary>
     [DefaultExecutionOrder(1900)]
     internal sealed class Sa74Smolder : MonoBehaviour, ISceneService
     {
-        private const int Plumes = Sa74Firestorm.Plumes, Puffs = Sa74Firestorm.Puffs;
-        private const float Period = Sa74Firestorm.Period;
-        private readonly ParticleSystem.Particle[] smokeBuffer = new ParticleSystem.Particle[Plumes * Puffs + Sa74Firestorm.PillarPuffs];
-        private readonly ParticleSystem.Particle[] fireBuffer = new ParticleSystem.Particle[Plumes * Sa74Firestorm.FlameQuads];
-        private readonly ParticleSystem.Particle[] emberBuffer = new ParticleSystem.Particle[Sa74Firestorm.Embers];
-        private readonly ParticleSystem.Particle[] deckBuffer = new ParticleSystem.Particle[Sa74Firestorm.DeckPuffs];
-        private readonly Vector3[] bases = new Vector3[Plumes];
-        private readonly float[] starts = new float[Plumes];
-        private readonly float[] scales = new float[Plumes];
-        private Vector3 pillar;
-        private bool hasPillar;
+        private struct Candidate
+        {
+            internal Vector3 Position;
+            internal float Start, Scale;
+            internal uint Seed;
+        }
+
+        private sealed class BurnSystem
+        {
+            internal ParticleSystem System;
+            internal float BaseRate, VelXMin, VelXMax, VelZMin, VelZMax;
+            internal bool IsFlame, HasVelCurve;
+        }
+
+        private sealed class BurnRig
+        {
+            internal GameObject Root;
+            internal readonly List<BurnSystem> Systems = new List<BurnSystem>();
+            internal int SiteIndex = -1;
+            internal bool NeedsPrewarm, WindDirty = true;
+        }
+
+        private sealed class Ground
+        {
+            internal Material Material;
+            internal string Property;
+            internal Texture Original;
+            internal RenderTexture Burned;
+            internal bool Cover;
+        }
+
+        private static readonly string[] GroundMaps = { "_macro_basecolor", "_macro_ao", "_splat_fields", "_splat_grass", "_splat_lush" };
+        private static readonly BindingFlags InstanceFields = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        private static readonly FieldInfo DamageEffectsField = typeof(UnitPart).GetField("damageEffects", InstanceFields);
+        private static readonly FieldInfo DisintegrationEffectsField = typeof(UnitPart).GetField("disintegrationEffects", InstanceFields);
+        private static readonly FieldInfo WreckageField = typeof(Building).GetField("wreckage", InstanceFields);
+        private static readonly FieldInfo FuelFireField = typeof(FuelTank).GetField("fireEffect", InstanceFields);
+
+        private readonly Candidate[] candidates = new Candidate[Sa74Firestorm.CandidateSites];
+        private readonly List<BurnRig> pool = new List<BurnRig>(Sa74Firestorm.ActivePool);
+        private readonly List<int> selected = new List<int>(Sa74Firestorm.ActivePool);
+        private readonly List<Ground> grounds = new List<Ground>();
+
         private Sa74Fallout.Site site;
         private GameObject root;
-        private ParticleSystem smoke, fire, embers, deck;
-        private Material smokeMaterial, fireMaterial, deckMaterial, charMaterial;
-        private sealed class Ground { internal Material Material; internal string Property; internal Texture Original; internal RenderTexture Burned; internal bool Cover; }
-        private sealed class Detail { internal Material Material; internal string Property; internal Texture Original; internal bool Applied; }
-        // The whole-map colour is recoloured; the plant cover weights are burned away so fields and grass do not stay green.
-        private static readonly string[] GroundMaps = { "_macro_basecolor", "_splat_fields", "_splat_grass", "_splat_lush" };
-        private readonly List<Ground> grounds = new List<Ground>();
-        private readonly List<Detail> details = new List<Detail>();
-        private Texture2D sootDetail;
-        private int charStep = -1;
+        private Material charMaterial;
+        private GameObject burnTemplate, smokeTemplate;
+        private readonly HashSet<string> burnFlamePaths = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> burnSmokePaths = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> smokePaths = new HashSet<string>(StringComparer.Ordinal);
+        private bool templatesSearched;
         private int count;
+        private int charStep = -1;
+        private float lastCharReach = -1f;
+        private float lastAge = float.NaN;
+        private float nextSelect, nextTick;
+        private Vector3 appliedWind = new Vector3(float.NaN, 0f, 0f);
+
         internal static int ActivePlumes { get; private set; }
         internal static int ActiveFires { get; private set; }
         internal static int ActiveEmbers { get; private set; }
         internal static int ActiveDeck { get; private set; }
         internal static int CharMaterials { get; private set; }
-        internal static int CharDetails { get; private set; }
+        internal static int CharDetails => 0;
         internal static int CharStep { get; private set; }
         internal static float CharReach { get; private set; }
         internal static int CharWrites { get; private set; }
+        internal static bool VanillaBurnReady { get; private set; }
+        internal static bool VanillaSmokeReady { get; private set; }
 
         public void ResetForScene() => Clear();
 
@@ -56,95 +98,91 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             Sa74Fallout.Site newest = Sa74Fallout.Sites.Count > 0 ? Sa74Fallout.Sites[Sa74Fallout.Sites.Count - 1] : null;
             if (!ReferenceEquals(newest, site)) { Clear(); site = newest; }
             if (site == null) return;
-            float age = Time.time - site.Started;
+            float age = Mathf.Max(0f, Time.time - site.Started);
             if (age < Sa74Burn.StartSeconds || (root == null && !Build())) return;
             root.transform.position = site.Position.ToLocalPosition();
-            Pose(age);
             Char(age);
+            TickBurns(age);
         }
 
         private bool Build()
         {
-            if (SmokeFx.Puff == null || GlowFx.Glow == null) return false;
-            smokeMaterial = new Material(SmokeFx.Puff) { name = "SA-74N smoldering smoke", renderQueue = 3000 };
-            fireMaterial = new Material(GlowFx.Glow) { name = "SA-74N ground fires", renderQueue = 3003 };
-            // HDR fire: it has to outshine the -1.5 EV nuclear-winter grade and catch bloom.
-            if (fireMaterial.HasProperty("_BaseColor")) fireMaterial.SetColor("_BaseColor", new Color(3.4f, 3.4f, 3.4f, 1f));
-            deckMaterial = new Material(SmokeFx.Puff) { name = "SA-74N soot deck", renderQueue = 3001 };
+            ResolveTemplates();
             root = new GameObject("SA-74N burned land / " + site.Id);
             root.transform.SetParent(Datum.origin, false);
             root.transform.position = site.Position.ToLocalPosition();
-            smoke = Make("smoke", smokeBuffer.Length, smokeMaterial, .72f);
-            fire = Make("fires", fireBuffer.Length, fireMaterial, .45f);
-            embers = Make("embers", emberBuffer.Length, fireMaterial, .06f);
-            deck = Make("soot deck", deckBuffer.Length, deckMaterial, 1f);
             Vector3 centre = site.Position.ToLocalPosition();
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             MapSettings map = level != null ? level.LoadedMapSettings : null;
             Vector2 span = map != null ? map.MapSize : Core.Game.TheaterFrame.Resolve();
-            float reach = Sa74Firestorm.Reach(span.x, span.y);
+            float reach = Sa74Burn.EffectiveRadius(Sa74Firestorm.Reach(span.x, span.y), Sa74Fallout.ShockRadius, site.GroundClearance);
             count = 0;
-            for (int i = 0; i < Plumes; i++)
+            if (reach <= 1f) return true;
+            if (Physics.Raycast(centre + Vector3.up * 20000f, Vector3.down, out RaycastHit gz, 45000f,
+                PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) && gz.point.y > Datum.LocalSeaY + 1f)
+            {
+                candidates[count++] = new Candidate
+                {
+                    Position = Datum.origin.InverseTransformPoint(gz.point),
+                    Scale = 2.8f,
+                    Start = Sa74BlastShape.ArrivalSeconds(site.GroundClearance) + 1f,
+                    Seed = unchecked(site.Id * 7919u + 5741u)
+                };
+            }
+            float minR = Mathf.Min(Sa74Fallout.CraterRadius * .6f, reach * .15f), maxR = reach * .92f;
+            for (int i = 1; i < Sa74Firestorm.CandidateSites && maxR > minR; i++)
             {
                 uint seed = unchecked(site.Id * 7919u + (uint)i * 104729u + 5741u);
-                // Linear in radius, not area: fires crowd toward ground zero and thin out to the map edge.
-                float distance = 800f + Hash(seed) * (reach - 800f), angle = i * 2.39996323f + Hash(seed + 7u);
+                float distance = minR + Sa74Firestorm.Hash(seed) * (maxR - minR);
+                float angle = i * 2.39996323f + Sa74Firestorm.Hash(seed + 7u);
                 Vector3 above = centre + new Vector3(Mathf.Cos(angle) * distance, 20000f, Mathf.Sin(angle) * distance);
-                // Only land burns: a miss is the sea.
+                // Only affected land burns: misses over open water are skipped.
                 if (!Physics.Raycast(above, Vector3.down, out RaycastHit hit, 45000f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) ||
                     hit.point.y <= Datum.LocalSeaY + 1f) continue;
-                bases[count] = Datum.origin.InverseTransformPoint(hit.point);
-                scales[count] = Sa74Firestorm.Scale(distance, reach);
-                starts[count++] = Sa74BlastShape.ArrivalSeconds(distance) + Sa74Firestorm.IgnitionDelay(seed, distance, reach);
+                candidates[count++] = new Candidate
+                {
+                    Position = Datum.origin.InverseTransformPoint(hit.point),
+                    Scale = Sa74Firestorm.Scale(distance, reach),
+                    Start = Sa74BlastShape.ArrivalSeconds(distance) + Sa74Firestorm.IgnitionDelay(seed, distance, reach),
+                    Seed = seed
+                };
             }
-            Vector3 zero = centre + Vector3.up * 20000f;
-            hasPillar = Physics.Raycast(zero, Vector3.down, out RaycastHit ground, 45000f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) &&
-                ground.point.y > Datum.LocalSeaY + 1f;
-            if (hasPillar) pillar = Datum.origin.InverseTransformPoint(ground.point);
             return true;
         }
 
-        /// <summary>Burns the land into the map's whole-terrain colour and detail textures. Decal projectors this wide are
-        /// clipped by the 80 km camera far plane and leave straight-edged unburned holes; the terrain's own maps have no such limit.</summary>
+        /// <summary>Chars only the affected ground in the terrain's whole-map colour, AO and vegetation splats.</summary>
         private void Char(float age)
         {
+            if (count == 0) return;
+            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            MapSettings map = level != null ? level.LoadedMapSettings : null;
+            Vector2 span = map != null ? map.MapSize : Core.Game.TheaterFrame.Resolve();
+            if (span.x <= 0f || span.y <= 0f) return;
+            float maxReach = Sa74Burn.Reach(span.x, span.y);
+            float reach = Sa74Burn.EffectiveRadius(maxReach, Sa74Fallout.FrontRadius(age), site.GroundClearance);
             float strength = Sa74Burn.Strength(age);
             int step = Sa74Burn.Step(age);
-            if (step == charStep || count == 0) return;
+            if (reach <= 1f || (step == charStep && Mathf.Abs(reach - lastCharReach) < 500f)) return;
             Shader shader = Sa74Mushroom.BlastShader();
             if (shader == null || shader.passCount < 3) return;
             if (charMaterial == null) charMaterial = new Material(shader) { name = "SA-74N terrain char" };
-            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             if (grounds.Count == 0)
                 foreach (MeshRenderer renderer in FindObjectsOfType<MeshRenderer>())
                 {
                     Material material = renderer.sharedMaterial;
                     if (material == null || !material.HasProperty("_macro_basecolor") || grounds.Exists(ground => ground.Material == material)) continue;
-                    // The sea shares the macro slot; the firestorm soots land, never the water texture.
+                    // The sea shares the macro slot; the firestorm chars land, never the water texture.
                     if (level != null && level.ocean != null && renderer.transform.IsChildOf(level.ocean.transform)) continue;
-                    // Each unique terrain material owns up to four full-map copies; sixteen covers every shipped map chunk.
-                    if (grounds.Count >= 16) break;
-                    // Detail albedos multiply over the macro colour; without them the burned map still shows bright rock and grass.
-                    foreach (string property in material.GetTexturePropertyNames())
-                    {
-                        if (!property.StartsWith("_SampleTexture2D_") || !property.EndsWith("_Texture_1_Texture2D")) continue;
-                        if (details.Exists(detail => detail.Material == material && detail.Property == property)) continue;
-                        Texture texture = material.GetTexture(property);
-                        if (texture == null || texture is RenderTexture || texture.width < 16) continue;
-                        string name = texture.name ?? "";
-                        if (name.EndsWith("_n") || name.IndexOf("angleVariation", StringComparison.OrdinalIgnoreCase) >= 0) continue;
-                        if (details.Count >= 32) break;
-                        details.Add(new Detail { Material = material, Property = property, Original = texture });
-                    }
+                    if (grounds.Count >= 20) break;
                     foreach (string property in GroundMaps)
                     {
                         Texture original = material.HasProperty(property) ? material.GetTexture(property) : null;
                         if (original == null || original is RenderTexture || original.width < 16) continue;
-                        bool cover = property != "_macro_basecolor";
-                        // ponytail: colour up to 4096 square (about 85 MB with mips), cover weights up to 2048, while a burned map exists.
-                        int limit = cover ? 2048 : 4096;
+                        bool cover = property != "_macro_basecolor" && property != "_macro_ao";
+                        // ponytail: colour up to 4096 square, AO and cover weights up to 2048, while burned land exists.
+                        int limit = cover || property == "_macro_ao" ? 2048 : 4096;
                         var burned = new RenderTexture(Mathf.Min(limit, original.width), Mathf.Min(limit, original.height), 0, RenderTextureFormat.ARGB32,
-                            cover ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.sRGB)
+                            cover || property == "_macro_ao" ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.sRGB)
                         {
                             name = "SA-74N burned " + original.name, useMipMap = true, autoGenerateMips = true,
                             wrapMode = original.wrapMode, filterMode = FilterMode.Trilinear, anisoLevel = Mathf.Max(original.anisoLevel, 4)
@@ -155,11 +193,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 }
             if (grounds.Count == 0) return;
             charStep = step;
-            MapSettings map = level != null ? level.LoadedMapSettings : null;
-            Vector2 span = map != null ? map.MapSize : Core.Game.TheaterFrame.Resolve();
-            if (span.x <= 0f || span.y <= 0f) return;
+            lastCharReach = reach;
             GlobalPosition at = site.Position;
-            float reach = Sa74Burn.Reach(span.x, span.y);
             foreach (Ground ground in grounds)
             {
                 charMaterial.SetTexture("_Sa74Macro", ground.Original);
@@ -174,251 +209,397 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 commands.Release();
                 ground.Material.SetTexture(ground.Property, ground.Burned);
             }
-            if (strength > .12f) DarkenDetails();
-            CharMaterials = grounds.Count; CharDetails = details.Count; CharStep = charStep; CharReach = reach; CharWrites++;
+            CharMaterials = grounds.Count; CharStep = charStep; CharReach = reach; CharWrites++;
         }
 
-        /// <summary>A shared near-black noise albedo replaces every ground detail while the burned map exists.</summary>
-        private void DarkenDetails()
+        private void TickBurns(float age)
         {
-            if (details.Count == 0) return;
-            if (sootDetail == null) sootDetail = MakeSootDetail();
-            foreach (Detail detail in details)
+            if (count == 0 || (burnTemplate == null && smokeTemplate == null))
             {
-                if (detail.Applied) continue;
-                detail.Material.SetTexture(detail.Property, sootDetail);
-                detail.Applied = true;
+                ActivePlumes = ActiveFires = ActiveEmbers = ActiveDeck = 0;
+                return;
             }
-        }
-
-        private static Texture2D MakeSootDetail()
-        {
-            const int side = 32;
-            var texture = new Texture2D(side, side, TextureFormat.RGBA32, true, true)
-            { name = "SA-74N ground soot detail", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Trilinear };
-            var pixels = new Color[side * side];
-            for (int y = 0; y < side; y++) for (int x = 0; x < side; x++)
+            bool ageJumped = !float.IsNaN(lastAge) && Mathf.Abs(age - lastAge) > 5f;
+            lastAge = age;
+            float now = Time.unscaledTime;
+            if (ageJumped || now >= nextSelect)
             {
-                float noise = Mathf.PerlinNoise(x * .41f + .3f, y * .41f + .7f);
-                float shade = .022f + noise * .030f;
-                pixels[y * side + x] = new Color(shade * 1.04f, shade, shade * .92f, 1f);
+                nextSelect = now + .5f;
+                SelectSites(age);
             }
-            texture.SetPixels(pixels); texture.Apply(true, true);
-            return texture;
-        }
-
-        private ParticleSystem Make(string label, int budget, Material material, float maximumSize)
-        {
-            var layer = new GameObject("SA-74N " + label);
-            layer.SetActive(false);
-            layer.transform.SetParent(root.transform, false);
-            ParticleSystem system = layer.AddComponent<ParticleSystem>();
-            var main = system.main;
-            main.playOnAwake = false; main.loop = false; main.startSpeed = 0f;
-            main.startLifetime = 10000f; main.maxParticles = budget;
-            main.simulationSpace = ParticleSystemSimulationSpace.Custom;
-            main.customSimulationSpace = Datum.origin;
-            main.cullingMode = ParticleSystemCullingMode.AlwaysSimulate;
-            var emission = system.emission; emission.enabled = false;
-            var shape = system.shape; shape.enabled = false;
-            var renderer = layer.GetComponent<ParticleSystemRenderer>();
-            renderer.sharedMaterial = material;
-            renderer.shadowCastingMode = ShadowCastingMode.Off; renderer.receiveShadows = false;
-            renderer.sortMode = ParticleSystemSortMode.Distance;
-            renderer.minParticleSize = 0f; renderer.maxParticleSize = maximumSize;
-            // The system is paused and posed by hand: give it bounds that cover the whole burned zone.
-            renderer.localBounds = new Bounds(Vector3.zero, new Vector3(120000f, 30000f, 120000f));
-            layer.SetActive(true);
-            system.Play(); system.Pause();
-            return system;
-        }
-
-        private void Pose(float age)
-        {
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
-            Vector3 wind = level != null ? Vector3.ClampMagnitude(level.windVelocity, 12f) : new Vector3(2.5f, 0f, .8f);
+            Vector3 wind = level != null ? Vector3.ClampMagnitude(level.windVelocity, 18f) : Vector3.zero;
             wind.y = 0f;
-            Vector3 centre = site.Position.ToLocalPosition();
-            // Fires rage for the first quarter hour, then the land smolders for good.
+            bool windChanged = float.IsNaN(appliedWind.x) || (wind - appliedWind).sqrMagnitude > .25f;
+            if (windChanged) appliedWind = wind;
+            bool updateRates = ageJumped || now >= nextTick;
+            if (updateRates) nextTick = now + .25f;
             float settle = Sa74Firestorm.Settle(age);
-            int smokeCount = 0, fireCount = 0, emberCount = 0, deckCount = 0, active = 0;
-            for (int p = 0; p < count; p++)
+            int plumes = 0, fires = 0, smokes = 0;
+            foreach (BurnRig rig in pool)
             {
-                float strength = Sa74Firestorm.Growth(age, starts[p]);
-                if (strength <= .001f) continue;
-                active++;
-                uint seed = unchecked(site.Id * 15485863u + (uint)p * 104729u);
-                float a = Hash(seed), b = Hash(seed + 11u), scale = scales[p];
-                float top = (4200f + a * 5200f) * Mathf.Sqrt(scale);
-                Vector3 inward = centre - bases[p]; inward.y = 0f;
-                inward = inward.sqrMagnitude > 1f ? inward.normalized : Vector3.zero;
-                for (int k = 0; k < Puffs; k++)
+                if (rig.SiteIndex < 0) continue;
+                plumes++;
+                Candidate c = candidates[rig.SiteIndex];
+                float growth = Sa74Firestorm.Growth(age, c.Start);
+                bool prewarm = rig.NeedsPrewarm || ageJumped;
+                if (updateRates || prewarm || windChanged || rig.WindDirty)
                 {
-                    float phase = Mathf.Repeat(age / Period + (k + b) / Puffs, 1f);
-                    float c = Hash(seed + 97u + (uint)k);
-                    float above = 120f + phase * top;
-                    // A firestorm pulls surface air inward; wind takes over as the column rises.
-                    float inflow = Mathf.Pow(1f - phase, 2f) * 900f;
-                    Vector3 position = bases[p] + Vector3.up * above + wind * (phase * Period * .55f) + inward * inflow
-                        + new Vector3(Mathf.Sin(phase * 5f + c * 6.28f), 0f, Mathf.Cos(phase * 4f + c * 6.28f)) * (phase * 420f);
-                    float alpha = .9f * strength * Mathf.Lerp(1f, .85f, settle) * Sa74Firestorm.SmokeFade(phase);
-                    if (alpha <= .004f) continue;
-                    Color color = SmokeColor(phase, c, Sa74Firestorm.Flicker(age * .6f, seed + (uint)k));
-                    color.a = alpha;
-                    smokeBuffer[smokeCount++] = new ParticleSystem.Particle
+                    float flameMul = growth * Mathf.Lerp(1f, .45f, settle) * FxBus.Scales.Particles;
+                    float smokeMul = growth * Mathf.Lerp(1f, .70f, settle) * FxBus.Scales.Particles;
+                    foreach (BurnSystem s in rig.Systems)
                     {
-                        position = position, startSize = Mathf.Lerp(700f, 4200f, phase) * (.8f + .4f * c) * scale,
-                        startColor = color, rotation = c * 360f + age * (c - .5f) * 2f,
-                        startLifetime = 10000f, remainingLifetime = 10000f, randomSeed = seed + (uint)k + 1u
-                    };
+                        if (s.System == null) continue;
+                        if (updateRates || prewarm)
+                        {
+                            var emission = s.System.emission;
+                            emission.rateOverTimeMultiplier = s.BaseRate * (s.IsFlame ? flameMul : smokeMul);
+                        }
+                        if (!s.IsFlame && (windChanged || rig.WindDirty) && s.HasVelCurve)
+                        {
+                            var velocity = s.System.velocityOverLifetime;
+                            velocity.enabled = true;
+                            velocity.space = ParticleSystemSimulationSpace.World;
+                            velocity.x = new ParticleSystem.MinMaxCurve(s.VelXMin + wind.x * .45f, s.VelXMax + wind.x * .45f);
+                            velocity.z = new ParticleSystem.MinMaxCurve(s.VelZMin + wind.z * .45f, s.VelZMax + wind.z * .45f);
+                        }
+                        if (prewarm)
+                        {
+                            s.System.Simulate(12f, true, true, false);
+                            s.System.Play(true);
+                        }
+                        else if (!s.System.isPlaying) s.System.Play(true);
+                    }
+                    rig.NeedsPrewarm = false;
+                    rig.WindDirty = false;
                 }
-                float flicker = Sa74Firestorm.Flicker(age, seed);
-                float burning = Mathf.Lerp(1f, .72f, settle) * strength * flicker;
-                fireBuffer[fireCount++] = new ParticleSystem.Particle
+                foreach (BurnSystem s in rig.Systems)
                 {
-                    position = bases[p] + Vector3.up * (90f + a * 50f), startSize = (1500f + a * 1200f) * flicker * scale,
-                    startColor = new Color(1f, .24f, .035f, .40f * burning),
-                    startLifetime = 10000f, remainingLifetime = 10000f, randomSeed = seed + 3u
-                };
-                fireBuffer[fireCount++] = new ParticleSystem.Particle
+                    if (s.System == null) continue;
+                    if (s.IsFlame) fires += s.System.particleCount;
+                    else smokes += s.System.particleCount;
+                }
+            }
+            ActivePlumes = plumes;
+            ActiveFires = fires;
+            ActiveEmbers = 0;
+            ActiveDeck = smokes;
+        }
+
+        private void SelectSites(float age)
+        {
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            Camera camera = cameras != null ? cameras.mainCamera : null;
+            if (camera == null) camera = Camera.main;
+            Vector3 eye = camera != null ? camera.transform.position : Vector3.zero;
+            float rangeSq = Sa74Firestorm.ActiveRange * Sa74Firestorm.ActiveRange;
+            selected.Clear();
+            for (int i = 0; i < count; i++)
+            {
+                if (Sa74Firestorm.Growth(age, candidates[i].Start) <= .001f) continue;
+                if (camera != null && (Datum.origin.TransformPoint(candidates[i].Position) - eye).sqrMagnitude > rangeSq) continue;
+                selected.Add(i);
+            }
+            if (camera != null && selected.Count > Sa74Firestorm.ActivePool)
+                selected.Sort((a, b) =>
+                    (Datum.origin.TransformPoint(candidates[a].Position) - eye).sqrMagnitude.CompareTo(
+                        (Datum.origin.TransformPoint(candidates[b].Position) - eye).sqrMagnitude));
+            if (selected.Count > Sa74Firestorm.ActivePool)
+                selected.RemoveRange(Sa74Firestorm.ActivePool, selected.Count - Sa74Firestorm.ActivePool);
+            // shortcut: cap active vanilla particle emitters at 24 camera-nearest sites; raise ActivePool if wide scenes look sparse.
+            foreach (BurnRig rig in pool)
+                if (rig.SiteIndex >= 0 && !selected.Contains(rig.SiteIndex)) ReleaseRig(rig);
+            foreach (int idx in selected)
+            {
+                if (pool.Exists(r => r.SiteIndex == idx)) continue;
+                BurnRig rig = AcquireRig();
+                if (rig == null) break;
+                rig.SiteIndex = idx;
+                rig.NeedsPrewarm = true;
+                rig.WindDirty = true;
+                Candidate c = candidates[idx];
+                rig.Root.transform.position = Datum.origin.TransformPoint(c.Position);
+                rig.Root.transform.rotation = Quaternion.Euler(0f, Sa74Firestorm.Hash(c.Seed + 19u) * 360f, 0f);
+                rig.Root.transform.localScale = Vector3.one * (1.5f + 1.0f * c.Scale);
+                rig.Root.SetActive(true);
+            }
+        }
+
+        private BurnRig AcquireRig()
+        {
+            foreach (BurnRig existing in pool)
+                if (existing.SiteIndex < 0) return existing;
+            if (pool.Count >= Sa74Firestorm.ActivePool) return null;
+            BurnRig created = CreateRig();
+            if (created != null) pool.Add(created);
+            return created;
+        }
+
+        private static void ReleaseRig(BurnRig rig)
+        {
+            rig.SiteIndex = -1;
+            rig.NeedsPrewarm = false;
+            foreach (BurnSystem s in rig.Systems)
+                if (s.System != null) s.System.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (rig.Root != null) rig.Root.SetActive(false);
+        }
+
+        private BurnRig CreateRig()
+        {
+            var rigRoot = new GameObject("SA-74N vanilla burn");
+            rigRoot.SetActive(false);
+            rigRoot.transform.SetParent(root.transform, false);
+            var rig = new BurnRig { Root = rigRoot };
+            if (burnTemplate != null)
+            {
+                GameObject clone = Instantiate(burnTemplate, rigRoot.transform, false);
+                StripAndCollect(clone, burnFlamePaths, smokeTemplate == null ? burnSmokePaths : null, rig.Systems);
+            }
+            if (smokeTemplate != null)
+            {
+                GameObject clone = Instantiate(smokeTemplate, rigRoot.transform, false);
+                StripAndCollect(clone, null, smokePaths, rig.Systems);
+            }
+            if (rig.Systems.Count == 0) { Destroy(rigRoot); return null; }
+            return rig;
+        }
+
+        private static void StripAndCollect(GameObject clone, HashSet<string> flamePaths, HashSet<string> extraSmokePaths, List<BurnSystem> collected)
+        {
+            foreach (AudioSource audio in clone.GetComponentsInChildren<AudioSource>(true))
+            {
+                audio.Stop(); audio.enabled = false; Destroy(audio);
+            }
+            foreach (Light light in clone.GetComponentsInChildren<Light>(true))
+            {
+                light.enabled = false;
+                if (light.TryGetComponent(out UniversalAdditionalLightData urp)) DestroyImmediate(urp);
+                Destroy(light);
+            }
+            foreach (Collider collider in clone.GetComponentsInChildren<Collider>(true))
+            {
+                collider.enabled = false; Destroy(collider);
+            }
+            foreach (Rigidbody rb in clone.GetComponentsInChildren<Rigidbody>(true))
+            {
+                rb.detectCollisions = false; rb.isKinematic = true; Destroy(rb);
+            }
+            foreach (Renderer renderer in clone.GetComponentsInChildren<Renderer>(true))
+                if (!(renderer is ParticleSystemRenderer)) { renderer.enabled = false; Destroy(renderer); }
+            foreach (MonoBehaviour behaviour in clone.GetComponentsInChildren<MonoBehaviour>(true))
+                if (behaviour != null) Destroy(behaviour);
+
+            foreach (ParticleSystem system in clone.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                string path = GetPath(clone.transform, system.transform);
+                bool keepFlame = flamePaths != null && flamePaths.Contains(path);
+                bool keepSmoke = extraSmokePaths != null && extraSmokePaths.Contains(path);
+                if (!keepFlame && !keepSmoke)
                 {
-                    position = bases[p] + Vector3.up * (130f + a * 50f), startSize = (800f + b * 700f) * flicker * scale,
-                    startColor = new Color(1f, .46f, .08f, .72f * burning),
-                    startLifetime = 10000f, remainingLifetime = 10000f, randomSeed = seed + 5u
-                };
-                fireBuffer[fireCount++] = new ParticleSystem.Particle
+                    var em = system.emission; em.enabled = false;
+                    system.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    ParticleSystemRenderer r = system.GetComponent<ParticleSystemRenderer>();
+                    if (r != null) { r.enabled = false; Destroy(r); }
+                    Destroy(system);
+                    continue;
+                }
+                var main = system.main;
+                main.playOnAwake = false; main.loop = true; main.stopAction = ParticleSystemStopAction.None;
+                main.simulationSpace = ParticleSystemSimulationSpace.Custom; main.customSimulationSpace = Datum.origin;
+                main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+                main.maxParticles = Mathf.Min(main.maxParticles, keepFlame ? 40 : 96);
+                var emission = system.emission; emission.enabled = true;
+                var velocity = system.velocityOverLifetime;
+                var vy = velocity.y;
+                bool hasVel = vy.mode == ParticleSystemCurveMode.Constant || vy.mode == ParticleSystemCurveMode.TwoConstants;
+                if (hasVel && vy.mode == ParticleSystemCurveMode.Constant)
+                    velocity.y = new ParticleSystem.MinMaxCurve(vy.constant, vy.constant);
+                if (!keepFlame)
                 {
-                    position = bases[p] + Vector3.up * (170f + b * 60f), startSize = (330f + b * 330f) * flicker,
-                    startColor = new Color(1f, .84f, .44f, .58f * burning),
-                    startLifetime = 10000f, remainingLifetime = 10000f, randomSeed = seed + 7u
-                };
-                // A ragged fire front around the core, each tongue flickering on its own, so a fire reads as a burning line, not one blob.
-                for (int f = 3; f < Sa74Firestorm.FlameQuads - 1; f++)
+                    var force = system.forceOverLifetime;
+                    force.enabled = true;
+                    force.space = ParticleSystemSimulationSpace.World;
+                    force.x = new ParticleSystem.MinMaxCurve(0f);
+                    force.y = new ParticleSystem.MinMaxCurve(1.2f);
+                    force.z = new ParticleSystem.MinMaxCurve(0f);
+                }
+                collected.Add(new BurnSystem
                 {
-                    uint tongue = seed + 31u * (uint)f;
-                    float spin = Hash(tongue) * 6.2831853f, reachOut = (500f + Hash(tongue + 1u) * 1100f) * scale;
-                    float lick = Sa74Firestorm.Flicker(age * 1.7f, tongue);
-                    fireBuffer[fireCount++] = new ParticleSystem.Particle
+                    System = system,
+                    BaseRate = emission.rateOverTimeMultiplier * (keepFlame ? 1f : .55f),
+                    IsFlame = keepFlame,
+                    HasVelCurve = hasVel,
+                    VelXMin = velocity.x.constantMin, VelXMax = velocity.x.constantMax,
+                    VelZMin = velocity.z.constantMin, VelZMax = velocity.z.constantMax
+                });
+                system.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            }
+        }
+
+        private void ResolveTemplates()
+        {
+            if (templatesSearched) return;
+            templatesSearched = true;
+            burnFlamePaths.Clear(); burnSmokePaths.Clear(); smokePaths.Clear();
+            ResolveSmokeTemplate();
+            ResolveBurnTemplate();
+            VanillaBurnReady = burnTemplate != null && burnFlamePaths.Count > 0;
+            VanillaSmokeReady = (smokeTemplate != null && smokePaths.Count > 0) || (burnTemplate != null && burnSmokePaths.Count > 0);
+        }
+
+        private void ResolveSmokeTemplate()
+        {
+            Encyclopedia e = GameAccess.EncyclopediaOrNull;
+            if (e == null || e.buildings == null) return;
+            BuildingDefinition fuelDepot = null;
+            foreach (BuildingDefinition d in e.buildings)
+            {
+                if (d == null) continue;
+                string key = d.jsonKey ?? string.Empty, name = d.unitName ?? string.Empty;
+                if (key.Equals("FuelContainer2x1", StringComparison.OrdinalIgnoreCase) || name.Equals("Fuel Depot", StringComparison.OrdinalIgnoreCase))
+                { fuelDepot = d; break; }
+                string combined = (key + " " + name).ToLowerInvariant();
+                if (combined.Contains("fuel") && (combined.Contains("depot") || combined.Contains("container") || combined.Contains("silo")))
+                    fuelDepot = d;
+            }
+            if (fuelDepot == null || fuelDepot.unitPrefab == null) return;
+            var candidatesList = new HashSet<GameObject>();
+            foreach (UnitPart part in fuelDepot.unitPrefab.GetComponentsInChildren<UnitPart>(true))
+            {
+                if (DamageEffectsField?.GetValue(part) is IEnumerable damageEffects)
+                    foreach (object item in damageEffects)
+                        if (item is DamageEffect fx && fx.prefab != null) candidatesList.Add(fx.prefab);
+                if (DisintegrationEffectsField?.GetValue(part) is GameObject[] dis)
+                    foreach (GameObject go in dis) if (go != null) candidatesList.Add(go);
+            }
+            Building building = fuelDepot.unitPrefab.GetComponentInChildren<Building>(true);
+            GameObject wreckage = building != null ? WreckageField?.GetValue(building) as GameObject : null;
+            if (wreckage != null) candidatesList.Add(wreckage);
+
+            int bestScore = int.MinValue;
+            ParticleSystem bestSystem = null;
+            foreach (GameObject candidate in candidatesList)
+            {
+                if (candidate == null) continue;
+                foreach (ParticleSystem system in candidate.GetComponentsInChildren<ParticleSystem>(true))
+                {
+                    int score = ScoreSmokeSystem(candidate.transform, system);
+                    if (score > bestScore) { bestScore = score; smokeTemplate = candidate; bestSystem = system; }
+                }
+            }
+            if (smokeTemplate == null || bestSystem == null) { smokeTemplate = null; return; }
+            foreach (ParticleSystem system in smokeTemplate.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                string desc = DescribeLayer(smokeTemplate.transform, system);
+                if (IsExplicitSmoke(desc) && !IsTransientExplosion(desc) && !desc.Contains("fire") && !desc.Contains("flame"))
+                    smokePaths.Add(GetPath(smokeTemplate.transform, system.transform));
+            }
+            if (smokePaths.Count == 0) smokePaths.Add(GetPath(smokeTemplate.transform, bestSystem.transform));
+        }
+
+        private void ResolveBurnTemplate()
+        {
+            int bestScore = int.MinValue;
+            ParticleSystem bestFlame = null;
+            foreach (DamageParticles fx in Resources.FindObjectsOfTypeAll<DamageParticles>())
+            {
+                if (fx == null) continue;
+                foreach (ParticleSystem system in fx.GetComponentsInChildren<ParticleSystem>(true))
+                {
+                    string desc = (fx.name + "/" + DescribeLayer(fx.transform, system)).ToLowerInvariant();
+                    if (!desc.Contains("fire") && !desc.Contains("flame")) continue;
+                    int score = ScoreFlameSystem(desc);
+                    if (score > bestScore) { bestScore = score; burnTemplate = fx.gameObject; bestFlame = system; }
+                }
+            }
+            if (burnTemplate == null)
+            {
+                Encyclopedia e = GameAccess.EncyclopediaOrNull;
+                if (e != null && e.aircraft != null)
+                    foreach (AircraftDefinition ac in e.aircraft)
                     {
-                        position = bases[p] + new Vector3(Mathf.Cos(spin) * reachOut, 110f + Hash(tongue + 2u) * 80f, Mathf.Sin(spin) * reachOut),
-                        startSize = (420f + Hash(tongue + 3u) * 520f) * lick * Mathf.Sqrt(scale),
-                        startColor = new Color(1f, .38f + .2f * lick, .06f, .62f * burning * lick),
-                        startLifetime = 10000f, remainingLifetime = 10000f, randomSeed = tongue
-                    };
-                }
-                // A wide dim halo: from far away and at night the burning land reads as one orange glow, not single dots.
-                fireBuffer[fireCount++] = new ParticleSystem.Particle
-                {
-                    position = bases[p] + Vector3.up * 60f, startSize = (3800f + b * 2400f) * scale,
-                    startColor = new Color(1f, .30f, .05f, .16f * burning),
-                    startLifetime = 10000f, remainingLifetime = 10000f, randomSeed = seed + 13u
-                };
+                        if (ac == null || ac.unitPrefab == null) continue;
+                        foreach (FuelTank tank in ac.unitPrefab.GetComponentsInChildren<FuelTank>(true))
+                        {
+                            GameObject fireFx = FuelFireField?.GetValue(tank) as GameObject;
+                            if (fireFx == null) continue;
+                            foreach (ParticleSystem system in fireFx.GetComponentsInChildren<ParticleSystem>(true))
+                            {
+                                string desc = (fireFx.name + "/" + DescribeLayer(fireFx.transform, system)).ToLowerInvariant();
+                                if (!desc.Contains("fire") && !desc.Contains("flame")) continue;
+                                int score = ScoreFlameSystem(desc);
+                                if (score > bestScore) { bestScore = score; burnTemplate = fireFx; bestFlame = system; }
+                            }
+                        }
+                    }
             }
-            for (int i = 0; i < emberBuffer.Length && count > 0; i++)
+            if (burnTemplate == null || bestFlame == null) { burnTemplate = null; return; }
+            foreach (ParticleSystem system in burnTemplate.GetComponentsInChildren<ParticleSystem>(true))
             {
-                int p = i % count;
-                float strength = Sa74Firestorm.Growth(age, starts[p]);
-                if (strength <= .001f) continue;
-                uint seed = unchecked(site.Id * 32452843u + (uint)i * 104729u);
-                float a = Hash(seed), b = Hash(seed + 3u);
-                float phase = Mathf.Repeat(age / (38f + b * 60f) + a, 1f);
-                float flicker = Sa74Firestorm.Flicker(age, seed + 9u);
-                Vector3 position = bases[p] + Vector3.up * (180f + phase * (2200f + a * 2400f))
-                    + wind * (phase * 900f) + new Vector3(Mathf.Sin(phase * 9f + a * 6.28f), 0f, Mathf.Cos(phase * 7f + b * 6.28f)) * (phase * 260f);
-                float alpha = .90f * strength * Mathf.Pow(1f - phase, 1.4f) * flicker;
-                if (alpha <= .004f) continue;
-                emberBuffer[emberCount++] = new ParticleSystem.Particle
-                {
-                    position = position, startSize = 25f + a * 70f,
-                    startColor = Color.Lerp(new Color(1f, .18f, .015f), new Color(1f, .62f, .12f), b) * new Color(1f, 1f, 1f, alpha),
-                    rotation = a * 360f + age * (b - .5f) * 8f,
-                    startLifetime = 10000f, remainingLifetime = 10000f, randomSeed = seed + 1u
-                };
+                string desc = (burnTemplate.name + "/" + DescribeLayer(burnTemplate.transform, system)).ToLowerInvariant();
+                if ((desc.Contains("fire") || desc.Contains("flame")) && !IsTransientExplosion(desc))
+                    burnFlamePaths.Add(GetPath(burnTemplate.transform, system.transform));
+                else if (IsExplicitSmoke(desc) && !IsTransientExplosion(desc))
+                    burnSmokePaths.Add(GetPath(burnTemplate.transform, system.transform));
             }
-            if (hasPillar) smokeCount = PosePillar(age, settle, wind, smokeCount);
-            float deckStrength = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(30f, 180f, age)) * Mathf.Lerp(1f, .70f, settle);
-            for (int i = 0; i < deckBuffer.Length && count > 0; i++)
-            {
-                uint seed = unchecked(site.Id * 49979687u + (uint)i * 104729u);
-                float a = Hash(seed), b = Hash(seed + 7u);
-                float angle = i * 2.39996323f + b * .5f;
-                float radial = Mathf.Sqrt(a) * Sa74Firestorm.DeckRadius;
-                float phase = Mathf.Repeat(age / (420f + b * 360f) + b, 1f);
-                Vector3 position = centre + new Vector3(Mathf.Cos(angle) * radial, 5200f + phase * 3800f + a * 1800f, Mathf.Sin(angle) * radial)
-                    + wind * (phase * 1200f);
-                float alpha = .16f * deckStrength * (.55f + .45f * b) * Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(phase * 8f));
-                if (alpha <= .003f) continue;
-                float shade = .035f + a * .020f;
-                deckBuffer[deckCount++] = new ParticleSystem.Particle
-                {
-                    position = position, startSize = 2600f + a * 4200f,
-                    startColor = new Color(shade * 1.05f, shade, shade * .93f, alpha),
-                    rotation = b * 360f + age * (a - .5f) * .5f,
-                    startLifetime = 10000f, remainingLifetime = 10000f, randomSeed = seed + 1u
-                };
-            }
-            smoke.SetParticles(smokeBuffer, smokeCount);
-            fire.SetParticles(fireBuffer, fireCount);
-            embers.SetParticles(emberBuffer, emberCount);
-            deck.SetParticles(deckBuffer, deckCount);
-            ActivePlumes = active; ActiveFires = fireCount; ActiveEmbers = emberCount; ActiveDeck = deckCount;
+            if (burnFlamePaths.Count == 0) burnFlamePaths.Add(GetPath(burnTemplate.transform, bestFlame.transform));
         }
 
-        /// <summary>Ground zero keeps one towering black pillar for good, glowing from the fires at its root and feeding the soot deck.</summary>
-        private int PosePillar(float age, float settle, Vector3 wind, int smokeCount)
+        private static int ScoreSmokeSystem(Transform prefabRoot, ParticleSystem system)
         {
-            float strength = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(Sa74Burn.StartSeconds, 90f, age)) * Mathf.Lerp(1f, .88f, settle);
-            for (int k = 0; k < Sa74Firestorm.PillarPuffs; k++)
-            {
-                uint seed = unchecked(site.Id * 86028121u + (uint)k * 104729u);
-                float c = Hash(seed);
-                float phase = Mathf.Repeat(age / Sa74Firestorm.PillarPeriod + (k + c * .5f) / Sa74Firestorm.PillarPuffs, 1f);
-                float alpha = .85f * strength * Sa74Firestorm.SmokeFade(phase);
-                if (alpha <= .004f) continue;
-                Vector3 position = pillar + Vector3.up * (200f + phase * 13000f) + wind * (phase * Sa74Firestorm.PillarPeriod * .35f)
-                    + new Vector3(Mathf.Sin(phase * 3f + c * 6.28f), 0f, Mathf.Cos(phase * 2.5f + c * 6.28f)) * (phase * 1400f);
-                // The glow climbs higher up the pillar than up a single fire's column: the crater is the brightest fire on the map.
-                Color color = SmokeColor(phase * .55f, c, Sa74Firestorm.Flicker(age * .4f, seed));
-                color.a = alpha;
-                smokeBuffer[smokeCount++] = new ParticleSystem.Particle
-                {
-                    position = position, startSize = Mathf.Lerp(2600f, 9000f, phase) * (.85f + .3f * c),
-                    startColor = color, rotation = c * 360f + age * (c - .5f),
-                    startLifetime = 10000f, remainingLifetime = 10000f, randomSeed = seed + 1u
-                };
-            }
-            return smokeCount;
+            string desc = (prefabRoot.name + "/" + DescribeLayer(prefabRoot, system)).ToLowerInvariant();
+            bool explicitSmoke = IsExplicitSmoke(desc);
+            int score = explicitSmoke ? 1200 : 0;
+            if (desc.Contains("fuel")) score += 120;
+            if (desc.Contains("dark") || desc.Contains("black") || desc.Contains("soot")) score += 180;
+            if (IsTransientExplosion(desc)) score -= 1400;
+            if (desc.Contains("explosion") && !explicitSmoke) score -= 1000;
+            if ((desc.Contains("fire") || desc.Contains("flame")) && !explicitSmoke) score -= 700;
+            var main = system.main;
+            score += Mathf.RoundToInt(Mathf.Min(main.startLifetime.constantMax, 40f) * 8f);
+            score += Mathf.RoundToInt(Mathf.Min(main.startSize.constantMax, 60f) * 3f);
+            if (main.loop) score += 140;
+            return score;
         }
 
-        /// <summary>Unlit smoke: the root carries the fire's own orange glow (it must read in the dark end state), the top is cold soot.</summary>
-        private static Color SmokeColor(float phase, float c, float flicker)
+        private static int ScoreFlameSystem(string desc)
         {
-            float shade = .045f + c * .028f + phase * .045f;
-            Color lit = new Color(.70f, .27f, .07f) * (.75f + .25f * flicker);
-            Color soot = new Color(shade * 1.06f, shade, shade * .95f);
-            return Color.Lerp(lit, soot, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.02f, .34f, phase)));
+            int score = desc.Contains("flame") ? 60 : 40;
+            if (desc.Contains("damage") || desc.Contains("burn")) score += 25;
+            if (desc.Contains("engine")) score += 8;
+            if (IsTransientExplosion(desc) || desc.Contains("explosion") || desc.Contains("impact") || desc.Contains("muzzle"))
+                score -= 80;
+            return score;
         }
 
-        private static float Hash(uint value)
+        private static string DescribeLayer(Transform root, ParticleSystem system)
         {
-            unchecked { value ^= value >> 16; value *= 0x7feb352du; value ^= value >> 15; value *= 0x846ca68bu; value ^= value >> 16; }
-            return (value & 0x00ffffffu) / 16777215f;
+            ParticleSystemRenderer renderer = system.GetComponent<ParticleSystemRenderer>();
+            string material = renderer != null && renderer.sharedMaterial != null ? renderer.sharedMaterial.name : string.Empty;
+            return (GetPath(root, system.transform) + "/" + material).ToLowerInvariant();
+        }
+
+        private static bool IsExplicitSmoke(string desc) => desc.Contains("smoke") || desc.Contains("soot") || desc.Contains("plume");
+
+        private static bool IsTransientExplosion(string desc) =>
+            desc.Contains("fireball") || desc.Contains("flash") || desc.Contains("spark") ||
+            desc.Contains("debris") || desc.Contains("fragment") || desc.Contains("shrapnel");
+
+        private static string GetPath(Transform root, Transform target)
+        {
+            if (target == root) return string.Empty;
+            var names = new List<string>(8);
+            Transform current = target;
+            while (current != null && current != root) { names.Add(current.name); current = current.parent; }
+            names.Reverse();
+            return string.Join("/", names.ToArray());
         }
 
         private void Clear()
         {
+            foreach (BurnRig rig in pool) if (rig.Root != null) Destroy(rig.Root);
+            pool.Clear(); selected.Clear();
             if (root != null) Destroy(root);
-            foreach (Detail detail in details)
-            {
-                if (detail.Material != null && detail.Applied && detail.Material.GetTexture(detail.Property) == sootDetail)
-                    detail.Material.SetTexture(detail.Property, detail.Original);
-            }
-            details.Clear();
-            if (sootDetail != null) Destroy(sootDetail);
-            sootDetail = null;
-            if (smokeMaterial != null) Destroy(smokeMaterial);
-            if (fireMaterial != null) Destroy(fireMaterial);
-            if (deckMaterial != null) Destroy(deckMaterial);
             if (charMaterial != null) Destroy(charMaterial);
             foreach (Ground ground in grounds)
             {
@@ -426,10 +607,14 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (ground.Material != null) ground.Material.SetTexture(ground.Property, ground.Original);
                 if (ground.Burned != null) { ground.Burned.Release(); Destroy(ground.Burned); }
             }
-            grounds.Clear(); charStep = -1;
-            root = null; smoke = fire = embers = deck = null; smokeMaterial = fireMaterial = deckMaterial = charMaterial = null; site = null;
-            count = 0; hasPillar = false; ActivePlumes = ActiveFires = ActiveEmbers = ActiveDeck = 0;
-            CharMaterials = 0; CharDetails = 0; CharStep = 0; CharReach = 0f; CharWrites = 0;
+            grounds.Clear(); charStep = -1; lastCharReach = -1f; lastAge = float.NaN;
+            nextSelect = nextTick = 0f; appliedWind = new Vector3(float.NaN, 0f, 0f);
+            root = null; charMaterial = null; site = null;
+            burnTemplate = smokeTemplate = null; templatesSearched = false;
+            burnFlamePaths.Clear(); burnSmokePaths.Clear(); smokePaths.Clear();
+            count = 0; ActivePlumes = ActiveFires = ActiveEmbers = ActiveDeck = 0;
+            CharMaterials = 0; CharStep = 0; CharReach = 0f; CharWrites = 0;
+            VanillaBurnReady = VanillaSmokeReady = false;
         }
 
         private void OnDestroy() => Clear();

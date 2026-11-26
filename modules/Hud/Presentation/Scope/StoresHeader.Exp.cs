@@ -6,7 +6,7 @@ using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    // CM cell (ONE BAR v3 3.2): one tile per countermeasure in the order the game steps through them, up to three. A tile, stacked and centred: the glyph large on top (the jammer's game sprite), the EMPHASIS numeral under it,
+    // CM cell: one tile per countermeasure in the order the game steps through them. A tile, stacked and centred: the icon on top, the EMPHASIS numeral under it,
     // the short name on R3 (the rounds just dispensed in its place for 0.45 s). The selected tile has the Hi rule segment (the WPN rail's idiom); a called tile an outlined pulsing box. Empty is a red 0 over a Faint glyph. The capacitor is SYS's (StoresHeader.Power).
     internal sealed partial class StoresHeader
     {
@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool PaintExp(ScopeCanvas g, in BoardRect r, bool flashOn)
         {
             bool beat = false;
-            int n = Math.Min(d.CmCount, StoresLayout.TileMax);
+            int n = Math.Min(d.CmCount, HudCm.MaxStations);
             if (n <= 0) return false;
             float tw = Mathf.Floor(r.W / n);
             for (int i = 0; i < n; i++) beat |= PaintTile(g, i, r.X + i * tw, r.Y, tw, flashOn);
@@ -47,17 +47,43 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 if (c.Tag == "IR") FlareGlyph(g, gx, cy, glyph, gs);
                 else if (c.Tag == "RDR") ChaffGlyph(g, gx, cy, glyph, gs);
+                else if (c.Tag == "AEG") DartPodGlyph(g, gx, cy, glyph, gs);
+                else DrawCountermeasureIcon(g, i, c.Icon, gx, cy, gs, glyph);
                 ScopeTone tone = firing ? Hi : StoresMath.CountTone(HudCm.Level(c), selected);
                 g.FitText(ScopeStr.Int(c.Ammo), mid, ny, nw, tone, HudType.Emphasis, HudType.Label, ScopeAlign.Center, true);
             }
 
-            string name = jammer ? (c.Active ? "ON" : "JAM") : c.Tag == "IR" ? "FLR" : c.Tag == "RDR" ? "CHF" : HudCm.Word(c);
+            string name = jammer ? (c.Active ? "ON" : "JAM") : c.Tag == "AEG" ? "AEGIS" : HudCm.Word(c);
             if (firing) g.Text(ScopeStr.Cat("-", cmFired[i]), mid, y + ScopeLayout.R3, Hi, HudType.Label, ScopeAlign.Center, true);
             else g.Text(name, mid, y + ScopeLayout.R3, hot || breathing ? Hi : Dim, HudType.Label, ScopeAlign.Center, hot || breathing);
             return call || firing || breathing;
         }
 
-        // The three tile icons (2026-11-19, user: "remake icons to fit there better"): drawn on one 12 x 12 box round (cx, cy) at scale s, symmetric, the same 1 unit stroke, each filling the box so they read as one set.
+        private void DrawCountermeasureIcon(ScopeCanvas g, int index, int icon, float x, float y, float scale, ScopeTone tone)
+        {
+            ArtKind kind = StoreIcons.Pick(icon, out ArtBounds ink, out float width, out float height);
+            float size = 12f * scale;
+            if (kind != ArtKind.None)
+            {
+                ArtPlace art = StoreArt.Fit(ink, width, height, x - size / 2f, y - size / 2f, size, size);
+                Art[CmArtStart + index] = new ArtSlot(icon, art, tone, 1f, kind == ArtKind.Mask);
+            }
+            else g.Ring(x, y, 3f * scale, tone);
+        }
+
+        // Tile glyphs share a 12 × 12 box and the same stroke weight.
+
+        private static void DartPodGlyph(ScopeCanvas g, float x, float y, ScopeTone tone, float scale)
+        {
+            for (int i = -1; i <= 1; i++)
+            {
+                float centre = x + i * 3.5f * scale;
+                float tip = y - (i == 0 ? 5.5f : 3.5f) * scale;
+                g.Line(centre, tip, centre, y + 5f * scale, tone);
+                g.Line(centre - 1.3f * scale, tip + 2f * scale, centre, tip, tone);
+                g.Line(centre, tip, centre + 1.3f * scale, tip + 2f * scale, tone);
+            }
+        }
 
         /// <summary>The jammer: an emitter with its waves going out both ways (the radar fan of the SYS lamp, doubled).</summary>
         internal static void JamGlyph(ScopeCanvas g, float cx, float cy, ScopeTone tone, float s = 1f)

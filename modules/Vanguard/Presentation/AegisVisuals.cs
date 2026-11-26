@@ -1,3 +1,4 @@
+using System;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Runtime;
 using UnityEngine;
@@ -26,62 +27,78 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (Joint != null) Joint.localRotation = Quaternion.AngleAxis(Angle * amount, Axis) * Rest;
         }
 
-        /// <summary>World centre of a joint's meshes (LODs are its children); the pivot when it has none.</summary>
-        public static Vector3 Centre(Transform joint)
+        public static Vector3 Tip(Transform joint)
         {
-            Renderer[] renderers = joint.GetComponentsInChildren<Renderer>(true);
-            if (renderers.Length == 0) return joint.position;
-            Bounds b = renderers[0].bounds;
-            for (int i = 1; i < renderers.Length; i++) b.Encapsulate(renderers[i].bounds);
-            return b.center;
-        }
-
-        public static Transform Find(Transform root, string name)
-        {
-            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
-                if (t.name == name) return t;
-            return null;
+            MeshFilter mesh = joint.GetComponentInChildren<MeshFilter>(true);
+            return mesh != null && mesh.sharedMesh != null
+                ? mesh.transform.TransformPoint(mesh.sharedMesh.bounds.center) - joint.position
+                : Vector3.zero;
         }
     }
 
-    /// <summary>
-    /// Every peer: AEGIS pod cell covers Door0..2. A cover swings open the moment its cell is fired (vanilla
-    /// MountedMissile state, set by LaunchMount on every peer), is open before the rail drops the dart
-    /// (cell railDelay = AegisSnap.DoorLead) and closes again behind it. A missing joint is skipped.
-    /// </summary>
+    /// <summary>Animates the fired cell's cover through the rail release on every peer.</summary>
     internal sealed class AegisDoors : MonoBehaviour
     {
+        private static readonly Color Standby = new Color(0.22f, 0.30f, 0.31f);
+        private static readonly Color Cycling = new Color(0.95f, 0.60f, 0.18f);
+        private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
+        private static readonly int Smoothness = Shader.PropertyToID("_Smoothness");
+
         private MountedMissile[] cells;
         private AegisHinge[] doors;
-        private float[] firedAt;
+        private float[] openedAt;
+        private SkywellGlow status;
 
-        /// <summary>Rigs every pod the station holds: a two-station hardpoint set merges both pods into one 6-dart station.</summary>
-        public static void Attach(WeaponStation station)
+        public static void AttachPod(Transform pod)
         {
-            foreach (Weapon weapon in station.Weapons)
-            {
-                Transform pod = weapon != null && weapon is MountedMissile ? weapon.transform.parent : null;
-                if (pod != null && pod.GetComponent<AegisDoors>() == null) Rig(pod);
-            }
-        }
-
-        private static void Rig(Transform pod)
-        {
+            if (pod == null || pod.GetComponent<AegisDoors>() != null) return;
+            Transform visual = pod.Find("VanguardVisual");
+            if (visual == null) visual = pod;
             MountedMissile[] cells = pod.GetComponentsInChildren<MountedMissile>(true);
-            Transform first = cells[0].transform;
-            var doors = new AegisHinge[cells.Length];
+            if (cells.Length == 0) return;
+            var rig = pod.gameObject.AddComponent<AegisDoors>();
+            rig.enabled = false;
+            rig.cells = cells;
+            rig.doors = new AegisHinge[cells.Length];
+            rig.openedAt = new float[cells.Length];
             for (int i = 0; i < cells.Length; i++)
             {
-                Transform door = AegisHinge.Find(pod, "Door" + CellIndex(cells[i], i));
+                rig.openedAt[i] = float.NegativeInfinity;
+                Transform door = StoreArt.Joint(visual, "Door" + CellIndex(cells[i], i));
                 if (door == null) continue;
-                float lateral = Vector3.Dot(AegisHinge.Centre(door) - door.position, first.right);
-                doors[i] = AegisHinge.Of(door, first.forward, AegisSnap.DoorSwing(lateral));
+                Transform cell = cells[i].transform;
+                float lateral = Vector3.Dot(AegisHinge.Tip(door), cell.right);
+                rig.doors[i] = AegisHinge.Of(door, cell.forward, AegisSnap.DoorSwing(lateral));
             }
-            var c = pod.gameObject.AddComponent<AegisDoors>();
-            c.cells = cells;
-            c.doors = doors;
-            c.firedAt = new float[cells.Length];
-            for (int i = 0; i < cells.Length; i++) c.firedAt[i] = -1f;
+            rig.status = new SkywellGlow(visual);
+            rig.status.Set(Standby, 0f);
+            TintGlass(visual.Find("Glass"));
+        }
+
+        public static void Open(MountedMissile cell)
+        {
+            if (cell == null || cell.transform.parent == null) return;
+            var rig = cell.transform.parent.GetComponent<AegisDoors>();
+            if (rig == null) return;
+            int index = Array.IndexOf(rig.cells, cell);
+            if (index < 0 || rig.doors[index].Joint == null) return;
+            rig.openedAt[index] = Time.time;
+            rig.status.Set(Cycling, 0.22f);
+            rig.enabled = true;
+            VanguardStats.Bump("aegis.doorOpen");
+        }
+
+        private static void TintGlass(Transform glass)
+        {
+            if (glass == null) return;
+            var block = new MaterialPropertyBlock();
+            foreach (Renderer renderer in glass.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.GetPropertyBlock(block);
+                block.SetColor(BaseColor, new Color(0.075f, 0.13f, 0.16f));
+                block.SetFloat(Smoothness, 0.78f);
+                renderer.SetPropertyBlock(block);
+            }
         }
 
         // Builder names cells AegisCell0..2 after the pod model's CELLS order, which also numbers the covers.
@@ -94,17 +111,18 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private void Update()
         {
             float now = Time.time;
-            for (int i = 0; i < cells.Length; i++)
+            bool moving = false;
+            for (int i = 0; i < doors.Length; i++)
             {
-                bool fired = cells[i] != null && cells[i].GetAmmoLoaded() == 0;
-                if (!fired) firedAt[i] = -1f;
-                else if (firedAt[i] < 0f)
-                {
-                    firedAt[i] = now;
-                    if (doors[i].Joint != null) VanguardStats.Bump("aegis.doorOpen");
-                }
-                doors[i].Apply(firedAt[i] < 0f ? 0f : AegisSnap.Door(now - firedAt[i]));
+                if (float.IsNegativeInfinity(openedAt[i])) continue;
+                float age = now - openedAt[i];
+                doors[i].Apply(AegisSnap.Door(age));
+                if (age < AegisSnap.DoorHold + AegisSnap.DoorClose) moving = true;
+                else openedAt[i] = float.NegativeInfinity;
             }
+            if (moving) return;
+            status.Set(Standby, 0f);
+            enabled = false;
         }
     }
 
@@ -126,9 +144,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             int found = 0;
             for (int i = 0; i < Names.Length; i++)
             {
-                Transform fin = AegisHinge.Find(visual, Names[i]);
+                Transform fin = StoreArt.Joint(visual, Names[i]);
                 if (fin == null) continue;
-                float angle = AegisSnap.FinSwing(AegisHinge.Centre(fin) - fin.position, fin.position - body.position, body.forward, out Vector3 axis);
+                float angle = AegisSnap.FinSwing(AegisHinge.Tip(fin), fin.position - body.position, body.forward, out Vector3 axis);
                 if (angle <= 0f) continue;
                 fins[i] = AegisHinge.Of(fin, axis, angle);
                 found++;

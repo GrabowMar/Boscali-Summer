@@ -38,6 +38,9 @@ namespace BoscaliSummer.Modules.Skylark
         private static SkylarkDrive gaugeDrive;
 
         [SerializeField] private Transform[] intakeDoors, exhaustShutters;
+        [SerializeField] private Renderer[] exhaustGlows;
+        private MaterialPropertyBlock exhaustBlock;
+        private float shownGlow = -1f;
         private SkylarkHinge[] hinges;
         private Aircraft aircraft;
         private ControlInputs inputs;
@@ -55,6 +58,7 @@ namespace BoscaliSummer.Modules.Skylark
         internal float Charge { get; private set; } = 1f;
         internal bool Electric { get; private set; }
         internal bool Boost { get; private set; }
+        internal float FanThrustScale => Electric ? EvThrust : Boost ? 1f + BoostGain : 1f;
         /// <summary>The tanks are empty: the battery alone drives the fans.</summary>
         internal bool Dry { get; private set; }
         /// <summary>Thrust to weight on the turbine alone is under 1.05: a vertical lift needs BOOST (owner peer, sampled each second).</summary>
@@ -74,6 +78,11 @@ namespace BoscaliSummer.Modules.Skylark
             Transform[] Pair(string name) => new[] { nodes.TryGetValue(name + "_L", out Transform l) ? l : null, nodes.TryGetValue(name + "_R", out Transform r) ? r : null };
             intakeDoors = Pair("Intake_Door");
             exhaustShutters = Pair("Exhaust_Shutter");
+            exhaustGlows = new[]
+            {
+                nodes.TryGetValue("ExhaustGlow_L", out Transform gl) ? gl.GetComponent<Renderer>() : null,
+                nodes.TryGetValue("ExhaustGlow_R", out Transform gr) ? gr.GetComponent<Renderer>() : null
+            };
         }
 
         private void Awake()
@@ -210,6 +219,20 @@ namespace BoscaliSummer.Modules.Skylark
         private void LateUpdate()
         {
             foreach (SkylarkHinge hinge in hinges) hinge.Step(Electric ? 1f : 0f, DoorSeconds, Time.deltaTime);
+            if (exhaustGlows != null && exhaustGlows.Length > 0)
+            {
+                if (exhaustBlock == null) exhaustBlock = new MaterialPropertyBlock();
+                bool hot = aircraft.Ignition && !aircraft.disabled && !Electric && !Dry;
+                float level = hot ? (Boost ? 1f : Mathf.Lerp(.25f, .72f, Mathf.Clamp01(engine.GetThrustRatio()))) : 0f;
+                if (Mathf.Abs(level - shownGlow) > .04f)
+                {
+                    shownGlow = level;
+                    Color baseCol = Color.Lerp(new Color(.05f, .05f, .05f), new Color(.95f, .38f, .08f), level);
+                    Color emitCol = new Color(1.4f, .46f, .08f) * level;
+                    foreach (Renderer glow in exhaustGlows)
+                        if (glow != null) SkylarkMeshKit.SetLamp(glow, exhaustBlock, baseCol, emitCol);
+                }
+            }
         }
 
         // The native nozzles and engine recompute heat, sound and fuel flow every step from these limits,

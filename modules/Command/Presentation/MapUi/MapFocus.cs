@@ -29,6 +29,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return Flat(map, worldX, worldZ, zoomIn);
         }
 
+        internal static bool ToAirTrack(Unit track, bool zoomIn)
+        {
+            if (!DynamicMap.mapMaximized || track == null || track.disabled) return false;
+            GlobalPosition point = track.GlobalPosition();
+            if (!float.IsFinite(point.x) || !float.IsFinite(point.y) || !float.IsFinite(point.z)) return false;
+            return MfdTerrainRelief.IsDrawing
+                ? ReliefNavigator.FocusAirTrack(point, zoomIn)
+                : To(point.x, point.z, zoomIn);
+        }
+
         /// <summary>Where the point is on screen as a fraction of the viewport height from its centre; -1 when unknown. For the sim read-back and the harness.</summary>
         internal static float CentreOffset(float worldX, float worldZ)
         {

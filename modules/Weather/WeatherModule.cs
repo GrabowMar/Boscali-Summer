@@ -90,6 +90,9 @@ namespace BoscaliSummer.Modules.Weather
             context.AddClientSetting("SKY", "SUN SHAFTS",
                 "Beams of light around the sun, cut by clouds, terrain and aircraft. Client-local; applies now.",
                 context.Settings.Weather.SunShaftsEnabled, ClientPreset.Light);
+            context.AddClientLevel("SKY", "ATMOS HAZE",
+                "Low-altitude aerial mist, depth haze and warm dawn/dusk horizon glow. 0 keeps native haze.",
+                weather.AtmosphericHaze, 0f, 1f, .1f);
             context.AddClientSetting("SKY", "AURORA & SPRITES",
                 "Aurora on clear nights; red sprites and blue jets above distant night storms. Client-local; applies now.",
                 context.Settings.Weather.SkyPhenomenaEnabled, ClientPreset.Light);

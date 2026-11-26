@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace BoscaliSummer.Garrisons
 {
@@ -28,6 +29,25 @@ namespace BoscaliSummer.Garrisons
             bearing = (float)(Math.Atan2(directionY, directionX) * 180.0 / Math.PI);
             pinned = true;
             return Finite(x) && Finite(y);
+        }
+
+        public static string StickCaption(int count, HaloPhase phase, float rangeMetres, bool metric, bool includeRange)
+        {
+            string tag;
+            switch (phase)
+            {
+                case HaloPhase.Exit: tag = "EXIT"; break;
+                case HaloPhase.Glide: tag = "GLIDE"; break;
+                case HaloPhase.Deploy:
+                case HaloPhase.Canopy: tag = "CHUTE"; break;
+                case HaloPhase.Landed: tag = "DOWN"; break;
+                default: tag = "DROP"; break;
+            }
+            string caption = "PARA x" + Math.Max(1, count) + " · " + tag;
+            if (!includeRange || phase == HaloPhase.Landed || !Finite(rangeMetres) || rangeMetres < 0f) return caption;
+            return caption + " " + (metric
+                ? (rangeMetres / 1000f).ToString("0.0", CultureInfo.InvariantCulture) + " KM"
+                : (rangeMetres / 1852f).ToString("0.0", CultureInfo.InvariantCulture) + " NM");
         }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);

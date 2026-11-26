@@ -222,7 +222,7 @@ namespace BoscaliSummer.Modules.Ares.Presentation
 
             flow.Section(AvIcon.Pilot, "PILOT", "YOUR AIRCRAFT");
             AvCellGrid pilot = flow.Grid(2);
-            Toggle(flow, pilot, page, "GOD MODE", "Your aircraft and you take no damage of any kind.", () => AresCheats.God, v => AresCheats.God = v);
+            Toggle(flow, pilot, page, "GOD MODE", "Your aircraft and you take no damage of any kind; repairs your aircraft when switched on.", () => AresCheats.God, v => host.SetGodMode(v));
             Toggle(flow, pilot, page, "INFINITE FUEL", "Your engines burn nothing.", () => AresCheats.Fuel, v => AresCheats.Fuel = v);
             Toggle(flow, pilot, page, "INFINITE AMMO", "Every station refills twice a second.", () => AresCheats.Ammo, v => AresCheats.Ammo = v);
             Toggle(flow, pilot, page, "INFINITE FLARES", "Flares and chaff refill twice a second.", () => AresCheats.Flares, v => AresCheats.Flares = v);
@@ -230,6 +230,9 @@ namespace BoscaliSummer.Modules.Ares.Presentation
             Toggle(flow, pilot, page, "ONE-HIT KILLS", "What you hit takes fifty times the damage.", () => AresCheats.OneHit, v => AresCheats.OneHit = v);
             Toggle(flow, pilot, page, "BOOST x2", "As much thrust again as your engines make.", () => AresCheats.Boost, v => AresCheats.Boost = v);
             Toggle(flow, pilot, page, "LOW GRAVITY", "Everything with physics on this machine falls at 30 %.", () => AresCheats.LowGravity, v => host.SetLowGravity(v));
+            AvButtons repair = flow.Buttons(
+                Button("REPAIR PLANE", () => host.RepairMe(), AvIcon.Refresh, AvButtonStyle.Primary));
+            repair.Controls[0].Help = "Repairs your aircraft in one click (hit points, fires, fuel leaks and engines).";
 
             flow.Section(AvIcon.World, "WORLD", "EVERYONE");
             AvCellGrid world = flow.Grid(2);

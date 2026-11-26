@@ -44,12 +44,13 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     localRainIntensity = Mathf.Clamp01(localWeather.RainRate / 20f);
                 }
             }
+            float atmosHaze = !SkyYielded && settings != null ? settings.AtmosphericHaze.Value : 0f;
             // Clouds, rain and terrain must read the same atmosphere for this frame.
             if (liveWeather) { UpdateRainSystems(weatherTime); sunDisc.Tick(LevelInfo.i, view, viewTransmission); }
             else { environmentSnapshot = default; TeardownRainSystems(); atmosphere.Restore(); HighAltitudeSky.Clear(); sunDisc.Release(); }
             if (!Application.isBatchMode && settings != null && settings.Enabled.Value) heatHaze.Update(Time.unscaledTime);
             else heatHaze.Restore();
-            sunShafts.Tick(LevelInfo.i, view, liveWeather && settings.SunShaftsEnabled.Value && !SkyYielded, viewTransmission);
+            sunShafts.Tick(LevelInfo.i, view, liveWeather && settings.SunShaftsEnabled.Value && !SkyYielded, viewTransmission, atmosHaze);
             bool wantClouds = liveWeather && settings.CinematicCloudsEnabled.Value && !SkyYielded;
             if (wantClouds)
             {
@@ -77,8 +78,11 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 clouds.Restore();
                 HighAltitudeSky.Clear();
             }
+            float skyHeight = view != null ? view.transform.position.GlobalY() : 0f;
+            float skyHaze = Mathf.Clamp01(Mathf.InverseLerp(80f, 10f, localWeather.VisibilityKm) +
+                atmosHaze * 0.45f * Mathf.Exp(-Mathf.Max(0f, skyHeight) / 2500f));
             skyAtmosphere.Tick(LevelInfo.i, view, wantClouds && flightClouds != null && flightClouds.Active,
-                Mathf.InverseLerp(80f, 10f, localWeather.VisibilityKm), atmosphere.LastNightLight);
+                skyHaze, atmosphere.LastNightLight);
             Trace();
 
             LevelInfo terrainLevel = LevelInfo.i;
@@ -247,11 +251,12 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
             // Haze first: everything below reads the fog colour it produces.
             float viewHeight = currentCam.transform.position.GlobalY();
+            float atmosHaze = !SkyYielded && settings != null ? settings.AtmosphericHaze.Value : 0f;
             if (hazeEnabled)
                 atmosphere.Apply(RainVisualsEnabled
                     ? rainIntensity : 0f, underwaterView, cloudShade, LevelInfo.i != null ? LevelInfo.i.sun : null,
                     LevelInfo.i != null && LevelInfo.i.moon != null ? LevelInfo.i.moon.intensity : 0f,
-                    DarkNightsEnabled, viewHeight, WeatherClimate.Local != null ? WeatherClimate.Local.hazeScale : 1f);
+                    DarkNightsEnabled, viewHeight, WeatherClimate.Local != null ? WeatherClimate.Local.hazeScale : 1f, atmosHaze);
             else atmosphere.Restore();
             // From very high up: the curved Earth past the far plane, and cloud layers that stop at its horizon.
             HighAltitudeSky.Publish(viewHeight, LevelInfo.i != null ? LevelInfo.i.sun : null);

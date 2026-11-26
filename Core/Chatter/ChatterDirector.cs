@@ -34,6 +34,8 @@ namespace BoscaliSummer.Core.Chatter
         public Action<ChatterAired> Aired;
         /// <summary>Optional preparation gate (recordings loading). Required reports wait without expiring.</summary>
         public Func<bool> Ready;
+        /// <summary>Optional per-channel filter (null: every channel plays). Scripted mission dialogue bypasses it.</summary>
+        public Func<ChatterChannel, bool> ChannelEnabled;
 
         private sealed class Entry
         {
@@ -97,13 +99,16 @@ namespace BoscaliSummer.Core.Chatter
             AiredCount = DroppedCount = 0;
         }
 
+        private bool ChannelAllowed(ChatterSpeaker speaker, string evt) =>
+            ChannelEnabled == null || ChannelEnabled(ChatterChannels.Of(speaker.Net, speaker.Character, evt));
+
         /// <summary>
         /// Something happened that <paramref name="speaker"/> would call. <paramref name="key"/> names the thing for the repeat rule (default: the event and the speaker);
         /// <paramref name="facts"/> fill the line's tokens. False when the radio will not say it: off, unknown event, no line this speaker can say, a repeat, or a full channel.
         /// </summary>
         public bool Raise(float now, string evt, ChatterSpeaker speaker, string key = null, params (string Name, string Value)[] facts)
         {
-            if (speaker == null || string.IsNullOrEmpty(evt) || Level == ChatterLevel.Off) return false;
+            if (speaker == null || string.IsNullOrEmpty(evt) || Level == ChatterLevel.Off || !ChannelAllowed(speaker, evt)) return false;
             if (!Library.Events.TryGetValue(evt, out ChatterEventDef def)) { Unknown.Add(evt); return false; }
             if (Level == ChatterLevel.Essential && def.Priority == ChatterPriority.Ambient) return false;
             key = key ?? evt + ":" + speaker.Id;
@@ -128,7 +133,7 @@ namespace BoscaliSummer.Core.Chatter
         /// <summary>Exact words, for a publisher whose text is made elsewhere (a mission script, a support desk's answer).</summary>
         public bool Say(float now, ChatterSpeaker speaker, string key, string text, ChatterPriority priority)
         {
-            if (speaker == null || string.IsNullOrWhiteSpace(text) || string.IsNullOrEmpty(key) || Level == ChatterLevel.Off) return false;
+            if (speaker == null || string.IsNullOrWhiteSpace(text) || string.IsNullOrEmpty(key) || Level == ChatterLevel.Off || !ChannelAllowed(speaker, "say")) return false;
             if (Level == ChatterLevel.Essential && priority == ChatterPriority.Ambient) return false;
             if (Repeat(now, key)) return false;
             return Enqueue(now, new Entry { Speaker = speaker, Priority = priority, Key = key, Event = "say", Text = ChatterLibrary.Clean(text), Born = now });
@@ -280,7 +285,7 @@ namespace BoscaliSummer.Core.Chatter
                 ChatterPriority priority = now < busyUntil ? onAir : ChatterPriority.Tactical;
                 if (busy && (importantOnAir || !(e.Priority >= ChatterPriority.Tactical && e.Priority > priority))) return;
                 if (!busy && now < System.Math.Max(busyUntil, scriptedUntil) + GapSeconds && e.Priority < ChatterPriority.Emergency) return;
-                if (alive != null && !alive(e.Speaker)) { Drop(best); continue; }
+                if ((alive != null && !alive(e.Speaker)) || !ChannelAllowed(e.Speaker, e.Event)) { Drop(best); continue; }
                 pending.RemoveAt(best);
                 Air(now, e, busy);
                 return;
@@ -404,6 +409,7 @@ namespace BoscaliSummer.Core.Chatter
         public bool StartExchange(float now, IReadOnlyList<ChatterSpeaker> candidates)
         {
             if (Level != ChatterLevel.Full || exchange != null || candidates == null || candidates.Count < 2) return false;
+            if (ChannelEnabled != null && !ChannelEnabled(ChatterChannel.Wing)) return false;
             var roles = new ChatterSpeaker[ChatterExchangeDef.MaxRoles];
             for (int pass = 0; pass < 2; pass++)
             {

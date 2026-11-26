@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Skylark
     {
         private static readonly HashSet<string> CompatibleAircraft = new HashSet<string>(StringComparer.Ordinal)
         {
-            "VTOLTrainer1", "AttackHelo1", "UtilityHelo1", "QuadVTOL1"
+            "AttackHelo1", "UtilityHelo1"
         };
 
         internal static void Include(Hangar hangar)

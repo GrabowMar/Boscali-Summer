@@ -49,6 +49,8 @@ namespace BoscaliSummer.Modules.Skylark
             screen.sharedMaterial = oldScreen.sharedMaterial;
             SkylarkTemplate.Set(cockpit, "tacScreenRender", screen);
             SkylarkTemplate.Set(cockpit, "aircraft", aircraft);
+            SkylarkStatusDisplay.RefitStores(aircraft, cockpit);
+            SkylarkFlightStrip.Install(aircraft, cockpitPart, nodes["Tacscreen"]);
 
             Transform stick = MotionPivot(nodes["Stick"], aircraft, "SkylarkStickMotion");
             SingleRecord(cockpit, "joysticks", joystick =>
@@ -69,7 +71,8 @@ namespace BoscaliSummer.Modules.Skylark
 
             BindWarning(aircraft, nodes["MissileWarning_Lamp"].GetComponent<Renderer>());
             BindCanopy(aircraft, cockpitPart, nodes);
-            BindLighting(cockpit, cockpitPart, nodes);
+            BindLighting(cockpit, cockpitPart, nodes, cockpitLayer);
+            SkylarkCockpitDetails.Install(aircraft, cockpitPart, nodes, cockpitLayer);
 
             // Native camera switching controls individual renderers, not their children.
             // The native warning driver owns its lamp; adding it here would turn it on
@@ -77,8 +80,9 @@ namespace BoscaliSummer.Modules.Skylark
             var inside = nodes["Cockpit"].GetComponentsInChildren<Renderer>(true)
                 .Where(r => !r.name.EndsWith("_LOD") && r.name != "Cockpit_Ext"
                     && r.name != "MissileWarning_Lamp" && !crew.Any(member => r.transform.IsChildOf(member.transform))).ToList();
-            foreach (string name in new[] { "Canopy_Int", "Canopy_InternalView", "Canopy_Frame_Int" })
+            foreach (string name in new[] { "Canopy_Int", "Canopy_InternalView" })
                 inside.Add(nodes[name].GetComponent<Renderer>());
+            inside.AddRange(nodes["Canopy_Frame_Int"].GetComponentsInChildren<Renderer>(true).Where(r => !r.name.EndsWith("_LOD")));
             Renderer[] exterior = new[] { "Canopy", "Canopy_Frame", "Cockpit_Ext" }
                 .Select(name => nodes[name].GetComponent<Renderer>()).ToArray();
             // The native cockpit overlay camera uses its own render layer. A
@@ -170,7 +174,7 @@ namespace BoscaliSummer.Modules.Skylark
             SkylarkTemplate.Set(aircraft, "canopies", new[] { canopy });
         }
 
-        private static void BindLighting(Cockpit cockpit, UnitPart cockpitPart, Dictionary<string, Transform> nodes)
+        private static void BindLighting(Cockpit cockpit, UnitPart cockpitPart, Dictionary<string, Transform> nodes, int cockpitLayer)
         {
             Transform[] anchors = nodes.Where(pair => pair.Key.StartsWith("CockpitLighting_"))
                 .OrderBy(pair => pair.Key).Select(pair => pair.Value).ToArray();
@@ -186,7 +190,11 @@ namespace BoscaliSummer.Modules.Skylark
                     light.transform.SetParent(anchors[next++ % anchors.Length], false);
                     light.transform.localPosition = Vector3.zero;
                     light.type = LightType.Point;
-                    light.range = 1.1f;
+                    light.range = .8f;
+                    light.color = new Color(.71f, .83f, .92f);
+                    light.intensity *= .55f;
+                    // Keep the exterior dark while preserving the donor's daylight and damage callbacks.
+                    light.cullingMask = 1 << cockpitLayer;
                 }
             }
         }

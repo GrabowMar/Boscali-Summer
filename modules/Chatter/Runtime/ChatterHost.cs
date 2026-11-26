@@ -48,13 +48,14 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         public FlightNets Flight => flight;
         public float Now => Time.time;
 
-        public void Configure(IChatterSettings chatterSettings, ManualLogSource logger)
+        public void Configure(IChatterSettings chatterSettings, ManualLogSource logger, Func<ChatterChannel, bool> channelEnabled = null)
         {
             settings = chatterSettings;
             log = logger;
             flight = new FlightNets(this);
             voices = new ChatterVoices(logger, chatterSettings.DataRoot);
             director.Ready = () => !voices.Loading;
+            director.ChannelEnabled = channelEnabled;
             BoscaliSummer.Core.Fx.VisorSound.AddVoiceProbe(VoiceSounding);
             Instance = this;
             director.Aired += OnAired;

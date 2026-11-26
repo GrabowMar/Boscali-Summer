@@ -28,12 +28,28 @@ namespace BoscaliSummer.Modules.Skylark
             if (definition == null) throw new InvalidOperationException("Skylark catalogue is not ready");
             spawned = NetworkSceneSingleton<Spawner>.i.SpawnAircraft(null, definition.unitPrefab,
                 definition.aircraftParameters.loadouts[0], 1f, default,
-                new GlobalPosition(10000f, 2500f, -35000f), Quaternion.identity, Vector3.forward * 130f,
+                new GlobalPosition(10000f, 2500f, -35000f), Quaternion.identity, Vector3.zero,
                 null, FactionRegistry.GetSortedHQs()[0], "SkylarkPeerProof", .5f, .5f);
             if (spawned == null) throw new InvalidOperationException("Native spawner returned null");
             spawned.SetGear(false);
             controls = new SkylarkPeerControls();
             spawned.pilots[0].SwitchStateNew(controls);
+            return Snapshot();
+        }
+
+        public static string SetMast(bool deployed)
+        {
+            RequireHost();
+            if (spawned == null) throw new InvalidOperationException("Spawn first");
+            SkylarkNet.Request(spawned, SkylarkNet.MastAction, (byte)(deployed ? 1 : 0));
+            return Snapshot();
+        }
+
+        public static string SelectStation(byte station)
+        {
+            RequireHost();
+            if (spawned == null) throw new InvalidOperationException("Spawn first");
+            spawned.SetActiveStation(station);
             return Snapshot();
         }
 
@@ -84,6 +100,8 @@ namespace BoscaliSummer.Modules.Skylark
                         speed = a.speed, altitude = a.radarAlt, disabled = a.disabled, simplePhysics = a.simplePhysics,
                         localSim = a.LocalSim,
                         angle = a.GetComponent<DuctedThrustSystem>().angle,
+                        mast = a.GetComponent<SkylarkMast>().Deployed, rcs = a.RCS,
+                        gunDeploy = a.GetComponent<SkylarkTurret>().Deploy,
                         weapons = a.weaponStations.Select(s => new { s.Number, s.Ammo, s.FullAmmo, name = s.WeaponInfo.weaponName }),
                         parts = a.partLookup.Select(p => new { p.name, p.hitPoints, detached = p.IsDetached() }),
                         ducts = a.partLookup.SelectMany(p => p.GetComponentsInChildren<Transform>(true)).Distinct()
@@ -96,7 +114,7 @@ namespace BoscaliSummer.Modules.Skylark
 
     internal sealed class SkylarkPeerControls : PilotBaseState
     {
-        internal float Degrees;
+        internal float Degrees = 90f;
         public override void EnterState(Pilot pilot)
         {
             this.pilot = pilot; aircraft = pilot.aircraft; controlInputs = aircraft.GetInputs();

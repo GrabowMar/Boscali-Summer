@@ -26,7 +26,7 @@
     "TheaterOps": 17,
     "Trenches": 17,
     "UrbanCombat": 40,
-    "Vanguard": 27
+    "Vanguard": 25
   },
   "large_files": {
     "count": 2,
@@ -69,6 +69,7 @@
   "shared_harmony_targets": {
     "AirSurvival": 1,
     "Ares": 2,
+    "Autopilot": 1,
     "Chatter": 2,
     "CombatAdjust": 6,
     "Command": 5,
@@ -95,7 +96,7 @@
     "TheaterOps": 1,
     "Trenches": 3,
     "UrbanCombat": 4,
-    "Vanguard": 13,
+    "Vanguard": 14,
     "Wing": 10
   }
 }

@@ -167,6 +167,7 @@ namespace BoscaliSummer.Modules.Ares.Runtime
                 case "freeze": return host.ToggleFreezeSelection();
                 case "follow": return host.ToggleFollowSelection();
                 case "takecontrol": return host.TakeControl();
+                case "repairme": return host.RepairMe();
                 case "fixme": return host.FixMe();
                 case "credit": return host.AddCredit();
                 default: return "unknown verb " + verb;
@@ -202,7 +203,7 @@ namespace BoscaliSummer.Modules.Ares.Runtime
         {
             switch (name)
             {
-                case "god": AresCheats.God = on; break;
+                case "god": return host.SetGodMode(on);
                 case "fuel": AresCheats.Fuel = on; break;
                 case "ammo": AresCheats.Ammo = on; break;
                 case "flares": AresCheats.Flares = on; break;

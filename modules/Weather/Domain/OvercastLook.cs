@@ -95,5 +95,36 @@ namespace BoscaliSummer.Modules.Weather.Domain
             g = Scalar.Clamp01((g + (lum - g) * grey) * dark);
             b = Scalar.Clamp01((b + (lum - b) * grey) * dark);
         }
+
+        /// <summary>0..1 golden-hour envelope from sine of sun elevation: peaks around 4-8 deg, 0 below -3 deg or above ~20 deg.</summary>
+        public static float GoldenHour(float sunHeight) =>
+            Scalar.IsFinite(sunHeight)
+                ? WeatherMath.Smoothstep(-0.05f, 0.08f, sunHeight) * (1f - WeatherMath.Smoothstep(0.14f, 0.34f, sunHeight))
+                : 0f;
+
+        /// <summary>Low-altitude atmospheric mist floor (fog density), thinning with altitude and lifting slightly at golden hour.</summary>
+        public static float AtmosphericHazeFloor(float amount, float altitude, float sunHeight)
+        {
+            if (!Scalar.IsFinite(amount) || !Scalar.IsFinite(altitude) || !Scalar.IsFinite(sunHeight) || amount <= 0f) return 0f;
+            float k = Scalar.Clamp01(amount);
+            float alt = (float)System.Math.Exp(-System.Math.Max(0f, altitude) / 1400f);
+            float golden = 1f + 0.35f * GoldenHour(sunHeight);
+            return 0.00014f * k * alt * golden;
+        }
+
+        /// <summary>Warms low-altitude haze slightly at golden hour under open skies without clipping HDR values.</summary>
+        public static void GoldenHazeTint(float amount, float sunHeight, float shade, float altitude, ref float r, ref float g, ref float b)
+        {
+            if (!Scalar.IsFinite(amount) || !Scalar.IsFinite(sunHeight) || !Scalar.IsFinite(shade) || !Scalar.IsFinite(altitude) || amount <= 0f) return;
+            float golden = GoldenHour(sunHeight);
+            if (golden <= 0f) return;
+            float alt = (float)System.Math.Exp(-System.Math.Max(0f, altitude) / 2200f);
+            float k = Scalar.Clamp01(amount) * golden * (1f - Scalar.Clamp01(shade) * 0.7f) * alt * 0.42f;
+            if (k <= 0f) return;
+            float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+            r += (lum * 1.20f - r) * k;
+            g += (lum * 0.99f - g) * k;
+            b += (lum * 0.81f - b) * k;
+        }
     }
 }

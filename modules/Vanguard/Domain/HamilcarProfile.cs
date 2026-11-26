@@ -94,12 +94,18 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         /// Landing centre: <see cref="StandOff"/> short of the target on the flat launch -> target line, at the target's height.
         /// A centre farther than <paramref name="reach"/> is clamped to reach on that line and <paramref name="isShort"/> is set.
         /// </summary>
-        public static Vector3 Centre(Vector3 launch, Vector3 target, float reach, out bool isShort)
+        public static Vector3 Centre(Vector3 launch, Vector3 target, float reach, out bool isShort) =>
+            Centre(launch, target, reach, StandOff, out isShort);
+
+        /// <summary>
+        /// Landing centre with explicit <paramref name="standOff"/> short of <paramref name="target"/> (0 when aiming at a player LZ).
+        /// </summary>
+        public static Vector3 Centre(Vector3 launch, Vector3 target, float reach, float standOff, out bool isShort)
         {
             Vector3 flat = new Vector3(target.x - launch.x, 0f, target.z - launch.z);
             float distance = flat.magnitude;
             Vector3 direction = distance > 1e-3f ? flat / distance : Vector3.forward;
-            float along = Mathf.Max(0f, distance - StandOff);
+            float along = Mathf.Max(0f, distance - Mathf.Max(0f, standOff));
             isShort = along > reach;
             if (isShort) along = reach;
             return new Vector3(launch.x + direction.x * along, target.y, launch.z + direction.z * along);
@@ -241,5 +247,24 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public static string ShortDetail(float metres) => "LZ " + Km(metres) + " FROM TARGET";
 
         public static string LostDetail(bool shotDown) => shotDown ? "SHOT DOWN" : "NO LANDING ZONE";
+
+        /// <summary>0..1 flight-to-rollout progress for the TAC BOARD HAMILCAR gauge.</summary>
+        public static float HudProgress(HamilcarPhase phase, float distToTouchdown, float startDist, float phaseAge)
+        {
+            switch (phase)
+            {
+                case HamilcarPhase.Release:
+                case HamilcarPhase.Glide:
+                    if (startDist > GateRange)
+                        return Mathf.Clamp01(1f - (distToTouchdown - GateRange) / (startDist - GateRange)) * 0.65f;
+                    return phase == HamilcarPhase.Release ? 0.05f : 0.35f;
+                case HamilcarPhase.Final: return 0.65f + Mathf.InverseLerp(GateRange, FlareRange, distToTouchdown) * 0.15f;
+                case HamilcarPhase.Flare: return 0.80f + Mathf.InverseLerp(FlareRange, 0f, distToTouchdown) * 0.10f;
+                case HamilcarPhase.Slide: return 0.90f + Mathf.Clamp01(phaseAge / SlideSeconds) * 0.05f;
+                case HamilcarPhase.Unload: return 0.95f + Mathf.Clamp01(phaseAge / UnloadSeconds) * 0.05f;
+                case HamilcarPhase.Husk: return 1f;
+                default: return 0f;
+            }
+        }
     }
 }

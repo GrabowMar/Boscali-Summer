@@ -37,10 +37,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         internal Transform Root => root;
         internal RectTransform PageRect => pageRect;
         private CanvasGroup rootGroup;
-        private RectTransform scopeRect, pageRect, overlayRect, frameRect, storesRect, statusRect;
-        private AvVector shellVector, pageVector, overlayVector, frameVector, storesVector, statusVector;
-        private ScopeText shellText, pageText, overlayText, storesText, statusText;
-        private ScopeCanvas shellCanvas, pageCanvas, overlayCanvas, frameCanvas, storesCanvas, statusCanvas;
+        private RectTransform scopeRect, pageRect, overlayRect, frameRect, storesRect, statusRect, airframeRect, airframeArtRect;
+        private AvVector shellVector, pageVector, overlayVector, frameVector, storesVector, statusVector, airframeVector;
+        private ScopeText shellText, pageText, overlayText, storesText, statusText, airframeText;
+        private ScopeCanvas shellCanvas, pageCanvas, overlayCanvas, frameCanvas, storesCanvas, statusCanvas, airframeCanvas;
+        private NativeStatusDisplay nativeStatus;
+        private DamageState airframeDamage;
+        private bool airframeDamaged;
         private sealed class PageSurface
         {
             public RectTransform Scope, Body, Overlay, Frame;
@@ -173,6 +176,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             statusText = new ScopeText(Holder(statusRect, "Words"), font, fontMaterial);
             statusCanvas = new ScopeCanvas(statusVector.Buffer, statusText, "scope.status");
 
+            // AIRFRAME: compact docked container for the native top-down aircraft damage schematic.
+            airframeRect = Pinned(root, "Airframe", true);
+            airframeGroup = Quiet(airframeRect.gameObject);
+            airframeVector = AvVector.Create(airframeRect, "Strokes", FrameQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
+            airframeText = new ScopeText(Holder(airframeRect, "Words"), font, fontMaterial);
+            airframeCanvas = new ScopeCanvas(airframeVector.Buffer, airframeText, "scope.airframe");
+            airframeArtRect = Pinned(airframeRect, "Art", true);
+            nativeStatus = new NativeStatusDisplay();
+
             BuildBoard();
         }
 
@@ -226,7 +238,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private static void Show(Component c, bool on)
         {
-            if (c.gameObject.activeSelf != on) c.gameObject.SetActive(on);
+            if (c != null && c.gameObject.activeSelf != on) c.gameObject.SetActive(on);
         }
 
         /// <summary>
@@ -286,6 +298,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void HideBoard()
         {
             corner?.Release();
+            nativeStatus?.Release();
+            Show(airframeRect, false);
             BoardBox = default;
             wingPainted = false;
             paintedValid = false;
@@ -301,20 +315,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             corner?.Dispose();
             corner = null;
+            nativeStatus?.Dispose();
+            nativeStatus = null;
             DestroyCorners();
             BoardBox = default;
+            airframeDamage = default;
+            airframeDamaged = false;
             swayShift = rootBase = boardShift = boardTearShift = default;
             header.Clear();
             if (root != null) UnityEngine.Object.Destroy(root.gameObject);
             root = null;
-            rootGroup = storesGroup = shellGroup = scopeGroup = statusGroup = null;
+            rootGroup = storesGroup = shellGroup = scopeGroup = statusGroup = airframeGroup = null;
             dock = null;
             rootCanvas = null;
             canvasRect = null;
-            scopeRect = pageRect = overlayRect = frameRect = storesRect = statusRect = null;
-            shellVector = pageVector = overlayVector = frameVector = storesVector = statusVector = null;
-            shellText = pageText = overlayText = storesText = statusText = null;
-            shellCanvas = pageCanvas = overlayCanvas = frameCanvas = storesCanvas = statusCanvas = null;
+            scopeRect = pageRect = overlayRect = frameRect = storesRect = statusRect = airframeRect = airframeArtRect = null;
+            shellVector = pageVector = overlayVector = frameVector = storesVector = statusVector = airframeVector = null;
+            shellText = pageText = overlayText = storesText = statusText = airframeText = null;
+            shellCanvas = pageCanvas = overlayCanvas = frameCanvas = storesCanvas = statusCanvas = airframeCanvas = null;
             Array.Clear(pageSurfaces, 0, pageSurfaces.Length);
             StoreIcons.Clear();      // the baked pictures are this scene's
             DestroyShade();

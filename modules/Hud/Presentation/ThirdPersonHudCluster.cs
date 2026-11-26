@@ -4,7 +4,6 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Runtime;
-using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -110,6 +109,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>The target card is on screen (the board asks so that it does not take the root down between two reads while the cockpit card is up).</summary>
         public bool TargetCardShown => builtActive && card.Active;
+
+        /// <summary>The cluster's root transform (the visor glitch shader's material goes onto the cards under it; null until built).</summary>
+        internal Transform Root => root;
 
         /// <summary>The missile feed card for the next <see cref="Present"/>: null <paramref name="feed"/> is no card.</summary>
         public void SetMissileFeed(Texture feed, string name, float rangeM, bool lost, float closureMps = float.NaN, float ttiS = float.NaN)
@@ -350,9 +352,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (screenW <= 0f || screenH <= 0f) return;
             avoid = new RectF(Board.CenterX / scale, Board.CenterY / scale, Board.Width / scale, Board.Height / scale);
 
-            ColorTheme theme = ThemeManager.Active.ColorTheme;
             Color ink = VanillaHudStyle.Ink;
-            Color caution = theme.Warning;
+            Color caution = VanillaHudStyle.Caution;
 
             Color? spdLit = null, altLit = null;
             Color fuelColor = ink;
@@ -719,7 +720,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The missile feed card: the weapon's name on the shelf (ink, lost or not), the countdown on the picture, RNG at the left and CLS at the right under it, SIGNAL LOST (the one alert word) over the held last picture.</summary>
         private void PresentMissileCard(RectF rect, Color ink, AvUnits units)
         {
-            Color alert = ThemeManager.Active.ColorTheme.Alert;
+            Color alert = VanillaHudStyle.WarningRed;
             if (!PresentCard(ref missile, rect, missileFeed, missileName, ink, ink)) return;
             string note = missileLost ? "SIGNAL LOST" : "";
             if (missile.LastNote != note)

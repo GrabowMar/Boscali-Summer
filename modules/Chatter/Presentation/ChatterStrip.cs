@@ -267,7 +267,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             for (int i = used - 1; i >= 0; i--)
                 if (Clock(rows[i]) > rows[i].Until + FadeSeconds) Drop(i);
             // The maximised map owns the screen (its left host slot sits where this column is): stand down under it; rows keep their clocks.
-            bool visible = used > 0 && !DynamicMap.mapMaximized && (flying || HasScripted());
+            bool visible = !BoscaliSummer.Core.Game.ForeignMods.HudOverlaysYielded && used > 0 && !DynamicMap.mapMaximized && (flying || HasScripted());
             Mount();
             shown = visible;
             if (!visible) { SetVisible(false); LeftHudStack.CommsBottom = 0f; return; }

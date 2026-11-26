@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private void Refresh(float now)
         {
             Canvas map = SceneSingleton<DynamicMap>.i?.maximizedMapCanvas;
-            if (squad == null || !squad.HuntActive || squad.ActiveEnemyWingIndex < 0 ||
+            if (BoscaliSummer.Core.Game.ForeignMods.HudOverlaysYielded || squad == null || !squad.HuntActive || squad.ActiveEnemyWingIndex < 0 ||
                 map != null && map.isActiveAndEnabled ||
                 !GameManager.GetLocalPlayer<Player>(out Player player) || player == null ||
                 player.Aircraft == null || player.Aircraft.disabled || player.Aircraft.HasEjected() || !Ensure())
@@ -224,8 +224,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             AvQuadBuffer lines = cardLines.Buffer;
             lines.Clear();
             Rgba ink = VanillaHudStyle.Colours.Warning.ToRgba();
-            AvStrokes.Fill(lines, -w * 0.5f, -h * 0.5f, w, h, ink.WithAlpha(0.05f));      // a calm amber wash and the class bar: the warning line's chrome, no brackets
-            AvStrokes.Fill(lines, -w * 0.5f, -h * 0.5f, 3f, h, ink);
+            const float flank = 40f, gap = 6f;
+            float ruleY = row1Y, leftEdge = -w * 0.5f, rightEdge = w * 0.5f;
+            AvStrokes.Fill(lines, leftEdge - flank, ruleY - 0.5f, flank + TopCentre.Pad - gap, 1f, ink.WithAlpha(HudInk.LineMid));
+            AvStrokes.Fill(lines, rightEdge - TopCentre.Pad + gap, ruleY - 0.5f, flank + TopCentre.Pad - gap, 1f, ink.WithAlpha(HudInk.LineMid));
             cardLines.Commit();
         }
 

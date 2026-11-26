@@ -3,6 +3,35 @@ namespace BoscaliSummer.Core.Chatter
     /// <summary>Who is talking: each net has its own look on the board and its own share of the settings.</summary>
     internal enum ChatterNet : byte { Wing, Awacs, Tower, Command, Enemy, Allied }
 
+    /// <summary>Player-facing comms groups that can be switched on or off independently.</summary>
+    internal enum ChatterChannel : byte { Awacs, Ground, Naval, Command, Tower, Wing, Allied, Enemy }
+
+    /// <summary>Maps a speaker's net, character and event to the player-facing comms switch that governs it.</summary>
+    internal static class ChatterChannels
+    {
+        public static ChatterChannel Of(ChatterNet net, string character, string evt)
+        {
+            switch (net)
+            {
+                case ChatterNet.Awacs: return ChatterChannel.Awacs;
+                case ChatterNet.Tower: return ChatterChannel.Tower;
+                case ChatterNet.Wing: return ChatterChannel.Wing;
+                case ChatterNet.Allied: return ChatterChannel.Allied;
+                case ChatterNet.Enemy: return ChatterChannel.Enemy;
+                default:
+                    if (character == "ground" || character == "paratrooper" ||
+                        evt == "command.basetaken" || evt == "command.baselost" || evt == "command.basewithdraw" ||
+                        evt == "command.insertion" || evt == "command.survivor.ground" || evt == "command.survivor.paratrooper" ||
+                        evt == "command.sa74.ground" || evt == "command.sa74.last")
+                        return ChatterChannel.Ground;
+                    if (character == "captain" ||
+                        evt == "command.carrierevac" || evt == "command.shiplost" || evt == "command.survivor.captain")
+                        return ChatterChannel.Naval;
+                    return ChatterChannel.Command;
+            }
+        }
+    }
+
     /// <summary>How badly a line needs the channel. A Tactical line cuts an Ambient or Status line that is on air; an Emergency cuts anything but another Emergency.</summary>
     internal enum ChatterPriority : byte { Ambient, Status, Tactical, Emergency }
 

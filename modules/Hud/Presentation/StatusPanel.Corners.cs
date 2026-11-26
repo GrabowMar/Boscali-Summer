@@ -108,6 +108,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (canvasRect == null) return false;
             if (cornerShade != null) UnityEngine.Object.Destroy(cornerShade.gameObject);      // the furniture died with its layer root: the shade is rebuilt with it
             cornerShade = CornerRoot("BoscaliCornerShade", canvasRect);
+            cornerShade.gameObject.AddComponent<VisorGlitchExempt>();
             cornerShade.SetAsFirstSibling();
             leftShadow = ShadeChild<Image>(cornerShade, "LeftStackShadow");
             HudSprites.Slice(leftShadow, HudSprites.Feather);

@@ -8,13 +8,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
-    /// The linked drone's video as every drone view shows it (UAV terminal hero, HUD feed card): the feed picture under
-    /// analogue static that thickens as the link weakens, bursts on every switch and fills the screen with no signal, and a sensor-ball
-    /// overlay as dense as the MISSILE CAM page (2026-10-20): REC lamp, callsign, REMORA stores, order and lens mode, a numbered heading
-    /// tape, scrolling ALT and SPD tapes, horizon bars where the stabilised lens puts the horizon, a gimbal box (azimuth off the nose,
-    /// elevation), the designation boxed through the lens (snapping solid with a ring when the ball locks on it), OWN and WPT marks,
-    /// link quality and latency, sensor, zoom, field of view, SPI slant range and grid, a frame counter, and the commanded course while hand-flown. The big
-    /// (terminal) view prints the long lines; the cards keep one line a corner. Cosmetic, client-local.
+    /// The linked drone's HUD feed with sensor symbology, live telemetry and signal-loss static.
     /// </summary>
     internal sealed class DroneFeedView : AvPart
     {
@@ -25,7 +19,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private readonly Image back;
         private readonly RawImage picture, snow;
         private readonly AvVector ink;
-        private readonly TMP_Text topLeft, topRight, heading, alt, speed, bottomLeft, bottomRight, centre, gimbal, markName, markRange, ownLabel, wptLabel;
+        private readonly TMP_Text topLeft, topRight, heading, alt, speed, bottomLeft, bottomRight, centre, gimbal, markName, markRange, ownLabel;
         private readonly TMP_Text[] numerals = new TMP_Text[3];
         private readonly Image recLamp;
         private readonly float type;
@@ -62,7 +56,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             markName = Text("MarkName", TextAlignmentOptions.Bottom);
             markRange = Text("MarkRange", TextAlignmentOptions.Top);
             ownLabel = Text("Own", TextAlignmentOptions.MidlineLeft);
-            wptLabel = Text("Wpt", TextAlignmentOptions.MidlineLeft);
             centre = Text("Centre", TextAlignmentOptions.Center);
             centre.fontStyle = FontStyles.Bold;
         }
@@ -158,8 +151,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             wasTracking = tracking;
 
             Color ink0 = Ink ?? AvInk.Ink, dim = Ink.HasValue ? Ink.Value.WithAlpha(0.6f) : AvInk.Dim;
-            Color tone = v == null ? AvInk.State(AvState.Inert) : v.Mode == DroneMode.Hand ? AvInk.State(AvState.Caution)
-                : v.Mode == DroneMode.Waypoint ? AvInk.State(AvState.Info) : AvInk.State(AvState.Ready);
+            Color tone = v == null ? AvInk.State(AvState.Inert) : v.Occupied ? AvInk.State(AvState.Caution) : AvInk.State(AvState.Ready);
             bool blink = ((int)(now * 1.25f) & 1) == 0;
             recLamp.enabled = v != null && blink;
             recLamp.color = AvInk.State(AvState.Danger);
@@ -185,15 +177,13 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
             string second = link.Stores(out RemoraView stores)
                 ? "AAM " + RemoraBoard.Left(stores) + "/" + RemoraBoard.Capacity(stores.Drone) + " · FLR " + stores.Flares + " · " + Phase(stores.Phase)
-                : "SYS " + (v.Mode == DroneMode.Auto ? "ON TASK" : "HOLD");
+                : "SYS " + (v.Occupied ? "REMOTE PILOT" : "ON TASK");
             // The card's header already names the drone and its order: the small view keeps its corners empty.
             AvText.Set(topLeft, big ? "REC  " + v.Callsign + " · " + v.Job + "\n" + second : "");
-            AvText.Set(topRight, !big ? "" : DroneLink.Word(v.Mode) + " · " + link.LensWord + "\n" +
+            AvText.Set(topRight, !big ? "" : v.FlightState + " · " + link.LensWord + "\n" +
                 (big ? "FRM " + (link.FrameNumber % 1000000).ToString("000000") + " · " : "") + "T+" + DroneLink.Clock(v.Age));
             AvText.Set(heading, Three(v.HeadingDeg));
-            AvText.Set(alt, v.Mode == DroneMode.Hand && Mathf.Abs(v.Point.y - v.AltM) > 30f
-                ? (v.Point.y > v.AltM ? "ALT CLB" : "ALT DSC") + "\n" + AvNum.Fixed(v.AltM, 0) + " M"       // climbing or diving to the commanded height
-                : "ALT\n" + AvNum.Fixed(v.AltM, 0) + " M");
+            AvText.Set(alt, "ALT\n" + AvNum.Fixed(v.AltM, 0) + " M");
             AvText.Set(speed, "SPD\n" + AvNum.Fixed(v.SpeedMs * 1.944f, 0) + " KT");
             string spi = link.HasSpi ? "SPI " + AvNum.Fixed(link.SpiSlantM / 1000f, 1) + " KM" : "SPI —";
             if (big)
@@ -210,7 +200,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 AvText.Set(bottomRight, link.LookWord + " · " + link.ZoomWord);
                 AvText.Set(gimbal, "");
             }
-            AvText.Set(centre, quality <= 0f ? "NO SIGNAL · RETURNING TO TASK" : link.SinceSwitch < BurstSeconds ? "ACQUIRING LINK · " + v.Callsign : "");
+            AvText.Set(centre, quality <= 0f ? "OUT OF LINK RANGE" : link.SinceSwitch < BurstSeconds ? "ACQUIRING LINK · " + v.Callsign : "");
         }
 
         private static string Phase(RemoraPhase phase) => phase == RemoraPhase.Engage ? "ENGAGE" : phase == RemoraPhase.Ram ? "RAM" : "ESCORT";
@@ -249,18 +239,18 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (v != null)
             {
                 Reticle(b, cx, cy, lw, a);
-                HeadingTape(v.HeadingDeg, v.Mode == DroneMode.Hand ? v.Point.x : float.NaN, lw, a, faint, tone.ToRgba());
+                HeadingTape(v.HeadingDeg, lw, a, faint);
                 // The card keeps the readings and drops the ladders and the gimbal box: a small picture with a big one's furniture was clutter.
                 Tape(b, true, v.AltM, 1000f, 100f, 5, lw, a, faint);
                 Tape(b, false, v.SpeedMs * 1.944f, 120f, 10f, 5, lw, a, faint);
                 Horizon(b, link, lw, a);
                 if (big) Gimbal(b, link, lw, faint, a);
-                Marks(b, link, v, now, lw, a, tone);
+                Marks(b, link, now, lw, a);
             }
             else
             {
                 foreach (TMP_Text n in numerals) Hide(n);
-                Hide(markName); Hide(markRange); Hide(ownLabel); Hide(wptLabel);
+                Hide(markName); Hide(markRange); Hide(ownLabel);
             }
             // Link bars beside the bottom-left words.
             int bars = v != null ? DroneLink.Bars(quality) : 0;
@@ -284,16 +274,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         // A tick every 10 degrees within 40 either side, numerals on the 30s (N E S W on the cardinals) clear of the boxed heading,
         // a caret under the box.
-        private void HeadingTape(float headingDeg, float commandDeg, float lw, Rgba a, Rgba faint, Rgba tone)
+        private void HeadingTape(float headingDeg, float lw, Rgba a, Rgba faint)
         {
-            if (!float.IsNaN(commandDeg))
-            {
-                // HAND: the commanded course as a caret on the tape (pinned to the tape's end while the turn is wider than it).
-                float off = Mathf.Clamp(Mathf.DeltaAngle(headingDeg, commandDeg), -40f, 40f);
-                float x = w * 0.5f + off / 40f * w * 0.22f, y = h - TapeRow - line - type * 0.95f;
-                AvStrokes.Chevron(ink.Buffer, x, y, type * 0.55f, 90f, lw * 2f + HaloPx, Halo);
-                AvStrokes.Chevron(ink.Buffer, x, y, type * 0.55f, 90f, lw * 2f, tone);
-            }
             AvQuadBuffer b = ink.Buffer;
             float cx = w * 0.5f, span = w * 0.22f, row = TapeRow, ticksTop = h - row - line, boxHalf = type * 1.7f;
             float deg = Mathf.Repeat(headingDeg, 360f);
@@ -370,8 +352,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             AvStrokes.Cross(b, px, py, type * 0.35f, lw * 1.3f, a);
         }
 
-        // The designation through the lens (dashed ring until the ball tracks it, then solid red with a snap ring), OWN and the WPT point.
-        private void Marks(AvQuadBuffer b, DroneLinkService link, DroneView v, float now, float lw, Rgba a, Color tone)
+        // The designation through the lens and the local aircraft when visible.
+        private void Marks(AvQuadBuffer b, DroneLinkService link, float now, float lw, Rgba a)
         {
             if (link.MarkInView(out Vector2 vp, out string name, out float rangeM))
             {
@@ -400,21 +382,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
             else Hide(ownLabel);
 
-            if (v.Mode == DroneMode.Waypoint)
-            {
-                Vector3 point = new GlobalPosition(v.Point).ToLocalPosition();
-                point.y = Datum.LocalSeaY;
-                // The ball stares at the point, so it sits on the cross: mark it only off the centre (WPT printed over the reticle).
-                if (link.Project(point, out Vector2 wp) && Inside(wp) && (Mathf.Abs(wp.x - 0.5f) * w > type * 2.5f || Mathf.Abs(wp.y - 0.5f) * h > type * 2.5f))
-                {
-                    float x = wp.x * w, y = wp.y * h;
-                    AvStrokes.Cross(b, x, y, type * 0.5f, lw + HaloPx, Halo);
-                    AvStrokes.Cross(b, x, y, type * 0.5f, lw, tone.ToRgba());
-                    Label(b, wptLabel, "WPT", x + type * 0.7f, y - line * 0.5f, type * 3f, AvInk.State(AvState.Info));
-                    return;
-                }
-            }
-            Hide(wptLabel);
         }
 
         private bool Inside(Vector2 vp) => vp.x > 0.02f && vp.x < 0.98f && vp.y * h > bottomBand && vp.y * h < h - topBand;

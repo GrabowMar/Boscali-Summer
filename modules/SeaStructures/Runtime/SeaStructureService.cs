@@ -40,6 +40,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
         public void ResetForScene()
         {
             seeded = false;
+            waitingForPlayer = false;
             runningSince = -1f;
         }
 
@@ -133,25 +134,50 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             return true;
         }
 
-        /// <summary>Never put a platform on top of a ship, aircraft, vehicle or the local player.</summary>
+        /// <summary>Never put a platform on top of a ship, aircraft, vehicle, airbase or the local player.</summary>
         private static bool ClearOfUnits(Vector3 p)
         {
+            float minSq = UnitClearance * UnitClearance;
             List<Unit> units = UnitRegistry.allUnits;
             for (int i = 0; i < units.Count; i++)
             {
                 Unit unit = units[i];
                 if (unit == null) continue;
-                Vector3 at = unit.transform.position;
-                float dx = at.x - p.x, dz = at.z - p.z;
-                if (dx * dx + dz * dz < UnitClearance * UnitClearance) return false;
+                if (TooClose(p, unit.transform.position, minSq)) return false;
             }
+            // A freshly spawned player aircraft may not be in UnitRegistry.allUnits yet (RegisterOnGridAsync).
+            if (GameManager.GetLocalPlayer<Player>(out Player player) && player != null && player.Aircraft != null &&
+                TooClose(p, player.Aircraft.transform.position, minSq))
+                return false;
+            CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
+            if (cam != null && TooClose(p, cam.transform.position, minSq)) return false;
+            if (FactionRegistry.airbaseLookup != null)
+                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+                    if (airbase != null && TooClose(p, airbase.transform.position, minSq)) return false;
             return true;
+        }
+
+        private static bool TooClose(Vector3 a, Vector3 b, float minSq)
+        {
+            float dx = b.x - a.x, dz = b.z - a.z;
+            return dx * dx + dz * dz < minSq;
+        }
+
+        private static bool InMapBounds(Vector3 local)
+        {
+            Vector2 size = TheaterFrame.Resolve();
+            float halfX = size.x * 0.5f - 1000f;
+            float halfZ = size.y * 0.5f - 1000f;
+            if (halfX <= 0f || halfZ <= 0f) return true;
+            GlobalPosition global = local.ToGlobalPosition();
+            return Mathf.Abs(global.x) <= halfX && Mathf.Abs(global.z) <= halfZ;
         }
 
         private static bool OpenWater(Vector3 local, float depth)
         {
-            var from = new Vector3(local.x, Datum.LocalSeaY + 3000f, local.z);
-            return !(Physics.Raycast(from, Vector3.down, out RaycastHit hit, 3600f, PhysicsLayers.StaticsMask) && hit.point.y > Datum.LocalSeaY - depth);
+            if (!InMapBounds(local)) return false;
+            var from = new Vector3(local.x, Datum.LocalSeaY + 6000f, local.z);
+            return !(Physics.Raycast(from, Vector3.down, out RaycastHit hit, 7000f, PhysicsLayers.StaticsMask) && hit.point.y > Datum.LocalSeaY - depth);
         }
 
         /// <summary>Host: one structure standing at sea level. Spawner.SpawnShip by hand, because the name must be set before the spawn.</summary>
@@ -164,8 +190,15 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             Vector3 local = at.ToLocalPosition();
             local.y = Datum.LocalSeaY;
             Quaternion rotation = Quaternion.Euler(0f, heading, 0f);
-            GameObject go = Instantiate(template);
-            go.transform.SetPositionAndRotation(local, rotation);
+            // Instantiate directly at (local, rotation) so Awake/OnEnable (notably Airbase.Awake caching
+            // SavedAirbase.Center and PhysX actor creation) never run at local (0, 0, 0) where the player is.
+            GameObject go = Instantiate(template, local, rotation);
+            Rigidbody body = go.GetComponent<Rigidbody>();
+            if (body != null)
+            {
+                body.position = local;
+                body.rotation = rotation;
+            }
             Ship ship = go.GetComponent<Ship>();
             ship.NetworkHQ = hq;
             ship.NetworkUniqueName = NamePrefix + (int)kind + ":" + serial++ + ":" + Guid.NewGuid().ToString("N").Substring(0, 6);

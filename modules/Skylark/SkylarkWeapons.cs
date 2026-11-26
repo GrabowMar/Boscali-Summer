@@ -20,10 +20,10 @@ namespace BoscaliSummer.Modules.Skylark
         private static readonly string[] Anchors = { "GunPosition", "Hardpoint_L1", "Hardpoint_R1", "Hardpoint_L2", "Hardpoint_R2", "Hardpoint_L3", "Hardpoint_R3", "Hardpoint_C" };
         private static readonly string[] Names = { "Chin turret", "Left inner station", "Right inner station", "Left tip station", "Right tip station", "Left mid station", "Right mid station", "Belly station" };
         private static readonly string[] Groups = { "Turret", "Inner stations", "Inner stations", "Tip stations", "Tip stations", "Mid stations", "Mid stations", "Belly station" };
-        private static readonly string[] Inner = { "AGM1_double", "AGM1_triple", "bomb_250_glide_single", "RocketPod1_triple", "AGM_heavy_single", "ARM1_single" };
-        private static readonly string[] Tip = { "AAM1_single", "AAM1_double", "IRMS1_single", "IRMS1_double", "AAM2_single" };
-        private static readonly string[] Mid = { "AGM1_single", "AGM1_double", "RocketPod1_single", "bomb_125_double", "IRMS1_double", "ECMPod1" };
-        private static readonly string[] Belly = { "gunpod_20mm", "ECMPod1", "JammingPod1", "ARM1_single" };
+        private static readonly string[] Inner = { "AGM1_double", "AGM1_triple", "AGM1_quad", "AGM2_6Pod", "RocketPod1_triple", "Rocket2_4Pod", "bomb_250_glide_single", "AGM_heavy_single", "ARM1_single", "AAM2_single", "AAM3_single" };
+        private static readonly string[] Tip = { "AAM1_single", "AAM1_double", "IRMS1_single", "IRMS1_double", "AAM2_single", "AAM3_single" };
+        private static readonly string[] Mid = { "AGM1_single", "AGM1_double", "AGM1_triple", "RocketPod1_single", "Rocket2_4Pod", "bomb_125_double", "bomb_250_glide_single", "IRMS1_double", "AAM2_single", "ARM1_single", "ECMPod1" };
+        private static readonly string[] Belly = { "gunpod_20mm", "ECMPod1", "JammingPod1", "ARM1_single", "AGM_heavy_single", "bomb_250_glide_single" };
         private static readonly string[][] Options = { null, Inner, Inner, Tip, Tip, Mid, Mid, Belly };
         // Stores per station in the order above (the first slot is always the turret). Keeps external stores under about 1.7 t.
         private static readonly (string Name, float Fuel, string[] Stores)[] Loadouts =
@@ -34,7 +34,9 @@ namespace BoscaliSummer.Modules.Skylark
             ("PRECISION", .7f, new[] { null, "bomb_250_glide_single", "bomb_250_glide_single", "AAM1_single", "AAM1_single", "AGM1_double", "AGM1_double", null }),
             ("AIR", .8f, new[] { null, null, null, "AAM1_double", "AAM1_double", "IRMS1_double", "IRMS1_double", null }),
             ("RECON / C2", 1f, new[] { null, null, null, "AAM1_single", "AAM1_single", null, null, "ECMPod1" }),
-            ("SILENT", 1f, new[] { null, null, null, "AAM1_single", "AAM1_single", null, null, null })
+            ("SILENT", 1f, new[] { null, null, null, "AAM1_single", "AAM1_single", null, null, null }),
+            ("INTERCEPT", .85f, new[] { null, "AAM2_single", "AAM2_single", "AAM1_double", "AAM1_double", "IRMS1_double", "IRMS1_double", "ECMPod1" }),
+            ("ANTI-ARMOR", .7f, new[] { null, "AGM_heavy_single", "AGM_heavy_single", "AAM1_single", "AAM1_single", "AGM1_double", "AGM1_double", "gunpod_20mm" })
         };
 
         internal const string SilentLoadout = "SILENT";
@@ -117,7 +119,7 @@ namespace BoscaliSummer.Modules.Skylark
             Halberd.name = "WI_BS_Skylark_Halberd";
             Halberd.weaponName = "EMC-3 Halberd";
             Halberd.shortName = "COIL";
-            Halberd.description = "Battery coilgun in the chin turret: 1600 m/s slugs, no barrel to spin. Quiet on the battery (EV), overdrive on the turbine (HYBRID).";
+            Halberd.description = "Recessed chin coilgun with 1600 m/s slugs and no spin-up. Quiet on the battery (EV), overdrive on the turbine (HYBRID).";
             Halberd.muzzleVelocity = Muzzle;
             Halberd.pierceDamage = Pierce;
             Halberd.blastDamage = Blast;
@@ -156,7 +158,20 @@ namespace BoscaliSummer.Modules.Skylark
             SkylarkTemplate.Set(turret, "maxElevation", 15f);
             if (nodes.TryGetValue("GunMuzzle", out Transform tip) && nodes.TryGetValue("GunPosition", out Transform ring))
             {
-                Transform muzzle = SkylarkTemplate.Empty("SkylarkMuzzle", cannon.transform, mount.prefab.transform.position + (tip.position - ring.position));
+                Vector3 origin = mount.prefab.transform.position - ring.position;
+                if (nodes.TryGetValue("GunTurret_Yaw", out Transform yaw) && nodes.TryGetValue("GunTurret_Pitch", out Transform pitch))
+                {
+                    turret.transform.position = origin + yaw.position;
+                    Transform elevation = SkylarkTemplate.Get<Transform>(turret, "elevationTransform");
+                    // The donor leaves its elevation pivot unset and Turret.Awake uses the gun transform.
+                    if (elevation == null)
+                    {
+                        elevation = cannon.transform;
+                        SkylarkTemplate.Set(turret, "elevationTransform", elevation);
+                    }
+                    elevation.position = origin + pitch.position;
+                }
+                Transform muzzle = SkylarkTemplate.Empty("SkylarkMuzzle", cannon.transform, origin + tip.position);
                 SkylarkTemplate.Set(cannon, "muzzles", new[] { muzzle });
                 foreach (ParticleSystem particles in SkylarkTemplate.Get<ParticleSystem[]>(cannon, "muzzleParticles") ?? Array.Empty<ParticleSystem>()) particles.transform.position = muzzle.position;
             }
@@ -181,13 +196,13 @@ namespace BoscaliSummer.Modules.Skylark
     {
         internal const float EvRate = 300f, HybridRate = 550f;
         internal static readonly Color Tracer = new Color(.25f, 1.6f, 2.6f);
-        private const float Recoil = .035f, RecoilReturn = .09f, RippleSeconds = .1f, GlowSeconds = .05f, DeploySeconds = .25f, StowPitch = -8f, EvVolume = .45f;
-        // 2026-11-20 rework, the M230 pattern: no doors, the gun is always mounted. The stow is a spring
-        // return that lies the barrel along the rising chin skin; actioning is instant (no door phase).
-        private const float DoorOpenR = -65f, DoorOpenL = 65f;    // retired with the blister: kept for older bundles
+        private const float Recoil = .035f, RecoilReturn = .09f, RippleSeconds = .1f, GlowSeconds = .05f, DeploySeconds = .25f, EvVolume = .45f;
+        private const float DoorOpenAngle = 72f;
         private static Material coilLit;
         [SerializeField] private Transform yaw, pitch, barrel;
         [SerializeField] private Transform[] doors;
+        [SerializeField] private bool hasDoors;
+        [SerializeField] private float stowPitch;
         [SerializeField] private Renderer[] coils;
         [SerializeField] private Renderer glow;
         private Material[] coilRest;
@@ -195,8 +210,9 @@ namespace BoscaliSummer.Modules.Skylark
         private Material glowRest;
         private Light glowLight;
         private Quaternion yawRest, pitchRest;
-        private Quaternion[] doorRest;
-        private Vector3 barrelPosition, barrelAxis;
+        private SkylarkHinge[] doorHinges;
+        private MaterialPropertyBlock armedBlock;
+        private Vector3 yawAxis, pitchAxis, barrelPosition, barrelAxis;
         private Turret turret;
         private Transform elevation;
         private Gun gun;
@@ -205,8 +221,8 @@ namespace BoscaliSummer.Modules.Skylark
         private AudioSource[] sources;
         private float[] volumes;
         private ParticleSystem[] flashes;
-        private float nextSearch, kick, ripple = 1f, flash, deploy, lastShot = -100f;
-        private int lastAmmo = -1;
+        private float nextSearch, kick, ripple = 1f, flash, deploy;
+        private int lastAmmo = -1, armedState = -1;
         private bool electric, tuned, glowOn;
 
         /// <summary>Rounds seen leaving the muzzle, coil ripples started, the current rate (rpm) and the fold (0 stowed, 1 deployed); sim readback.</summary>
@@ -214,15 +230,30 @@ namespace BoscaliSummer.Modules.Skylark
         internal int Ripples { get; private set; }
         internal float Rate { get; private set; }
         internal float Deploy => deploy;
+        internal int CoilCount => coils != null ? coils.Length : 0;
+        internal bool HasBayDoors => hasDoors;
+
+#if !PUBLIC_RELEASE
+        internal (float Gap, float Angle) MuzzleFit()
+        {
+            if (pitch == null || gun == null) return (-1f, -1f);
+            Transform visual = SkylarkTemplate.Node(pitch, "GunMuzzle");
+            Transform[] muzzles = SkylarkTemplate.Get<Transform[]>(gun, "muzzles");
+            if (visual == null || muzzles == null || muzzles.Length == 0 || muzzles[0] == null) return (-1f, -1f);
+            Transform native = muzzles[0];
+            return (Vector3.Distance(native.position, visual.position), Vector3.Angle(native.forward, visual.position - pitch.position));
+        }
+#endif
 
         internal void Configure(Dictionary<string, Transform> nodes)
         {
             yaw = nodes["GunTurret_Yaw"];
             pitch = nodes["GunTurret_Pitch"];
             barrel = nodes.TryGetValue("GunBarrel", out Transform b) ? b : null;
-            // the blister doors are optional art: the gun still folds without them (older bundles)
             doors = new[] { nodes.TryGetValue("GunBayDoor_R", out Transform dr) ? dr : null,
                             nodes.TryGetValue("GunBayDoor_L", out Transform dl) ? dl : null };
+            hasDoors = dr != null || dl != null;
+            stowPitch = nodes.ContainsKey("ChinFairing") ? -19f : -8f;
             coils = Enumerable.Range(0, 6).Select(i => nodes.TryGetValue("GunCoil" + i, out Transform c) ? c.GetComponent<Renderer>() : null).Where(r => r != null).ToArray();
             glow = nodes.TryGetValue("GunGlow", out Transform g) ? g.GetComponent<Renderer>() : null;
             if (coils.Length > 0 || glow != null) CoilMaterial();
@@ -243,11 +274,16 @@ namespace BoscaliSummer.Modules.Skylark
         {
             aircraft = GetComponent<Aircraft>();
             drive = GetComponent<SkylarkDrive>();
-            yawRest = Quaternion.Inverse(transform.rotation) * yaw.rotation;
-            pitchRest = Quaternion.Inverse(transform.rotation) * pitch.rotation;
-            doorRest = doors.Select(d => d != null ? Quaternion.Inverse(transform.rotation) * d.rotation : Quaternion.identity).ToArray();
+            yawRest = yaw.localRotation;
+            pitchRest = pitch.localRotation;
+            yawAxis = yaw.parent.InverseTransformDirection(transform.up);
+            pitchAxis = pitch.parent.InverseTransformDirection(transform.right);
+            doorHinges = new SkylarkHinge[doors != null ? doors.Length : 0];
+            for (int i = 0; i < doorHinges.Length; i++)
+                if (doors[i] != null) doorHinges[i] = new SkylarkHinge(transform, doors[i], Vector3.forward, i == 0 ? -DoorOpenAngle : DoorOpenAngle);
             coilRest = coils.Select(r => r.sharedMaterial).ToArray();
             coilOn = new bool[coils.Length];
+            armedBlock = new MaterialPropertyBlock();
             if (glow != null)
             {
                 glowRest = glow.sharedMaterial;
@@ -304,38 +340,34 @@ namespace BoscaliSummer.Modules.Skylark
 
         private void LateUpdate()
         {
-            if (!Find()) return;
+            if (yaw == null || pitch == null || !Find()) return;
             Tune();
             int ammo = gun.ammo;
-            if (ammo < lastAmmo)
+            bool fired = ammo < lastAmmo;
+            if (fired)
             {
                 Shots += lastAmmo - ammo;
                 Ripples++;
                 kick = Recoil;
                 ripple = 0f;
                 flash = GlowSeconds;
-                lastShot = Time.time;
             }
             lastAmmo = ammo;
             float dt = Time.deltaTime;
             float yawAngle = Mathf.DeltaAngle(0f, turret.transform.localEulerAngles.y), pitchAngle = Mathf.DeltaAngle(0f, elevation.localEulerAngles.x);
-            // Deployed while the gun is the selected weapon (the simulating peer knows); other peers deploy it once it fires or slews.
-            bool selected = aircraft.LocalSim
-                ? aircraft.weaponManager.currentWeaponStation != null && aircraft.weaponManager.currentWeaponStation == aircraft.weaponStations[0]
-                : Time.time - lastShot < 3f || Mathf.Abs(yawAngle) > 2f || Mathf.Abs(pitchAngle) > 2f;
-            deploy = Mathf.MoveTowards(deploy, selected ? 1f : 0f, dt / DeploySeconds);
-            // No doors in the barbette rework: the spring stow is the only sequence, so the fold tracks
-            // deploy directly. Older bundles with blister doors keep their phased swing below.
-            float fold = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(deploy * 1.25f));
-            if (doors.Length > 0) fold = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((deploy - .2f) / .8f));
-            Quaternion pivot = transform.rotation * Quaternion.Euler(0f, yawAngle * fold, 0f);
-            yaw.rotation = pivot * yawRest;
-            pitch.rotation = pivot * Quaternion.Euler(Mathf.Lerp(StowPitch, pitchAngle, fold), 0f, 0f) * pitchRest;
+            // Aircraft.SetActiveStation already replicates selection to observers. Native aim can remain off-axis
+            // after deselection. If it fires during the fold, put the barrel on the firing axis for the flash.
+            bool selected = !aircraft.disabled && aircraft.weaponStations.Count > 0
+                && aircraft.weaponManager.currentWeaponStation == aircraft.weaponStations[0];
+            deploy = fired ? 1f : Mathf.MoveTowards(deploy, selected ? 1f : 0f, dt / DeploySeconds);
+            // The bare gimbal begins its spring return at once. Blister doors on older bundles open first.
+            float fold = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(hasDoors ? (deploy - .2f) / .8f : deploy));
+            yaw.localRotation = Quaternion.AngleAxis(yawAngle * fold, yawAxis) * yawRest;
+            pitch.localRotation = Quaternion.AngleAxis(Mathf.Lerp(stowPitch, pitchAngle, fold), pitchAxis) * pitchRest;
             float doorPhase = Mathf.Clamp01(deploy / .25f);
-            for (int i = 0; i < doors.Length; i++)
-                if (doors[i] != null)
-                    doors[i].rotation = transform.rotation * doorRest[i]
-                        * Quaternion.Euler(0f, (i == 0 ? DoorOpenR : DoorOpenL) * doorPhase, 0f);
+            if (doorHinges != null)
+                foreach (SkylarkHinge hinge in doorHinges)
+                    if (hinge != null) hinge.Set(doorPhase);
             if (barrel != null && (kick > 0f || barrel.localPosition != barrelPosition))
             {
                 kick = Mathf.MoveTowards(kick, 0f, dt * Recoil / RecoilReturn);
@@ -349,9 +381,11 @@ namespace BoscaliSummer.Modules.Skylark
                     bool on = ripple < 1f && Mathf.Abs(ripple * coils.Length - i - .5f) < 1f;
                     if (on == coilOn[i] || coils[i] == null) continue;
                     coilOn[i] = on;
+                    if (i == 0 && on) { armedBlock.Clear(); coils[0].SetPropertyBlock(armedBlock); armedState = -1; }
                     coils[i].sharedMaterial = on ? coilLit : coilRest[i];
                 }
             }
+            UpdateArmedStandby(selected && !aircraft.disabled && aircraft.Ignition);
             flash -= dt;
             bool lit = flash > 0f;
             if (glow != null && lit != glowOn)
@@ -360,6 +394,25 @@ namespace BoscaliSummer.Modules.Skylark
                 glow.sharedMaterial = lit && coilLit != null ? coilLit : glowRest;
                 glowLight.enabled = lit;
             }
+        }
+
+        private void UpdateArmedStandby(bool armed)
+        {
+            if (coils == null || coils.Length == 0 || coils[0] == null || armedBlock == null || coilOn[0]) return;
+            int nextState = !armed ? 0 : drive != null && drive.Charge < SkylarkDrive.Floor ? 3 : electric ? 1 : 2;
+            if (nextState == armedState) return;
+            armedState = nextState;
+            if (nextState == 0)
+            {
+                armedBlock.Clear();
+                coils[0].SetPropertyBlock(armedBlock);
+                return;
+            }
+            Color glowColor = nextState == 3 ? new Color(1.1f, .45f, .08f)
+                : nextState == 1 ? new Color(.08f, .45f, .70f)
+                : new Color(.22f, 1.05f, 1.45f);
+            armedBlock.SetColor("_EmissionColor", glowColor);
+            coils[0].SetPropertyBlock(armedBlock);
         }
     }
 

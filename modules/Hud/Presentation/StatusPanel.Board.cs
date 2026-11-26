@@ -1,10 +1,10 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;
-using NuclearOption.UIStyleSystem;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
@@ -79,8 +79,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The player's HUD theme as the scope's tokens: ink, caution and warning colours, the rest derived.</summary>
         private static ScopePalette Palette()
         {
-            ColorTheme theme = ThemeManager.Active.ColorTheme;
-            return new ScopePalette(HudInk.Ink(ToRgba(theme.AllClear)), ToRgba(theme.Warning), ToRgba(theme.Alert));
+            VanillaHudStyle.Palette p = VanillaHudStyle.Colours;
+            return new ScopePalette(ToRgba(p.AllClear), ToRgba(p.Warning), ToRgba(p.Alert));
         }
 
         private static Rgba ToRgba(Color c) => new Rgba(c.r, c.g, c.b, 1f);
@@ -117,6 +117,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             SystemStates systems = frame.Systems;
             systems.Fuel = frame.Fuel;
             systems.Damage = frame.Damage;
+            airframeDamage = frame.Damage;
             if (ScopeFeeds.TryRead(out SystemsScope sys))
             {
                 systems.Heat = sys.Heat;
@@ -353,6 +354,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 {
                     if (paintedGeo.Info.Present) PaintStatus(fastPal, paintedGeo, fastFlash);
                     PaintWing(fastPal, paintedGeo, fastFlash);
+                    if (allow.ShowSystems && !underNative) PaintAirframe(fastPal, paintedGeo, fastFlash);
+                    else Show(airframeRect, false);
                     PaintStores(fastPal, paintedGeo, fastFlash);
                 }
                 return;
@@ -410,9 +413,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             if (!geo.Info.Present) Show(statusRect, false);
             else if (shellToo) PaintStatus(pal, geo, flashOn);
+            if (!allow.ShowSystems || underNative) Show(airframeRect, false);
             if (shellToo)
             {
                 PaintWing(pal, geo, flashOn);
+                if (allow.ShowSystems && !underNative) PaintAirframe(pal, geo, flashOn);
                 PaintStores(pal, geo, flashOn);
             }
             paintedGeo = geo;

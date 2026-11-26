@@ -43,7 +43,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private Vector3 swimHeading;
         private float lostFor;
         private float searchFor = -1f;
-        private bool huntingOrder; // a drone sent to a point is on a target there (Steer)
+        private bool piloted;
         private readonly System.Collections.Generic.List<Missile> inbound = new System.Collections.Generic.List<Missile>();
 
         public VanguardFlight(Missile missile, VanguardRole role, Unit target, GlobalPosition aimpoint, int slot)
@@ -76,6 +76,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public VanguardRole Role => role;
         public Unit Launcher => launcher;
         public Missile Missile => missile;
+        public Unit Target => target;
 
         public void Tick()
         {
@@ -85,15 +86,26 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 missile.DeployFins();
                 fins = true;
             }
-            if (VanguardKeys.IsSteerable(role) && SteerOrders.TryGet(missile, out SteerOrders.Order order) && Steer(order))
+            if (DronePilot.IsPiloting(missile))
             {
-                // A REMORA or MANTA on an order keeps its flares, seduction and sensor: the pilot steers the airframe, not its self-defence.
+                if (!piloted)
+                {
+                    piloted = true;
+                    DroneOrders.Claim(missile, null);
+                    missile.SetTarget(null);
+                }
+                if (role == VanguardRole.Scout) scout?.TickPiloted();
                 if (role == VanguardRole.Drone && Time.timeSinceLevelLoad >= nextEffect)
                 {
                     nextEffect = Time.timeSinceLevelLoad + EffectInterval;
                     Effects();
                 }
                 return;
+            }
+            if (piloted)
+            {
+                piloted = false;
+                nextPlan = 0f;
             }
             if (role == VanguardRole.Sentinel)
             {
@@ -242,42 +254,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (manta ? MantaRules.Seduces(threat.GetSeekerType(), range, Random.value) : SeductionRule.Seduces(threat.GetSeekerType(), range, Random.value))
                     SeekerCapture.Retarget(threat, missile);
             }
-        }
-
-        // Drone link (UAV terminal / UAV MFD / C-menu DRONE LINK): HAND flies the way the pilot's nose points, WPT flies to a point
-        // and circles it. A REMORA or MANTA sent to a point hunts its kind of target around it (DroneEngage) and circles when there
-        // is none; a hand-flown one keeps its ram fuse live. A dead pilot or a broken link (past DroneLink.MaxRangeM) hands the
-        // drone back to its job.
-        private bool Steer(SteerOrders.Order order)
-        {
-            if (launcher == null || launcher.disabled || !DroneLink.InRange(FastMath.Distance(launcher.GlobalPosition(), missile.GlobalPosition()), WatchtowerPod.LinkScale(launcher)))
-            {
-                SteerOrders.Remove(missile);
-                return false;
-            }
-            if (role == VanguardRole.Drone)
-            {
-                RamFuse();
-                if (missile.disabled) return true;
-                GunTick();
-                if (order.Mode == DroneMode.Waypoint)
-                {
-                    float now = Time.timeSinceLevelLoad;
-                    if (now >= nextPlan)
-                    {
-                        nextPlan = now + PlanInterval;
-                        huntingOrder = Recover(missile.GlobalPosition()) || DroneEngage(missile.GlobalPosition(), order.Point);
-                    }
-                    if (huntingOrder) return true;
-                }
-            }
-            Vector3 self = missile.GlobalPosition().AsVector3();
-            Vector3 aim = order.Mode == DroneMode.Hand
-                ? DroneLink.HandAim(self, order.Point.x, order.Point.y, missile.radarAlt)
-                : DroneLink.OrbitAim(self, order.Point.AsVector3(), DroneLink.OrbitRadiusM);
-            missile.SetThrottle(role == VanguardRole.Drone ? RemoraArcher.Boost : 0.85f);
-            missile.SetAimpoint(new GlobalPosition(aim), Vector3.zero);
-            return true;
         }
 
         private void Detonate() => missile.Detonate(missile.rb.velocity, false, false);

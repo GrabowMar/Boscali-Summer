@@ -12,7 +12,7 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>0 AUTO, 1 EV (electric stealth), 2 HYBRID (turbine on).</summary>
         int Drive { get; }
 
-        /// <summary>0 AUTO (tilt by airspeed), 1 DRONE (fans down, auto-hover), 2 PLANE (fans aft), 3 MANUAL (the pilot's own tilt axis).</summary>
+        /// <summary>0 DRONE (vectored velocity control), 1 PLANE (wingborne flight with low-speed lift assist).</summary>
         int Vector { get; }
 
         /// <summary>Battery charge for the DRIVE row, e.g. "BAT 78%", with HEAVY / BOOST / DRY when one applies.</summary>

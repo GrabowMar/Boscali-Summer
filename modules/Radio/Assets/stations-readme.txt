@@ -10,7 +10,7 @@ independently of station playback. Turn RECEIVE off to stop communications; use
 its separate volume keys to adjust speech. Music gently ducks while speech airs.
 Station STOP and music deck STOP do not turn military receive off.
 
-To add music, create a folder here, put .ogg or .wav tracks directly inside it,
+To add music, create a folder here, put .mp3, .ogg or .wav tracks directly inside it,
 then press RESCAN. Files directly in Music appear as LOCAL. The MUSIC page lets
 you select tracks; folders are also stations on the BROADCAST page. Built-in
 station folders replace that station's soundtrack rotation when populated.

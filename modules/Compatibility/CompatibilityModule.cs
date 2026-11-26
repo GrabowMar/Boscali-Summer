@@ -57,6 +57,18 @@ namespace BoscaliSummer.Modules.Compatibility
                 "Expansion2082's ship missile defence: one interceptor per inbound missile and no wasted shots. Off: ships fire as vanilla does, under Boscali's combat rules.",
                 s.ShipAaRules, requires: expansion);
 
+            const string UiPlus = "UIPLUS";
+            ClientSettingToggle uiPlus = context.AddClientSetting(UiPlus, "UIPLUS LINK",
+                "Share the HUD with UIPlus. Off: Boscali ignores it and both mods may draw flight HUD elements.",
+                s.UiPlusLink);
+            uiPlus.Gate = () => ForeignMods.Find(ForeignMods.UiPlus) == null ? "UIPlus is not installed." : null;
+            context.AddClientSetting(UiPlus, "UIPLUS HUD",
+                "UIPlus draws the flight HUD; Boscali's TAC BOARD, visor, arcs, brow, alerts, third-person cluster and external HUD stand down.",
+                s.UiPlusHud, requires: uiPlus);
+            context.AddClientSetting(UiPlus, "EXTRA OVERLAYS",
+                "Also hide Boscali's extra HUD overlays (chatter strip, wing panel, ace hunt, contracts, comms markers, LZ cue, drone feed, AR approach, visor glass, terrain ghost).",
+                s.UiPlusExtraOverlays, requires: uiPlus);
+
             ClientSettingToggle keys = context.AddClientSetting(Keys, "MOVE CLASHING KEYS",
                 "A NoAtmoFX key on one of ours moves to a Ctrl chord (F8: Alt). Boscali's own keys ignore Ctrl and Alt chords, so Kelly's Ctrl+F8 panel is safe.",
                 s.MoveKeys);

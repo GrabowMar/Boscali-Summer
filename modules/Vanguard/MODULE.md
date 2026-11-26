@@ -8,10 +8,14 @@
 - New loadout options. Bundle missiles (Blueprinter): MALD-X BAIT, MALD-J SHADOW, REMORA, HAWC-X SKIP, AEGIS-3, GLAIVE-2A
   SENTINEL, GLAIVE-2S SPECTRE, ORCA SLEEPER, ALE-X KITE, KS-01 KESTREL, CG-9 HAMILCAR, RG-12 LANCE, SKYWELL kit.
   Runtime-built: SRB-2 TORCH, HEL-60 SUNSPEAR, PCU-9 STORMCELL, ASQ-X WATCHTOWER, XQ-90 MANTA, SA-74N (cargo slots).
-- Radial/C menu: VANGUARD DESIGNATE / RELEASE (drones work the pilot's target), DRONE LINK (HAND / waypoint / AUTO),
-  RAM MODE, SKYWELL PIT STOP order; UAV TERMINAL window, TGT DRONES MFD page (Command), HUD drone feed card.
-- HUD lines on the shared board (`IHudBoard` channels `vg.*`: AEGIS READY, KITE, ARCHER, SHADOW, …) and TAC BOARD
-  gauges (LANCE charge, AEGIS darts, REMORA count, SKYWELL service).
+- In the tactical map's DRN panel, select or locate an airborne drone, watch its sensor, and take control with your
+  aircraft bindings. Your aircraft holds course and altitude during flight. Use the panel, the C menu, or your EJECT
+  binding to return to it. Drones are private at launch. Their launcher can open control to teammates per drone.
+- The C menu also keeps drone designation, RAM MODE, the HUD sensor card, and SKYWELL PIT STOP.
+- HUD cues and status on the shared board (`IHudBoard` channels `vg.*`: AEGIS, KITE, ARCHER, SHADOW, …) and TAC BOARD
+  gauges (LANCE charge, REMORA count, SKYWELL service).
+- AEGIS-3 carries three darts per pod. Cycle to AEGIS with the countermeasure selector and deploy against an
+  inbound missile. The cockpit readout and TAC BOARD combine the remaining darts across fitted pods.
 - SKYWELL: a transport becomes a tanker; a VTOL tender flies under a receiver holding the service zone and refuels/
   rearms it, with director cues (UP/DOWN, HOLD STEADY, SERVICE COMPLETE, ZONE LOST).
 - SA-74N: 74 Mt blast with mushroom volume, flash, firestorm, soot, nuclear winter grade, power cut and native
@@ -31,8 +35,10 @@
   `Runtime/Loadouts`) in the host-only [VanguardRegistry](Runtime/VanguardRegistry.cs); `VanguardSeekPatch` /
   `VanguardSlowChecksPatch` replace the seeker's `Seek`/`SlowChecks` with `flight.Tick()/SlowCheck()` (5 Hz re-plan).
   `VanguardArticulationPatch` (`Missile.StartMissile`, every peer) attaches visuals and fills `DroneRoster`.
-- Orders: `DroneOrders` (designations, RAM MODE, target claims) and `SteerOrders` (drone link) are host statics in
-  `VanguardRegistry.cs`; clients send `VanguardDroneOrder` through [VanguardNet](Networking/VanguardNet.cs).
+- `DroneOrders` holds designations, RAM MODE and target claims. [VanguardNet](Networking/VanguardNet.cs) validates
+  per-drone sharing and remote pilot input against the launching player, faction, active aircraft, link range and
+  the current pilot's lease. [DronePilot](Runtime/DronePilot.cs) reads stock aircraft inputs and applies them to the
+  drone's existing flight model on the host. Autonomous guidance resumes on release or link loss.
 - [RuntimeStores](Runtime/RuntimeStores.cs): clones donor mounts once donors exist, appends to `Encyclopedia` lists and
   `IndexLookup` (network index), places the clone on every station that offers a carrier, `Adopt`s live aircraft.
 - Authority: host decides all damage/guidance (e.g. `LanceServer`, `MaldxService`, `SkywellService`); clients only
@@ -40,6 +46,8 @@
   from the sender. Server→client state messages drive visuals/HUD (e.g. `RemoraNet` sends on change and every 2 s);
   client handlers ignore them on the host and reject out-of-range enum bytes.
 - Scene reset: `AegisService.ResetForScene` is the hub that clears registries, orders and stats.
+- AEGIS cells use the native `MountedMissile` rail release. The host picks the threat and broadcasts the spent
+  cell so each peer plays the same cover and rail animation.
 
 ## Map of folders
 
@@ -48,7 +56,7 @@
 | [Domain/](Domain/) | Pure numbers and state machines per weapon (`*Profile`, `*Rules`, `Lance*`, `Skywell*`, `Sa74*` shapes), `VanguardKeys`, `VanguardPrices` |
 | [Networking/](Networking/) | One `*Net` scene service per weapon family with its `[NetworkMessage]` structs and `ProtocolVersion` |
 | [Patches/](Patches/) | Harmony hooks grouped by weapon (`VanguardPatches`, `LancePatches`, `AegisPatches`, `alexPatches`, `HawcxPatches`, `maldjPatches`, `RuntimeStorePatches`); the runtime-store and SA-74N patches live beside their code in `Runtime/` (`MantaStore`, `Sa74Store`, `Sa74Fallout`, `Sa74Destruction`, `Sa74LightningPolicy`) and `Presentation/Sa74BlastAudio.cs` |
-| [Presentation/](Presentation/) | Every-peer visuals (`*Visuals`, rigs, `TowCable`, `TorchFx`, `Sa74Mushroom/Particles/Smolder/BlastAudio`), HUD lines (`*Hud`), drone link UI (`DroneLinkService`, `DroneTerminalWindow`, `DroneFeedHud/View`), `SkywellScopeFeed`, `VanguardHudFeeds` |
+| [Presentation/](Presentation/) | Every-peer visuals (`*Visuals`, rigs, `TowCable`, `TorchFx`, `Sa74Mushroom/Particles/Smolder/BlastAudio`), HUD lines (`*Hud`), drone roster and feed (`DroneLinkService`, `DroneFeedHud/View`), `SkywellScopeFeed`, `VanguardHudFeeds` |
 | [Runtime/](Runtime/) | Cross-weapon services: `VanguardFlight` core, registry/orders, `RuntimeStores`, pricing/labels/store art, SKYWELL server, SA-74N aftermath (`Sa74Fallout*`, `Sa74Destruction`, `Sa74CloudClearance`, `Sa74PowerCut`), `VanguardAutomation` |
 | [Runtime/Loadouts/](Runtime/Loadouts/) | Per-weapon host logic (`*Flight.cs` partials of `VanguardFlight`, `*Service`, `*Store`/`*Pod` runtime stores) and their `*Automation.cs` sim hooks |
 | [Assets/](Assets/) | Embedded `sa74-mushroom.bundle`, `sa74n.mesh.gz`, `vanguard-stores.bundle`, `Icons/*.png`, `Textures/SA74N_*.png`, shader source |
@@ -62,8 +70,8 @@
 | Which bundle missile gets which Vanguard behaviour | `Domain/VanguardKeys.cs` (`RoleOf(jsonKey)`), read by `VanguardInitializePatch`; per-peer visuals attach in `VanguardArticulationPatch` (`Patches/VanguardPatches.cs`) |
 | Prices / names / icons | `Domain/VanguardPrices.cs`, `Runtime/VanguardLabels.cs`, `Runtime/VanguardPricing.cs` |
 | Add a runtime store | new `StoreRecipe` in a `*Store`/`*Pod` `Register`, **appended** after `Sa74Store.Register` in `Install` |
-| Designation / drone link rules | `Runtime/VanguardRegistry.cs` (`DroneOrders`, `SteerOrders`), `Domain/DroneLink.cs`, `Networking/VanguardNet.cs` |
-| UAV terminal / feed | `Presentation/DroneTerminalWindow.cs`, `DroneFeedView.cs`, `DroneFeedHud.cs` |
+| Designation / drone control | `Runtime/VanguardRegistry.cs` (`DroneOrders`), `Runtime/DronePilot.cs`, `Runtime/DroneRoster.cs`, `Networking/VanguardNet.cs` |
+| Drone sensor feed | `Presentation/DroneLinkService.cs`, `DroneFeedView.cs`, `DroneFeedHud.cs` |
 | LANCE damage | `Runtime/Loadouts/LanceServer.cs`, `Domain/LanceSlug.cs`, `Patches/LancePatches.cs` |
 | SKYWELL tender / pit stop | `Runtime/SkywellService.cs`, `Runtime/Loadouts/skywellPit.cs`, `Presentation/SkywellVisuals.cs`, `SkywellHud.cs` |
 | SA-74N aftermath | `Runtime/Sa74Fallout.cs`, `Sa74Destruction.cs`, `Presentation/Sa74*.cs`, `Domain/Sa74*.cs` |
@@ -71,7 +79,7 @@
 
 ## Talks to other modules
 
-- Provides `IDroneCommand` (radial/C menu in Autopilot `MenuGame`, Command `VanillaMfdRebuild.Target` TGT DRONES,
+- Provides `IDroneCommand` (radial/C menu in Autopilot `MenuGame`, Command's DRN panel and map tracks,
   Chatter `RadioAsks`),
   `ISkywellControl` (radial PIT STOP), `ISkywellTenderView` (Megaplane sim hooks), Core `NativeWeatherOverride`
   (`Sa74Fallout.Winter`, read by Weather). Implements `IHudLine` for its held lines.
@@ -121,34 +129,40 @@
 _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archmap.py --write_
 
 - Module [VanguardModule](VanguardModule.cs), id `vanguard`, "Vanguard weapons"; depends on nothing; roster: VanguardModule.Available; mission profile: battlefield.
-- 169 .cs files, 27411 lines.
+- 173 .cs files, 28329 lines.
 
 ### Folders
 
 | Folder | .cs files | Lines |
 |---|---|---|
-| (root) | 1 | 103 |
-| Domain/ | 41 | 3263 |
-| Networking/ | 12 | 1736 |
-| Patches/ | 7 | 381 |
-| Presentation/ | 41 | 8047 |
-| Runtime/ | 67 | 13881 |
+| (root) | 1 | 111 |
+| Domain/ | 42 | 3270 |
+| Networking/ | 12 | 1824 |
+| Patches/ | 9 | 657 |
+| Presentation/ | 40 | 7754 |
+| Runtime/ | 69 | 14713 |
 
 ### Largest files
 
 | File | Lines |
 |---|---|
-| [Runtime/Sa74Fallout.cs](Runtime/Sa74Fallout.cs) | 763 |
+| [Runtime/Sa74Fallout.cs](Runtime/Sa74Fallout.cs) | 754 |
 | [Runtime/VanguardAutomation.cs](Runtime/VanguardAutomation.cs) | 700 |
+| [Presentation/Sa74Smolder.cs](Presentation/Sa74Smolder.cs) | 622 |
 | [Runtime/SkywellService.cs](Runtime/SkywellService.cs) | 599 |
 | [Presentation/SkywellVisuals.cs](Presentation/SkywellVisuals.cs) | 574 |
-| [Runtime/LanceService.cs](Runtime/LanceService.cs) | 573 |
 
-### Harmony patches (41)
+### Harmony patches (49)
 
 - `ARHSeeker.Seek` by `AlexDeflectArhPatch` in [Patches/alexPatches.cs](Patches/alexPatches.cs)
 - `Aircraft.FilterInputs` by `SkywellFilterPatch` in [Patches/VanguardPatches.cs](Patches/VanguardPatches.cs) — SHARED with Megaplane, Progression (INDEPENDENT)
 - `Building.OnStartServer` by `Sa74BuildingRegistrationPatch` in [Runtime/Sa74Destruction.cs](Runtime/Sa74Destruction.cs) — SHARED with Trenches (INDEPENDENT)
+- `ClientObjectManager.GetSpawnHandler` by `DronePrefabRegistrationPatch` in [Patches/DronePrefabRegistrationPatch.cs](Patches/DronePrefabRegistrationPatch.cs) (TargetMethod)
+- `CombatHUD.DisplayCountermeasureAmmo` by `AegisCombatHudPatch` in [Patches/AegisPatches.cs](Patches/AegisPatches.cs) (TargetMethod)
+- `CountermeasureIndicator.Refresh` by `AegisIndicatorPatch` in [Patches/AegisPatches.cs](Patches/AegisPatches.cs) (TargetMethod)
+- `CountermeasureManager.DeregisterCountermeasure` by `AegisCountermeasureRemovalPatch` in [Patches/AegisPatches.cs](Patches/AegisPatches.cs) (TargetMethod)
+- `CountermeasureManager.Rearm` by `AegisCountermeasureRearmPatch` in [Patches/AegisPatches.cs](Patches/AegisPatches.cs) (TargetMethod)
+- `CountermeasureManager.RegisterCountermeasure` by `AegisCountermeasureOrderPatch` in [Patches/AegisPatches.cs](Patches/AegisPatches.cs) (TargetMethod)
 - `DamageEffects.ArmorPenetrate` by `LanceArmorPenetratePatch` in [Patches/LancePatches.cs](Patches/LancePatches.cs)
 - `ExplosionAudio.Start` by `Sa74NativeBlastAudioPatch` in [Presentation/Sa74BlastAudio.cs](Presentation/Sa74BlastAudio.cs)
 - `Gun.AttachToHardpoint` by `LanceAttachPatch` in [Patches/LancePatches.cs](Patches/LancePatches.cs)
@@ -161,8 +175,9 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 - `MapBuilding.AssignBuildingSet` by `Sa74MapBuildingRegistrationPatch` in [Runtime/Sa74Destruction.cs](Runtime/Sa74Destruction.cs)
 - `Missile.DetectCollisions` by `TorpedoCollisionsPatch` in [Patches/VanguardPatches.cs](Patches/VanguardPatches.cs) — SHARED with CombatAdjust (INDEPENDENT)
 - `Missile.Detonate` by `Sa74DetonatePatch` in [Runtime/Loadouts/Sa74Store.cs](Runtime/Loadouts/Sa74Store.cs) — SHARED with Support (INDEPENDENT)
-- `Missile.StartMissile` by `AegisFinsPatch` in [Patches/AegisPatches.cs](Patches/AegisPatches.cs) — SHARED with CombatAdjust (INDEPENDENT)
+- `Missile.StartMissile` by `AegisFinsPatch` in [Patches/AegisPatches.cs](Patches/AegisPatches.cs) (TargetMethod) — SHARED with CombatAdjust (INDEPENDENT)
 - `Missile.StartMissile` by `VanguardArticulationPatch` in [Patches/VanguardPatches.cs](Patches/VanguardPatches.cs) — SHARED with CombatAdjust (INDEPENDENT)
+- `Missile.Steering` by `DronePilotSteeringPatch` in [Patches/DronePilotPatches.cs](Patches/DronePilotPatches.cs) (TargetMethod)
 - `Missile.UserCode_RpcDetonate_897349600` by `Sa74DetonationReplayPatch` in [Runtime/Loadouts/Sa74Store.cs](Runtime/Loadouts/Sa74Store.cs) — SHARED with FireAndDestruction, Support (ORDER-SENSITIVE: fire-and-destruction → support)
 - `MountedCargo.Fire` by `SkywellFirePatch` in [Patches/VanguardPatches.cs](Patches/VanguardPatches.cs) — SHARED with Gamemodes (INDEPENDENT)
 - `NetworkManagerNuclearOption.RegisterPrefabs` by `MantaPrefabsPatch` in [Runtime/Loadouts/MantaStore.cs](Runtime/Loadouts/MantaStore.cs) — SHARED with SeaStructures, Spooktober (INDEPENDENT)
@@ -171,6 +186,8 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 - `OpticalSeekerCruiseMissile.Seek` by `VanguardSeekPatch` in [Patches/VanguardPatches.cs](Patches/VanguardPatches.cs)
 - `OpticalSeekerCruiseMissile.SlowChecks` by `VanguardSlowChecksPatch` in [Patches/VanguardPatches.cs](Patches/VanguardPatches.cs)
 - `Pilot.Pilot_OnAeroInputsApplied` by `SkywellHoldPatch` in [Patches/VanguardPatches.cs](Patches/VanguardPatches.cs)
+- `PilotPlayerState.FixedUpdateState` by `DronePilotAxesPatch` in [Patches/DronePilotPatches.cs](Patches/DronePilotPatches.cs) (TargetMethod) — SHARED with Autopilot (ORDER-SENSITIVE: autopilot → vanguard)
+- `PilotPlayerState.PlayerControls` by `DronePilotActionsPatch` in [Patches/DronePilotPatches.cs](Patches/DronePilotPatches.cs) (TargetMethod)
 - `Radar.CanSeeRadarReturn` by `MaldjShadowPatch` in [Patches/maldjPatches.cs](Patches/maldjPatches.cs) — SHARED with Pmc (INDEPENDENT)
 - `SARHSeeker.Seek` by `AlexDeflectSarhPatch` in [Patches/alexPatches.cs](Patches/alexPatches.cs)
 - `Shockwave.Start` by `Sa74BlastTargetsPatch` in [Runtime/Sa74Fallout.cs](Runtime/Sa74Fallout.cs)
@@ -180,18 +197,17 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 - `TurbineEngine.Throttle` by `LanceTurbineThrottlePatch` in [Patches/LancePatches.cs](Patches/LancePatches.cs)
 - `Turret.FixedUpdate` by `AlexSuppressPatch` in [Patches/alexPatches.cs](Patches/alexPatches.cs) — SHARED with Performance (INDEPENDENT)
 - `WeaponChecker.PreferNukesFilter` by `AiLoadoutFilterPatch` in [Patches/RuntimeStorePatches.cs](Patches/RuntimeStorePatches.cs)
-- `WeaponManager.Fire` by `AegisSnapPatch` in [Patches/AegisPatches.cs](Patches/AegisPatches.cs)
 - `WeaponManager.Fire` by `AlexPressPatch` in [Patches/alexPatches.cs](Patches/alexPatches.cs)
+- `WeaponManager.RegisterWeapon` by `AegisRegisterPatch` in [Patches/AegisPatches.cs](Patches/AegisPatches.cs) (TargetMethod)
 - `WeaponManager.RegisterWeapon` by `HiddenPodRegisterPatch` in [Patches/RuntimeStorePatches.cs](Patches/RuntimeStorePatches.cs)
 - `WeaponManager.SpawnWeapons` by `Sa74SavedLoadoutPatch` in [Runtime/Loadouts/Sa74Store.cs](Runtime/Loadouts/Sa74Store.cs)
-- `WeaponStation.LaunchMount` by `AegisDoorsPatch` in [Patches/AegisPatches.cs](Patches/AegisPatches.cs) — SHARED with Support (INDEPENDENT)
 - `WeaponStation.LaunchMount` by `AlexLaunchPatch` in [Patches/alexPatches.cs](Patches/alexPatches.cs) — SHARED with Support (INDEPENDENT)
 - `WeaponStation.LaunchMount` by `SkywellLaunchPatch` in [Patches/VanguardPatches.cs](Patches/VanguardPatches.cs) — SHARED with Support (INDEPENDENT)
 
 ### Contracts
 
 - Registers as service: `IDroneCommand`, `ISkywellControl`, `ISkywellTenderView`
-- Implements: `IDroneCommand`, `IHudLine`, `ISkywellControl`, `ISkywellTenderView`
+- Implements: `ICountermeasureCapacity`, `IDroneCommand`, `IHudLine`, `ISkywellControl`, `ISkywellTenderView`
 - Resolves: `ICloudVolumeView`, `IDroneCommand`, `IHudBoard`, `ISkywellControl`, `IWeatherCameraExclusion`
 - Details: [CONTRACTS.md](../../docs/generated/CONTRACTS.md)
 
@@ -202,15 +218,15 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 
 ### Network
 
-- Protocol constants: `AegisNet.ProtocolVersion` = 2, `GlaiveNet.ProtocolVersion` = 3, `KestrelNet.ProtocolVersion` = 1, `LanceNet.ProtocolVersion` = 2, `MaldxNet.ProtocolVersion` = 1, `OrcaNet.ProtocolVersion` = 1, `RemoraNet.ProtocolVersion` = 4, `Sa74Net.ProtocolVersion` = 2, `SkywellNet.ProtocolVersion` = 6, `VanguardNet.ProtocolVersion` = 5, `AlexNet.ProtocolVersion` = 1, `SentinelNet.ProtocolVersion` = 1
-- Messages (15): `AegisEvent`, `AlexIntent`, `AlexState`, `GlaiveState`, `KestrelState`, `LanceFx`, `LanceIntent`, `MaldxEvent`, `OrcaNotice`, `RemoraState`, `Sa74State`, `SentinelState`, `SkywellIntent`, `SkywellState`, `VanguardDroneOrder`
+- Protocol constants: `AegisNet.ProtocolVersion` = 3, `GlaiveNet.ProtocolVersion` = 3, `KestrelNet.ProtocolVersion` = 1, `LanceNet.ProtocolVersion` = 2, `MaldxNet.ProtocolVersion` = 1, `OrcaNet.ProtocolVersion` = 1, `RemoraNet.ProtocolVersion` = 4, `Sa74Net.ProtocolVersion` = 2, `SkywellNet.ProtocolVersion` = 6, `VanguardNet.ProtocolVersion` = 6, `AlexNet.ProtocolVersion` = 1, `SentinelNet.ProtocolVersion` = 1
+- Messages (17): `AegisEvent`, `AlexIntent`, `AlexState`, `GlaiveState`, `KestrelState`, `LanceFx`, `LanceIntent`, `MaldxEvent`, `OrcaNotice`, `RemoraState`, `Sa74State`, `SentinelState`, `SkywellIntent`, `SkywellState`, `VanguardDroneControls`, `VanguardDroneOrder`, `VanguardDroneState`
 
 ### Sim hooks (never rename)
 
-`BoscaliSummer.Modules.Vanguard.Runtime.Sa74PeerProof` (dev), `BoscaliSummer.Vanguard.Sa74Automation` (dev), `BoscaliSummer.Vanguard.Sa74DestructionAutomation` (dev), `BoscaliSummer.Vanguard.Sa74FalloutAutomation` (dev), `BoscaliSummer.Vanguard.Sa74GroundAutomation` (dev), `BoscaliSummer.Vanguard.VanguardAutomation` (dev), `BoscaliSummer.Vanguard.VanguardAutomation+LanceProbe` (dev)
+`BoscaliSummer.Modules.Vanguard.Runtime.DronePeerProof` (dev), `BoscaliSummer.Modules.Vanguard.Runtime.Sa74PeerProof` (dev), `BoscaliSummer.Vanguard.Sa74Automation` (dev), `BoscaliSummer.Vanguard.Sa74DestructionAutomation` (dev), `BoscaliSummer.Vanguard.Sa74FalloutAutomation` (dev), `BoscaliSummer.Vanguard.Sa74GroundAutomation` (dev), `BoscaliSummer.Vanguard.VanguardAutomation` (dev), `BoscaliSummer.Vanguard.VanguardAutomation+LanceProbe` (dev)
 
 ### Pinned by nomodkit
 
-41 files compiled by path, 8 types referenced by name: see [PINNED.md](../../docs/generated/PINNED.md).
+42 files compiled by path, 9 types referenced by name: see [PINNED.md](../../docs/generated/PINNED.md).
 
 <!-- archmap:end -->

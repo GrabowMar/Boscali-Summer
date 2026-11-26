@@ -42,9 +42,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     /// <summary>
     /// The REMORA / MANTA pair (role Drone), host only. Both share this pipeline: a 2 Hz target scan, a pick that spreads rounds
     /// over targets (shoot-look-shoot), rounds spawned off the two rails (owner = drone, kill credit passes to the launcher),
-    /// the airframe ram, flares, radar seduction and a passive sensor. Only the scan and the round differ: the REMORA hunts the
-    /// air with AAM-29s (this file), the MANTA strikes the ground with AGMs (MantaFlight). Idle, they hold the escort slot;
-    /// sent to a point (drone link WPT), they hunt their kind of target around it while they circle (<see cref="DroneEngage"/>).
+    /// the airframe ram, flares, radar seduction and a passive sensor. The REMORA hunts the air with AAM-29s.
+    /// The MANTA strikes the ground with AGMs (MantaFlight). Idle, they hold the escort slot.
     /// </summary>
     internal sealed partial class VanguardFlight
     {
@@ -99,7 +98,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 return;
             }
             if (Recover(pos)) return;
-            if (DroneEngage(pos, null)) return;
+            if (DroneEngage(pos)) return;
             Transform lt = launcher.transform;
             Vector3 leadVel = launcher.rb != null ? launcher.rb.velocity : lt.forward * 200f;
             GlobalPosition slotPos = launcher.GlobalPosition() +
@@ -124,18 +123,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return true;
         }
 
-        /// <summary>
-        /// Scan, pick and fly at a target. <paramref name="area"/> is the point the drone was sent to (null on escort): its kind of
-        /// target around it is hunted too. False with nothing to do: the caller flies the slot or the orbit.
-        /// </summary>
-        private bool DroneEngage(GlobalPosition pos, GlobalPosition? area)
+        /// <summary>Scan, pick and fly at a target. False lets the drone rejoin its escort slot.</summary>
+        private bool DroneEngage(GlobalPosition pos)
         {
             if (launcher == null || launcher.disabled) return false;
             float now = Time.timeSinceLevelLoad;
             if (now >= nextDroneScan)
             {
                 nextDroneScan = now + (manta ? MantaRules.ScanInterval : RemoraArcher.ScanInterval);
-                if (manta) ScanGround(pos, area); else ScanAir(pos, area);
+                if (manta) ScanGround(pos); else ScanAir(pos);
             }
             int left = manta ? MantaRules.Left(archerFired) : RemoraArcher.Left(archerFired);
             bool ram = !manta && DroneOrders.RamMode(launcher);   // RAM MODE: every REMORA of this launcher rams, AAMs held
@@ -159,8 +155,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return true;
         }
 
-        // 2 Hz air picture: hostile missiles homing on the launcher, hostile aircraft locking it, near it, or near the sent point.
-        private void ScanAir(GlobalPosition pos, GlobalPosition? area)
+        // 2 Hz air picture: hostile missiles homing on the launcher and hostile aircraft locking it or flying nearby.
+        private void ScanAir(GlobalPosition pos)
         {
             droneScan.Clear();
             FactionHQ mine = missile.NetworkHQ;
@@ -182,11 +178,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (!locks && FastMath.Distance(foe.GlobalPosition(), home) > RemoraArcher.GuardRange) continue;
                 droneScan.Add(new DroneTarget { Unit = foe, Cue = (byte)(locks ? AirCue.Locker : AirCue.Nearest), Range = FastMath.Distance(foe.GlobalPosition(), pos) });
             }
-            if (!area.HasValue) return;
-            BattlefieldGrid.GetUnitsInRangeNonAlloc(area.Value, RemoraArcher.AreaRange, droneGrid);
-            for (int i = 0; i < droneGrid.Count; i++)
-                if (droneGrid[i] is Aircraft foe && Hostile(foe, mine))
-                    droneScan.Add(new DroneTarget { Unit = foe, Cue = (byte)AirCue.Nearest, Range = FastMath.Distance(foe.GlobalPosition(), pos) });
         }
 
         private static bool Hostile(Unit unit, FactionHQ mine) => unit != null && !unit.disabled && unit.NetworkHQ != null && unit.NetworkHQ != mine;

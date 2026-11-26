@@ -118,6 +118,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (Time.time >= nextSnapshot) { nextSnapshot = Time.time + PlanSeconds; Publish(); }
         }
 
+        public void TickPiloted()
+        {
+            if (missile.timeSinceSpawn >= KestrelProfile.HardCap) Remove();
+        }
+
         private void Plan(float age)
         {
             GlobalPosition here = missile.GlobalPosition();

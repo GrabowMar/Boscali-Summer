@@ -29,10 +29,16 @@ namespace BoscaliSummer.Modules.Skylark
         internal bool Step(float target, float seconds, float deltaTime)
         {
             if (Amount == target) return false;
-            Amount = Mathf.MoveTowards(Amount, target, deltaTime / seconds);
+            Set(Mathf.MoveTowards(Amount, target, deltaTime / seconds));
+            return true;
+        }
+
+        /// <summary>Set pose directly (0 = rest, 1 = full travel).</summary>
+        internal void Set(float target)
+        {
+            Amount = Mathf.Clamp01(target);
             node.localRotation = Quaternion.AngleAxis(angle * Amount, axis) * rest;
             node.localPosition = restPosition + slide * Amount;
-            return true;
         }
     }
 }

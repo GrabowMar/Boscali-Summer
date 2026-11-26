@@ -155,9 +155,17 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.HasDrones = drones != null;
             if (drones != null)
             {
-                w.DronesStriking = drones.Striking; w.DronesCanStrike = drones.CanStrike; w.Drones = drones.Ready;
-                for (int i = 0; i < drones.Linkable; i++) { w.DroneNames.Add(drones.Name(i)); w.DroneStates.Add(drones.State(i)); }
-                w.DroneLinked = drones.LinkedIndex; w.DroneOrdered = drones.Ordered; w.DroneFeed = drones.FeedShown; w.DroneRamMode = drones.RamMode;
+                w.DronesStriking = drones.Striking; w.DronesCanStrike = drones.CanStrike;
+                for (int i = 0; i < drones.Linkable; i++)
+                {
+                    string name = drones.Name(i);
+                    w.DroneNames.Add(name);
+                    w.DroneStates.Add(drones.State(i));
+                    if (!drones.Owns(i)) continue;
+                    w.OwnDrones = true;
+                    if (name.StartsWith("REMORA", StringComparison.Ordinal)) w.OwnRemora = true;
+                }
+                w.DroneLinked = drones.LinkedIndex; w.DroneFeed = drones.FeedShown; w.DroneRamMode = drones.RamMode; w.DronePiloting = drones.Piloting;
             }
             ChaffDispenser chaff = ChaffDispenser.Instance;
             if (chaff != null && chaff.Fitted) { w.HasChaff = true; w.Chaff = chaff.Ammo; w.ChaffMax = chaff.MaxAmmo; }

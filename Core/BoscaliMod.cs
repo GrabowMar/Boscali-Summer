@@ -97,6 +97,13 @@ namespace BoscaliSummer.Core
                 mod.Load(mod.ModulesForProfile());
                 if (!Application.isBatchMode)
                 {
+                    mod.clientSettings.AddKey("MISC MENU KEY",
+                        "Toggle the MISC (ARES / EXTRAS) window directly, including when AVIONICS (tactical map extension) is turned off.",
+                        settings.MiscMenuKey, onPrompt: true);
+                    MiscWindow miscWindow = mod.runtimeRoot.AddComponent<MiscWindow>();
+                    miscWindow.Configure(settings.MiscMenuKey);
+                    mod.sceneLifecycle.Register("core", miscWindow, 59);
+
                     var offered = new List<ModuleMetadata>();
                     foreach (IModule module in Compose(settings))
                         if (!MissionProfile.IsCore(module.Metadata.Id)) offered.Add(module.Metadata);

@@ -449,15 +449,28 @@ namespace BoscaliSummer.Garrisons
                 return null;
             }
 
-            return spawner.SpawnBuilding(
+            // Only seeded base-defense camps belong to an airbase: vanilla Airbase.AddBuilding
+            // re-owns every member building to the base's CurrentHQ, and Airbase.CaptureFaction
+            // flips them all when that base changes hands. Rappelled and paradropped camps stay
+            // detached so dropping in enemy territory never hands the emplacement to the enemy.
+            Airbase memberAirbase = site.Seeded ? site.Airbase : null;
+            Building spawned = spawner.SpawnBuilding(
                 def.unitPrefab,
                 placed.ToGlobalPosition(),
                 rotation,
                 site.Owner,
-                site.Airbase,
+                memberAirbase,
                 $"{NamePrefix}{Sanitize(site.Airbase != null ? site.Airbase.name : null)}:{site.Id}:{label}",
                 false,
                 null);
+            if (spawned != null && !site.Seeded)
+            {
+                // Inserted troops contest and capture the zone they drop into (1 capture strength per
+                // troop, split across the 4-slot camp, matching MountedTroops on the carrier).
+                float perSlot = Mathf.Max(1f, site.Troops / (float)site.Slots.Length);
+                spawned.ModifyCaptureStrength(perSlot);
+            }
+            return spawned;
         }
 
 

@@ -1788,6 +1788,22 @@ Shader "Boscali/FlightCloud"
             return float4(colour, opacity);
         }
 
+        float CloudSamplePhase(float2 pixel)
+        {
+            uint2 texel = (uint2)pixel;
+            uint2 block = texel >> 1u;
+            uint hash = SmoothHash((int)block.x, (int)block.y, 0xAB45u);
+
+            // Permute the four quarters independently per block so the checker phases
+            // have no directional lattice. Mirrored pairs keep the block mean at 0.5.
+            uint cell = (texel.x & 1u) | ((texel.y & 1u) << 1u);
+            uint stratum = cell ^ (hash >> 30u);
+            uint pair = stratum & 1u;
+            float offset = (((hash >> (pair * 15u)) & 32767u) + 0.5) / 32768.0;
+            float low = (pair + offset) * 0.25;
+            return stratum < 2u ? low : 1.0 - low;
+        }
+
         float4 MarchSky(float3 origin, float3 ray, float sceneDistance, float2 pixel, out float cloudDistance)
         {
             float3 ro = origin + _CloudWorldOffset;
@@ -1848,27 +1864,9 @@ Shader "Boscali/FlightCloud"
             // ~22 degree skirt, the same peak, no plateau and no edge.
             float sunGlow = SunGlowLobes(cosine);
             float awayFromSun = saturate(0.5 - 0.5 * cosine);
-            // Integer avalanche removes IGN's visible diagonal lattice. This changes ray
-            // sample placement only: the actual cloud field and detail stay anchored.
-            uint pixelHash = (uint)pixel.x * 1973u + (uint)pixel.y * 9277u + 89173u;
-            pixelHash ^= pixelHash >> 16;
-            pixelHash *= 0x7feb352du;
-            pixelHash ^= pixelHash >> 15;
-            pixelHash *= 0x846ca68bu;
-            pixelHash ^= pixelHash >> 16;
-            // The dither is frozen per texel (user ruling 2026-10-14): a cycling dither averaged out over frames but
-            // read as unstable, boiling cloud. Each texel now always marches the same positions, so a still view
-            // converges to one fixed picture; the composite's 3x3 kernel melts the static pattern.
-            // 2026-10-18 (user: grain, worst in motion): white noise per texel only fell by a third under the 3x3 kernels, and in motion the resolve
-            // shows nearly raw fresh texels. Stratified instead: the four texels of a 2x2 block take the four quarters of the step (what the
-            // composite and the history average), and the blocks march by the R2 sequence, so the texels marched in one checker frame are spread
-            // over the step too. A small hash breaks R2's lattice. Still frozen per texel.
-            float2 px = floor(pixel);
-            float2 block = floor(px * 0.5);
-            float2 cell = px - block * 2.0;
-            float r2 = frac(block.x * 0.7548776662 + block.y * 0.5698402910);
-            float ign = frac(r2 + cell.x * 0.5 + cell.y * 0.25 + ((pixelHash & 65535u) / 65536.0 - 0.5) * 0.08);
-            float jitter = lerp(0.1, 0.9, ign);
+            // Freeze the phase per texel so a still view can converge without boiling.
+            float samplePhase = CloudSamplePhase(pixel);
+            float jitter = lerp(0.1, 0.9, samplePhase);
 
             // Two sample streams merged by distance. The ordinary one is full detail to the near limit, then a coarse march
             // through the far level of detail out to the horizon, placed exactly as on a ray that passes no set-piece. The
@@ -1883,8 +1881,8 @@ Shader "Boscali/FlightCloud"
             // Resolve the first few hundred metres during entry/exit, including short
             // upward chords. Fade back to the ordinary budget before distant clouds.
             float nearProximity = 1.0 - smoothstep(500.0, 2500.0, start);
-            float nearSteps = clamp(floor(_CloudSteps * saturate(nearSpan / 12000.0 + 0.35) * lerp(1.0, 0.68, smoothstep(15000.0, 35000.0, start))), 4.0, 96.0);
-            nearSteps = max(nearSteps, floor(24.0 * nearProximity));
+            float nearSteps = clamp(_CloudSteps * saturate(nearSpan / 12000.0 + 0.35) * lerp(1.0, 0.68, smoothstep(15000.0, 35000.0, start)), 4.0, 96.0);
+            nearSteps = max(nearSteps, 24.0 * nearProximity);
             float farSteps = clamp(floor(_CloudFarSteps), 4.0, 96.0);
             // The far stream's first step (quadratic spacing, n = 0), for the near stream's
             // last 40 % to filter toward before the switch: a step-length jump at the near
@@ -1918,22 +1916,26 @@ Shader "Boscali/FlightCloud"
                 float span = farSeg ? farSpan : nearSpan;
                 float steps = farSeg ? farSteps : nearSteps;
                 float proximity = farSeg ? 0.0 : nearProximity;
-                float a = n / steps, b = (n + 1.0) / steps;
+                // Keep the near grid continuous across rays. As its budget crosses an
+                // integer, the new interval grows from zero at the end of the chord.
+                float a = n / steps, b = min(n + 1.0, steps) / steps;
                 // Cubic spacing spends the same bounded budget on nearby filaments;
                 // distant segments keep quadratic spacing and their existing detail.
                 float sampleStart = lerp(a * a, a * a * a, proximity);
                 float sampleEnd = lerp(b * b, b * b * b, proximity);
-                // Distant near-stream steps are hundreds of metres long too. Fade their
-                // frozen screen-space dither to midpoints before the far stream takes over.
+                // Coarse steps can cross several billows. Bound the offset in metres so
+                // adjacent rays still sample nearby density, then fade to far midpoints.
+                float ordinaryStep = span * (sampleEnd - sampleStart);
                 float sampleMid = s0 + span * (sampleStart + sampleEnd) * 0.5;
-                float segJitter = farSeg ? 0.5 : lerp(jitter, 0.5, smoothstep(15000.0, CLOUD_NEAR_LIMIT, sampleMid));
-                float tOrdinary = s0 + span * lerp(sampleStart, sampleEnd, segJitter);
+                float tOrdinary = sampleMid;
+                if (segment == 0)
+                    tOrdinary += (jitter - 0.5) * min(ordinaryStep, 300.0) * (1.0 - smoothstep(15000.0, CLOUD_NEAR_LIMIT, sampleMid));
                 // ponytail: a set-piece backing up out of a stride can land behind an ordinary sample already taken (at most three
                 // fine steps); that sliver composites out of order.
                 bool hero = heroLive && (segment == 2 || tHero < tOrdinary);
                 farSeg = farSeg && !hero;
                 float fine = clamp(tHero * 0.006, 150.0, 900.0);
-                float stepLength = hero ? fine : span * (sampleEnd - sampleStart);
+                float stepLength = hero ? fine : ordinaryStep;
                 float t = hero ? tHero : tOrdinary;
                 if (hero) heroLeft--; else n += 1.0;
                 float3 world = origin + ray * t;
@@ -1946,10 +1948,11 @@ Shader "Boscali/FlightCloud"
                 // LOD, micro-erosion and hard edges, and gVert the thin-layer average. Both used
                 // the near stream's step until the switch and the far stream's after it.
                 float filterStep = farSeg ? stepLength : lerp(stepLength, farStepLength, farBlend);
-                // 2026-10-26 (user: rougher, higher-res clouds, Ace Combat look): the near march filters its noise to 0.15 of a step (the
-                // stratified dither and the resolve average the rest); at 0.35 cloud 10 km away lost its edge texture to mip 4. Set-pieces
-                // keep 0.35 (their distant samples are fixed, not dithered).
-                gFoot = max(t * _CloudPixelAngle, filterStep * lerp(0.15, 0.35, hero ? 1.0 : farBlend));
+                // Wider intervals cannot resolve the smallest erosion features. Filter
+                // their 3D noise before the density remap turns it into dark/light speckles.
+                // Short intervals keep their fine edge and fly-through detail.
+                float nearFilter = lerp(0.15, 0.25, smoothstep(70.0, 220.0, filterStep));
+                gFoot = max(t * _CloudPixelAngle, filterStep * lerp(nearFilter, 0.35, hero ? 1.0 : farBlend));
                 gVert = farBlend * 0.5 * abs(ray.y) * filterStep;
                 gHeroOnly = hero;
                 gNoHero = !hero && t >= 2000.0;
@@ -2136,7 +2139,7 @@ Shader "Boscali/FlightCloud"
             if (sceneDistance < CLOUD_FAR_LIMIT && opacity < 0.996)
             {
                 float mistDistance;
-                float4 mist = TerrainMist(ro, ray, sceneDistance, ign, mistDistance);
+                float4 mist = TerrainMist(ro, ray, sceneDistance, samplePhase, mistDistance);
                 float back = (1.0 - opacity) * mist.a;
                 if (back > 0.0005)
                 {

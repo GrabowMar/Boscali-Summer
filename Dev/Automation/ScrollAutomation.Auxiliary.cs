@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 {
     public static partial class ScrollAutomation
     {
-        /// <summary>Sandbox-only auxiliary-window navigation/readback. Never applies a formation, weather or drone order.</summary>
+        /// <summary>Sandbox-only auxiliary-window navigation/readback. Never applies a formation or weather order.</summary>
         public static Dictionary<string, object> Auxiliary(Dictionary<string, object> args)
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO")))
@@ -79,12 +79,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     object picker = Field(owner, "picker");
                     page = Convert.ToInt32(picker.GetType().GetProperty("Class").GetValue(picker));
                     pages = Modules.Weather.Domain.MetCatalog.ClassWords;
-                    break;
-                case "drone":
-                    if (action == "open" || action == "close")
-                        BoscaliSummer.Vanguard.VanguardAutomation.Step(new Dictionary<string, object> { ["action"] = "link", ["do"] = action == "open" ? "terminal" : "close" });
-                    owner = Object.FindObjectOfType<Modules.Vanguard.Presentation.DroneTerminalWindow>();
-                    if (owner == null) return AuxAbsent(id, action);
                     break;
                 default: return Failure("ScrollAutomation", "Auxiliary", "unknown auxiliary window");
             }

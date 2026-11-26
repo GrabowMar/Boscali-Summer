@@ -237,7 +237,7 @@ namespace BoscaliSummer.SeaStructures
             result["stations"] = stations;
             result["wornSections"] = worn;
             result["fallenPieces"] = pieces;
-            result["height"] = target.transform.position.y - Datum.SeaLevel.y;
+            result["height"] = target.transform.position.y - Datum.LocalSeaY;
             result["tilt"] = Vector3.Angle(target.transform.up, Vector3.up);
             return result;
         }

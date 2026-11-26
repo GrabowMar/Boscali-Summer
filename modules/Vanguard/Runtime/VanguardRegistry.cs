@@ -10,6 +10,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         public static bool TryGet(Missile missile, out VanguardFlight flight) => Flights.TryGetValue(missile, out flight);
 
+        public static bool IsAegisTargeting(Unit launcher, Missile threat)
+        {
+            if (launcher == null || threat == null) return false;
+            foreach (VanguardFlight flight in Flights.Values)
+                if (flight.Role == VanguardRole.Interceptor && flight.Launcher == launcher && flight.Target == threat &&
+                    flight.Missile != null && !flight.Missile.disabled) return true;
+            return false;
+        }
+
         public static void Add(Missile missile, VanguardFlight flight)
         {
             Flights[missile] = flight;
@@ -40,7 +49,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static void OnDisabled(Unit unit)
         {
             unit.onDisableUnit -= OnDisabled;
-            if (unit is Missile missile) { Flights.Remove(missile); SteerOrders.Remove(missile); }
+            if (unit is Missile missile) Flights.Remove(missile);
         }
     }
 
@@ -143,33 +152,4 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         }
     }
 
-    /// <summary>
-    /// Drone link orders, host-side (UAV terminal, UAV MFD and C-menu DRONE LINK via IDroneCommand -> VanguardNet). A steerable
-    /// flight with an order here flies it instead of its own job (VanguardFlight.Steer). Every drone keeps its own order (2026-10-26:
-    /// HAND is a held course, not the pilot's stick, so several can hold at once). An order drops with its drone, its launcher or the
-    /// link (DroneLink.MaxRangeM). AEGIS darts, ORCA and the ALE-X kite never get one (VanguardKeys.IsSteerable).
-    /// </summary>
-    internal static class SteerOrders
-    {
-        internal struct Order
-        {
-            public DroneMode Mode;
-            public GlobalPosition Point;
-        }
-
-        private static readonly Dictionary<Missile, Order> Orders = new Dictionary<Missile, Order>();
-
-        public static void Set(Missile drone, DroneMode mode, GlobalPosition point)
-        {
-            if (drone == null) return;
-            if (mode == DroneMode.Auto) { Orders.Remove(drone); return; }
-            Orders[drone] = new Order { Mode = mode, Point = point };
-        }
-
-        public static bool TryGet(Missile drone, out Order order) => Orders.TryGetValue(drone, out order);
-
-        public static void Remove(Missile drone) => Orders.Remove(drone);
-
-        public static void Clear() => Orders.Clear();
-    }
 }

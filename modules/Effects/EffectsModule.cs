@@ -26,11 +26,18 @@ namespace BoscaliSummer.Modules.Effects
                 "GAME: keep the game's anti-aliasing. SMAA: smoother aircraft and cockpit edges, with extra GPU work.",
                 fx.EdgeSmoothing, new[] { "GAME", "SMAA" });
             ClientSettingToggle cinematic = context.AddClientSetting("COLOUR GRADE", "CINEMATIC",
-                "BF4-inspired cool shadows, brighter lights, horizontal lens streaks, subtle grain and vignette.", fx.Cinematic.Enabled);
+                "Realistic, atmospheric or tactical filmic grading, selective bloom, lens vignette and grain.", fx.Cinematic.Enabled);
+            context.AddClientChoice("COLOUR GRADE", "CINEMA LOOK",
+                "ATMOSPHERIC: moody sun- and weather-reactive film grade with soft bloom. REALISTIC: cleaner, subtler photographic look. TACTICAL: BF4-inspired cool shadows and stronger light streaks.",
+                fx.Cinematic.Look, new[] { "ATMOSPHERIC", "REALISTIC", "TACTICAL" }, cinematic);
             context.AddClientLevel("COLOUR GRADE", "CINEMA STRENGTH", "How strongly the cinematic look changes the picture.",
                 fx.Cinematic.Strength, 0f, 1f, .1f, requires: cinematic);
             context.AddClientLevel("COLOUR GRADE", "LIGHT GLOW", "Extra bloom and horizontal streaks around bright lights and exhausts.",
                 fx.Cinematic.Bloom, 0f, 1f, .1f, requires: cinematic);
+            context.AddClientLevel("COLOUR GRADE", "LENS VIGNETTE", "Soft darkening around screen edges.",
+                fx.Cinematic.Vignette, 0f, 1f, .1f, requires: cinematic);
+            context.AddClientLevel("COLOUR GRADE", "FILM GRAIN", "Subtle organic film grain, strongest in darker areas.",
+                fx.Cinematic.Grain, 0f, 1f, .1f, requires: cinematic);
             ClientSettingToggle graded = context.AddClientSetting("COLOUR GRADE", "COLOUR GRADE",
                 "Contrast, saturation and white balance over the game's picture (and the optional .cube LUT named in the config file).",
                 fx.Enabled);

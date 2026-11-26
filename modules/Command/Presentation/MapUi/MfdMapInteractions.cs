@@ -148,6 +148,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             HoldPause();
             DrawMark(map);
+            DroneMapTracks.Draw(map);
             DrawBanner(map);
             MapSelectionDeck.Tick(map);
             MfdFieldLog.Tick(map);
@@ -267,6 +268,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (parent == null) return;
             UnitMapIcon contact = ContactAt(map, click);
             AirbaseMapIcon airbase = contact == null ? AirbaseAt(map, click) : null;
+            Unit droneTrack = contact != null ? contact.unit : null;
+            Unit droneAtCursor = DroneMapTracks.At(click, ContactRadius, out float droneDistance);
+            if (airbase == null && droneAtCursor != null &&
+                (contact == null || droneDistance < (IconScreen(contact) - click).sqrMagnitude))
+            {
+                if (droneAtCursor != droneTrack) contact = null;
+                droneTrack = droneAtCursor;
+            }
+            ModuleServices.TryGet(out IDroneCommand drones);
+            int droneIndex = DroneMfdPanel.IndexOf(drones, droneTrack);
             int nearby = CountNearby(map, click);
             int selected = map.selectedIcons?.Count ?? 0;
             bool hasWing = airbase == null && ModuleServices.TryGet(out IMapWingMenu _);
@@ -308,8 +319,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 AddClear(map, selected);
             }
 
+            if (droneIndex >= 0)
+            {
+                group = "DRONES";
+                Add("OPEN DRONES PANEL", AvIcon.Drone, () => DroneMfdPanel.OpenTrack(droneTrack));
+            }
+
             group = "MAP";
-            if (contact != null || airbase != null) Add("FRAME", AvIcon.Focus2, () => Focus(ground, true), true);
+            if (droneIndex >= 0) Add("FRAME", AvIcon.Focus2, () =>
+            {
+                if (!MapFocus.ToAirTrack(droneTrack, true)) Focus(ground, true);
+            }, true);
+            else if (contact != null || airbase != null) Add("FRAME", AvIcon.Focus2, () => Focus(ground, true), true);
             else
             {
                 Add("CENTER", AvIcon.CurrentLocation, () => Focus(ground, false), true);
@@ -325,7 +346,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             Color tone = MapContextRead.Fill(map, ground, mark, rows);
             string title, kind;
-            if (contact != null)
+            if (droneIndex >= 0)
+            {
+                title = drones.Name(droneIndex);
+                kind = drones.Owns(droneIndex) ? "OWN DRONE" : "TEAM DRONE";
+                tone = AvStyleHost.FuiColor("friendly", AvTheme.Friendly);
+                rows.Insert(0, new MapMenuRow { Key = "STATUS", Value = drones.State(droneIndex), Tone = tone });
+            }
+            else if (contact != null)
             {
                 title = FirstLine(contact.GetInfoText());
                 FactionMode side = DynamicMap.GetFactionMode(contact.unit.NetworkHQ, false);
@@ -920,6 +948,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static void Reset()
         {
             Restore();
+            DroneMapTracks.Reset();
             MapContextCard.Destroy();
             if (banner != null) Object.Destroy(banner.gameObject);
             banner = null;
@@ -940,6 +969,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ReleasePause();
             MapSelectionDeck.Hide();
             MfdFieldLog.Hide();
+            DroneMapTracks.Hide();
             if (banner != null) banner.gameObject.SetActive(false);
             if (markGlyph != null) Object.Destroy(markGlyph.gameObject);
             markGlyph = null;

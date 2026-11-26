@@ -1,5 +1,7 @@
 using BepInEx.Configuration;
+using UnityEngine;
 using BoscaliSummer.Modules.Autopilot.Configuration;
+using BoscaliSummer.Modules.Chatter.Configuration;
 using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Comms.Configuration;
 using BoscaliSummer.Modules.DynamicOperations.Configuration;
@@ -68,6 +70,8 @@ namespace BoscaliSummer.Core.Config
         public BoscaliSummer.Modules.Compatibility.Configuration.CompatibilitySettings Compatibility { get; }
         public BoscaliSummer.Modules.SeaStructures.Configuration.SeaStructureSettings SeaStructures { get; }
         public BoscaliSummer.Modules.Megaplane.MegaplaneSettings Megaplane { get; }
+        public ChatterSettings Chatter { get; }
+        public ConfigEntry<KeyCode> MiscMenuKey { get; }
 
         public ModConfiguration(ConfigFile config)
         {
@@ -116,6 +120,9 @@ namespace BoscaliSummer.Core.Config
                 Compatibility = new BoscaliSummer.Modules.Compatibility.Configuration.CompatibilitySettings(config);
                 SeaStructures = new BoscaliSummer.Modules.SeaStructures.Configuration.SeaStructureSettings(config);
                 Megaplane = new BoscaliSummer.Modules.Megaplane.MegaplaneSettings(config);
+                Chatter = new ChatterSettings(config);
+                MiscMenuKey = config.Bind("Keys", "MiscMenuKey", KeyCode.F7,
+                    "Toggle the standalone MISC (ARES / EXTRAS) window directly, including when the tactical map extension (AVIONICS) is turned off. None disables the shortcut.");
                 LegacyConfigMigration.RemoveEntries(config);
                 // Last, so every module's entries are present to be sorted into what the
                 // F1 window lists and what stays in the config file only.

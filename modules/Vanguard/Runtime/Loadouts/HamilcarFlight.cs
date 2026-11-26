@@ -112,7 +112,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (!landingZone.HasValue && target != null && !target.disabled) hamilcarAim = TargetPosition(out _);
             GlobalPosition pos = missile.GlobalPosition();
             float reach = HamilcarProfile.Reach(launchPos.y - hamilcarAim.y);
-            var centre = new GlobalPosition(HamilcarProfile.Centre(launchPos.AsVector3(), hamilcarAim.AsVector3(), reach, out bool isShort));
+            float standOff = landingZone.HasValue ? 0f : HamilcarProfile.StandOff;
+            var centre = new GlobalPosition(HamilcarProfile.Centre(launchPos.AsVector3(), hamilcarAim.AsVector3(), reach, standOff, out bool isShort));
             bool found = HamilcarSearch(pos, centre, out GlobalPosition spot, out Vector3 approach);
             if (!found && !hamilcarNoLz && hamilcarApproach != Vector3.zero) return; // the second look found nothing: keep the first spot
             if (isShort && !hamilcarShort) VanguardStats.Bump("hamilcar.short");
@@ -125,6 +126,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         }
 
         // First candidate around the centre with a dry, level run-out and room for the vehicle off the nose.
+        // If straight-in fails (e.g. a steep valley/ridge), try +/-60 deg cross-contour headings on the inner rings.
         // None: the centre itself and no landing zone (it flies on and is lost at LostHeight).
         private bool HamilcarSearch(GlobalPosition from, GlobalPosition centre, out GlobalPosition spot, out Vector3 approach)
         {
@@ -143,16 +145,35 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 Vector3 run = new Vector3(touch.x - origin.x, 0f, touch.z - origin.z);
                 if (Vector3.Dot(run, forward) < 1f) continue; // never a spot behind the glider (the back line of a close centre)
                 run.Normalize();
-                if (!GroundPlacement.DryGround(touch, out Vector3 a) ||
-                    !GroundPlacement.DryGround(touch + run * (HamilcarProfile.SlideDistance * 0.5f), out Vector3 b) ||
-                    !GroundPlacement.DryGround(touch + run * HamilcarProfile.SlideDistance, out Vector3 c) ||
-                    Mathf.Abs(a.y - b.y) > 2f || Mathf.Abs(b.y - c.y) > 2f || Mathf.Abs(a.y - c.y) > 2f ||
-                    !GroundPlacement.TryPlace(cargo, c + run * (hamilcarSeat + HamilcarProfile.RollOff), Quaternion.LookRotation(run), out _)) continue;
-                spot = a.ToGlobalPosition();
-                approach = run;
-                return true;
+                if (TryRunOut(touch, run, cargo, out spot, out approach)) return true;
+            }
+            for (int i = 0; i <= 24; i++)
+            {
+                Vector2 offset = HamilcarProfile.Candidate(i, seed);
+                Vector3 touch = middle + right * offset.x + forward * offset.y;
+                touch.y = Datum.LocalSeaY + 1400f;
+                Vector3 baseRun = new Vector3(touch.x - origin.x, 0f, touch.z - origin.z);
+                if (Vector3.Dot(baseRun, forward) < 1f) continue;
+                baseRun.Normalize();
+                if (TryRunOut(touch, Quaternion.Euler(0f, 60f, 0f) * baseRun, cargo, out spot, out approach) ||
+                    TryRunOut(touch, Quaternion.Euler(0f, -60f, 0f) * baseRun, cargo, out spot, out approach))
+                    return true;
             }
             return false;
+        }
+
+        private bool TryRunOut(Vector3 touch, Vector3 run, UnitDefinition cargo, out GlobalPosition spot, out Vector3 approach)
+        {
+            spot = default;
+            approach = run;
+            if (!GroundPlacement.DryGround(touch, out Vector3 a) ||
+                !GroundPlacement.DryGround(touch + run * (HamilcarProfile.SlideDistance * 0.5f), out Vector3 b) ||
+                !GroundPlacement.DryGround(touch + run * HamilcarProfile.SlideDistance, out Vector3 c) ||
+                Mathf.Abs(a.y - b.y) > 2f || Mathf.Abs(b.y - c.y) > 2f || Mathf.Abs(a.y - c.y) > 2f ||
+                !GroundPlacement.TryPlace(cargo, c + run * (hamilcarSeat + HamilcarProfile.RollOff), Quaternion.LookRotation(run), out _))
+                return false;
+            spot = a.ToGlobalPosition();
+            return true;
         }
 
         // Metres still to fly along the approach line to the touchdown point (negative once past it).

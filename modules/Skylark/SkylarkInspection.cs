@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Skylark
 {
@@ -45,9 +46,22 @@ namespace BoscaliSummer.Modules.Skylark
                     name = h.Item1.name, path = Path(h.Item1.transform), distance = h.Item2, shader = h.Item1.sharedMaterial.shader.name }) });
             }
             SkinnedMeshRenderer pilot = SkylarkTemplate.Get<SkinnedMeshRenderer>(aircraft.pilots[0], "skinnedMeshRenderer");
+            SkylarkFlightStrip strip = aircraft.cockpit != null ? aircraft.cockpit.GetComponentInChildren<SkylarkFlightStrip>(true) : null;
+            SkylarkCockpitDetails details = aircraft.cockpit != null ? aircraft.cockpit.GetComponentInChildren<SkylarkCockpitDetails>(true) : null;
+            // The donor cockpit can be reparented with the native seat and damage parts. The scene's MFD tracks the live screen.
+            MFDAppManager mfd = MFDAppManager.i;
+            TacScreen screen = mfd != null && SkylarkTemplate.Get<Aircraft>(mfd, "aircraft") == aircraft ? mfd.GetComponent<TacScreen>() : null;
+            PylonIndicator pylons = screen != null ? screen.GetComponentInChildren<PylonIndicator>(true) : null;
+            Image profile = pylons != null ? pylons.GetComponent<Image>() : null;
+            SkylarkTacticalVector vector = screen != null ? screen.GetComponentInChildren<SkylarkTacticalVector>(true) : null;
             return new { ok = true, camera = V(aircraft.transform.InverseTransformPoint(camera.transform.position)),
                 anchor = V(aircraft.transform.InverseTransformPoint(aircraft.cockpitViewPoint.position)),
-                pilot = new { pilot.name, pilot.enabled, center = V(aircraft.transform.InverseTransformPoint(pilot.bounds.center)), size = V(pilot.bounds.size) }, samples };
+                pilot = new { pilot.name, pilot.enabled, center = V(aircraft.transform.InverseTransformPoint(pilot.bounds.center)), size = V(pilot.bounds.size) }, samples,
+                flightStrip = strip != null ? strip.Inspect() : null,
+                details = details != null ? details.Inspect() : null,
+                tactical = new { caption = vector != null ? vector.Caption : null,
+                    storesProfile = profile != null && profile.sprite != null ? profile.sprite.name : null,
+                    storesCount = pylons != null ? SkylarkTemplate.Get<Array>(pylons, "pylonElementSets").Length : 0 } };
         }
 
         private static float Hit(Vector3 origin, Vector3 direction, Vector3 a, Vector3 b, Vector3 c)

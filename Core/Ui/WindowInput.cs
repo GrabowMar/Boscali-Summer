@@ -7,7 +7,7 @@ using UnityEngine.EventSystems;
 namespace BoscaliSummer.Core.Ui
 {
     /// <summary>
-    /// The big-window input hold (the OPS front window's, shared since 2026-10-19 with the UAV terminal): the game's SelectionMenu
+    /// Input hold for full-screen windows: the game's SelectionMenu
     /// cursor flag frees the cursor, the Rewired mouse goes off so a click cannot fire a weapon and comes back only once its buttons
     /// are up, Esc stops opening the pause menu. Keyboard and joysticks stay live: the pilot keeps flying. With the Rewired mouse off
     /// the event system hears nothing, so <see cref="Pointer"/> hit-tests the window's own kit controls.
@@ -35,8 +35,7 @@ namespace BoscaliSummer.Core.Ui
         }
 
         /// <summary>
-        /// Every frame while open: takes back what another overlay handed back under the window. The C-menu that opens the UAV terminal
-        /// holds the same cursor flag and the mouse, and releases both as it closes, one frame after the window took input.
+        /// Reacquire the cursor and mouse after an overlay beneath this window releases them.
         /// </summary>
         public void Keep()
         {

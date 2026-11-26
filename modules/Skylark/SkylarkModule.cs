@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Skylark
     internal sealed class SkylarkModule : IModule
     {
         public ModuleMetadata Metadata => new ModuleMetadata("skylark", "VS-4 Skylark");
-        public Type[] PatchTypes => new[] { typeof(SkylarkEncyclopediaPatch), typeof(SkylarkBlueprinterPatch), typeof(SkylarkLiveryPatch), typeof(SkylarkAeroInitializePatch), typeof(SkylarkNozzleGaugePatch), typeof(SkylarkHangarAvailabilityPatch), typeof(SkylarkSilentRunningPatch), typeof(SkylarkBatteryFuelPatch), typeof(SkylarkGearSelfContactPatch), typeof(SkylarkCoilsDryPatch) };
+        public Type[] PatchTypes => new[] { typeof(SkylarkEncyclopediaPatch), typeof(SkylarkBlueprinterPatch), typeof(SkylarkLiveryPatch), typeof(SkylarkAeroInitializePatch), typeof(SkylarkNozzleGaugePatch), typeof(SkylarkNozzleCaptionPatch), typeof(SkylarkHangarAvailabilityPatch), typeof(SkylarkSilentRunningPatch), typeof(SkylarkBatteryFuelPatch), typeof(SkylarkGearSelfContactPatch), typeof(SkylarkCoilsDryPatch), typeof(SkylarkDroneCommandPatch) };
         public void Install(ModuleContext context)
         {
             context.AddService<ISkylarkControl>(context.AddSceneService<SkylarkControl>(80));

@@ -102,11 +102,26 @@ namespace BoscaliSummer.Modules.Effects.Runtime
                 independentSharpen ? renderTuning.SharpenStrength : settings.SharpenStrength.Value);
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
-            postQuality.Apply(level != null && cameras != null ? cameras.mainCamera : null,
+            Camera world = cameras != null ? cameras.mainCamera : null;
+            postQuality.Apply(level != null ? world : null,
                 settings.Dithering.Value, settings.EdgeSmoothing.Value, logger);
-            cinematic.Apply(settings.Cinematic, level, transform, cameras != null ? cameras.mainCamera : null,
+            CinematicAtmosphere atmos = default;
+            if (level != null)
+            {
+                float sunHeight = level.sun != null ? -level.sun.transform.forward.y : 1f;
+                float altitude = world != null ? world.transform.GlobalPosition().y : 0f;
+                float shade = 0f, rain = 0f;
+                if (ModuleServices.TryGet(out IFlightEnvironmentView env) &&
+                    env.TryGet(out FlightEnvironmentSnapshot snap) && snap.ValidWeather)
+                {
+                    shade = snap.CloudShade01;
+                    rain = snap.Precipitation01;
+                }
+                atmos = new CinematicAtmosphere(sunHeight, shade, rain, altitude);
+            }
+            cinematic.Apply(settings.Cinematic, level, transform, world,
                 settings.Cinematic.Enabled.Value ? cinematicAssets.Streak(logger) : null,
-                renderTuning?.OptimizeCinematicStreaks == true);
+                renderTuning?.OptimizeCinematicStreaks == true, atmos);
             if (!on || level == null || level.PostProcessing == null)
             {
                 Teardown();

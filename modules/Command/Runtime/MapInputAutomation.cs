@@ -1,7 +1,9 @@
 #if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using NOAvionics;
 using UnityEngine;
@@ -60,6 +62,16 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 case "card":
                     if (!OpenCard(map, Bool(args, "onTrack"))) return Failure("MapInputAutomation", "card", "no ground or track to open on");
                     break;
+                case "drone-track":
+                    if (!ModuleServices.TryGet(out IDroneCommand drones) || drones.LinkedIndex < 0)
+                        return Failure("MapInputAutomation", "drone-track", "no selected drone");
+                    Unit drone = drones.Track(drones.LinkedIndex);
+                    if (drone == null || drone.disabled) return Failure("MapInputAutomation", "drone-track", "no live drone");
+                    float droneOffset = DroneMapTracks.CentreOffset(drone);
+                    return new Dictionary<string, object>
+                    {
+                        ["ok"] = true, ["visible"] = droneOffset >= 0f, ["offset"] = droneOffset
+                    };
                 // Measuring the open map: lift vsync (a hidden sim window otherwise stalls for seconds), profile the map code, move the view.
                 case "uncap":
                     QualitySettings.vSyncCount = 0;

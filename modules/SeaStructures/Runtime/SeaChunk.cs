@@ -45,8 +45,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
         {
             float age = Time.time - born;
             // Steel does not float: once it has splashed, let it go down and fade out of the fight.
-            // Datum.SeaLevel is the world sea plane; LocalSeaY is only the floating-origin offset.
-            if (transform.position.y < Datum.SeaLevel.y - 1.5f) transform.position += Vector3.down * (Time.deltaTime * 1.2f);
+            if (transform.position.y < Datum.LocalSeaY - 1.5f) transform.position += Vector3.down * (Time.deltaTime * 1.2f);
             if (age > life) Destroy(gameObject);
         }
 

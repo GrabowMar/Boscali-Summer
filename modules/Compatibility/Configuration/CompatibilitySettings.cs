@@ -19,6 +19,9 @@ namespace BoscaliSummer.Modules.Compatibility.Configuration
         public ConfigEntry<bool> Expansion2082Link { get; }
         public ConfigEntry<bool> ShipHaze { get; }
         public ConfigEntry<bool> ShipAaRules { get; }
+        public ConfigEntry<bool> UiPlusLink { get; }
+        public ConfigEntry<bool> UiPlusHud { get; }
+        public ConfigEntry<bool> UiPlusExtraOverlays { get; }
 
         public CompatibilitySettings(ConfigFile config)
         {
@@ -45,6 +48,12 @@ namespace BoscaliSummer.Modules.Compatibility.Configuration
                 "Expansion2082's engine haze on its ships (Haze/Sweat).");
             ShipAaRules = config.Bind(section, "ShipAaRules", true,
                 "Expansion2082's ship missile-defence rules: one interceptor per inbound missile, ships mind only their own missiles, gun shells do not count as missile attacks.");
+            UiPlusLink = config.Bind(section, "UiPlusLink", true,
+                "When UIPlus is installed, share the HUD with it (the switches below). Off: Boscali ignores it and both may draw HUD elements.");
+            UiPlusHud = config.Bind(section, "UiPlusHud", true,
+                "Yield Boscali's flight HUD (TAC BOARD, visor, arcs, brow, alerts, third-person cluster and external HUD) to UIPlus while UIPlus is installed.");
+            UiPlusExtraOverlays = config.Bind(section, "UiPlusExtraOverlays", false,
+                "Also stand down Boscali's extra HUD-space overlays (chatter strip, wing panel/tint, ace hunt, contract, comms markers, LZ cue, drone feed, AR approach, visor overlay, terrain ghost) while UIPlus is installed.");
         }
     }
 }

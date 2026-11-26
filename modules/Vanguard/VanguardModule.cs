@@ -28,8 +28,16 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.VanguardSeekPatch),
             typeof(Patches.HawcxGlowPatch),
             typeof(Patches.VanguardSlowChecksPatch),
-            typeof(Patches.AegisSnapPatch),
-            typeof(Patches.AegisDoorsPatch),
+            typeof(Patches.DronePilotAxesPatch),
+            typeof(Patches.DronePilotActionsPatch),
+            typeof(Patches.DronePilotSteeringPatch),
+            typeof(Patches.DronePrefabRegistrationPatch),
+            typeof(Patches.AegisRegisterPatch),
+            typeof(Patches.AegisCountermeasureOrderPatch),
+            typeof(Patches.AegisCountermeasureRemovalPatch),
+            typeof(Patches.AegisCountermeasureRearmPatch),
+            typeof(Patches.AegisIndicatorPatch),
+            typeof(Patches.AegisCombatHudPatch),
             typeof(Patches.AegisFinsPatch),
             typeof(Patches.TorpedoCollisionsPatch),
             typeof(Patches.LanceFirePatch),
@@ -66,7 +74,6 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<Presentation.VanguardHudFeeds>(60);
             context.AddSceneService<AegisService>(60);
             context.AddSceneService<Networking.AegisNet>(60);
-            context.AddSceneService<Presentation.AegisHud>(60);
             context.AddSceneService<Networking.GlaiveNet>(60);
             context.AddSceneService<Networking.KestrelNet>(60);
             context.AddSceneService<Networking.OrcaNet>(60);
@@ -90,9 +97,10 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<Presentation.AlexHud>(60);
             context.AddSceneService<Presentation.SkywellScopeFeed>(60);
             Networking.VanguardNet net = context.AddSceneService<Networking.VanguardNet>(60);
+            context.AddSceneService<DronePilot>(60).Configure(net);
             Presentation.DroneLinkService drones = context.AddSceneService<Presentation.DroneLinkService>(60);
             drones.Configure(net);
-            context.AddService<IDroneCommand>(drones);     // TGT DRONES on the MFD reads the link through it
+            context.AddService<IDroneCommand>(drones);
             context.AddSceneService<Presentation.DroneFeedHud>(60).Configure(drones);       // the HUD feed card
             var scopeGauges = new VanguardScopeGauges(drones);
             scopeGauges.Register();      // the TAC BOARD's LANCE, AEGIS and REMORA gauges

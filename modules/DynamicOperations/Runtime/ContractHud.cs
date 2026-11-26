@@ -52,10 +52,11 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             ground.Clear();
         }
 
-        /// <summary>Ground height (global y) under a contract target, so the marker sits on the land and not at sea
+        /// <summary>Ground height (global y) under a contract target, so the marker sits above the land and not at sea
         /// level inside a hill (tester report: beachhead and recon-pass markers buried). One ray per target, cached;
-        /// a miss (terrain not loaded that far out) is retried every 2 s and falls back to sea level meanwhile.</summary>
+        /// a miss (terrain collider not loaded that far out) falls back to active Unity Terrains and retries every 2 s.</summary>
         private readonly Dictionary<long, (float y, bool hit, float retry)> ground = new Dictionary<long, (float, bool, float)>();
+        private const float MarkerGroundClearanceM = 12f;
 
         private float GroundY(float x, float z)
         {
@@ -64,9 +65,42 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             if (ground.Count > 64) ground.Clear();
             Vector3 top = new GlobalPosition(x, 9000f, z).ToLocalPosition();
             bool hit = Physics.Raycast(top, Vector3.down, out RaycastHit ray, 12000f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore);
-            float y = hit ? Mathf.Max(0f, ray.point.ToGlobalPosition().y) : 0f;
+            float y;
+            if (hit)
+            {
+                y = Mathf.Max(0f, ray.point.ToGlobalPosition().y) + MarkerGroundClearanceM;
+            }
+            else if (TrySampleTerrainY(x, z, out float terrainY))
+            {
+                y = Mathf.Max(0f, terrainY) + MarkerGroundClearanceM;
+            }
+            else
+            {
+                y = MarkerGroundClearanceM;
+            }
             ground[key] = (y, hit, Time.unscaledTime + 2f);
             return y;
+        }
+
+        private static bool TrySampleTerrainY(float globalX, float globalZ, out float globalY)
+        {
+            globalY = 0f;
+            Terrain[] terrains = Terrain.activeTerrains;
+            if (terrains == null || terrains.Length == 0) return false;
+            Vector3 local = new GlobalPosition(globalX, 0f, globalZ).ToLocalPosition();
+            for (int i = 0; i < terrains.Length; i++)
+            {
+                Terrain terrain = terrains[i];
+                if (terrain == null || terrain.terrainData == null) continue;
+                Vector3 origin = terrain.transform.position;
+                Vector3 size = terrain.terrainData.size;
+                if (local.x < origin.x || local.x > origin.x + size.x || local.z < origin.z || local.z > origin.z + size.z)
+                    continue;
+                float localY = origin.y + terrain.SampleHeight(local);
+                globalY = new Vector3(local.x, localY, local.z).ToGlobalPosition().y;
+                return true;
+            }
+            return false;
         }
 
         private void OnDestroy() => ResetForScene();

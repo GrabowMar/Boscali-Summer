@@ -8,7 +8,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// <summary>
     /// The stores side of the TAC BOARD (prototype: <c>takeover/stores.js</c>; LAYOUT.md 3.1 to 3.3), drawn as cells of the one bar into the rectangles <see cref="ScopeLayout"/> gives them: WPN (the selected weapon: the rounds,
     /// the arm word, its name and class, its picture, the station rail, the lock pips) and CM (one tile per countermeasure in cycle order), plus SYS's capacitor row (R1 of the SYS cell). Fed by <see cref="StoresScope"/> (Hud's own provider over the aircraft); a block with no data is not there, and <see cref="WeaponDrawn"/> /
-    /// <see cref="CmDrawn"/> / <see cref="CapDrawn"/> say which native box it replaced (the board shows the native one again otherwise). The weapon's and the jammer's pictures are the game's own sprites (<see cref="StoreIcons"/>: baked into an
+    /// <see cref="CmDrawn"/> / <see cref="CapDrawn"/> say which native box it replaced (the board shows the native one again otherwise). The stores pictures are their assigned sprites (<see cref="StoreIcons"/>: baked into an
     /// alpha mask): a sprite cannot be drawn through the stroke canvas, so the header writes where each goes into <see cref="Art"/> and the board puts an image there (StatusPanel.Stores.cs); without a picture HERO draws the class glyph.
     /// Painting allocates nothing in a steady frame; the class is partial: <c>StoresHeader.Hero.cs</c> and <c>StoresHeader.Exp.cs</c> hold the blocks.
     /// </summary>
@@ -22,10 +22,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The capacitor's last read, and the last shot it fell by: how much, when, and the share it fell from (the just-spent cells).</summary>
         private float capLast, capLastAt, shotKj, shotAt = float.NegativeInfinity, shotFrom;
 
-        /// <summary>The pictures the last <see cref="Paint"/> wants drawn: the weapon's (lit share, then the spent share of a magazine) and the jammer's. An unused slot has icon 0.</summary>
+        /// <summary>The pictures the last <see cref="Paint"/> wants drawn, including both shares of the weapon's magazine and any custom CM icons.</summary>
         public readonly ArtSlot[] Art = new ArtSlot[ArtSlots];
-        public const int ArtSlots = 2;
-        private const int HeroLit = 0, HeroSpent = 1;
+        public const int ArtSlots = CmArtStart + HudCm.MaxStations;
+        private const int HeroLit = 0, HeroSpent = 1, CmArtStart = 2;
 
         /// <summary>What the last <see cref="Paint"/> drew, and so which native object it stands in for.</summary>
         public bool WeaponDrawn, CmDrawn, CapDrawn;

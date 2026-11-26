@@ -71,13 +71,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <param name="darkNight">Darken the night and turn its ambient moonlit blue-grey (<see cref="OvercastLook.NightLight"/>).</param>
         /// <param name="height">The camera's height above the sea (m): above 12 km the fog thins to a column of air (<see cref="HighAir.FogScale"/>).</param>
         /// <param name="visibility">The map climate's haze factor on visibility (1 on a vanilla map): 1.6 is crisp arctic air (fog density / 1.6), 0.8 a humid tropical haze.</param>
-        internal void Apply(float rain, bool underwater, float shade = 0f, Light sun = null, float moon = 0f, bool darkNight = false, float height = 0f, float visibility = 1f)
+        internal void Apply(float rain, bool underwater, float shade = 0f, Light sun = null, float moon = 0f, bool darkNight = false, float height = 0f, float visibility = 1f, float atmosphericHaze = 0f)
         {
             rain = Mathf.Clamp01(rain);
             shade = Mathf.Clamp01(shade);
+            atmosphericHaze = Mathf.Clamp01(atmosphericHaze);
             float sunHeight = sun != null ? -sun.transform.forward.y : 1f;
             float thin = HighAir.FogScale(height);
-            if (underwater || (rain <= 0.001f && shade <= 0.001f && sunHeight >= 0f && thin >= 1f && visibility == 1f)) { Restore(); return; }
+            if (underwater || (rain <= 0.001f && shade <= 0.001f && sunHeight >= 0f && thin >= 1f && visibility == 1f && atmosphericHaze <= 0.001f)) { Restore(); return; }
 
             fog.Track(RenderSettings.fogDensity, applied);
             ambient.Track(RenderSettings.ambientIntensity, applied);
@@ -100,10 +101,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             LastFogMultiplier = RainSkyMath.FogMultiplier(rain) * RainSkyMath.ShadeFog(shade);
             float dim = RainSkyMath.AmbientMultiplier(rain) * RainSkyMath.ShadeAmbient(shade);
+            float atmosFloor = OvercastLook.AtmosphericHazeFloor(atmosphericHaze, height, sunHeight);
             // Vanilla's near-opaque storm fog erases the cloud bodies and terrain a pilot
             // must still be able to navigate by. Heavy rain keeps several km of contrast.
             // Forced local showers also need haze when the mission starts with zero fog.
-            fog.Written = Mathf.Min(Mathf.Max(fog.Base * LastFogMultiplier, RainSkyMath.HazeFloor(rain, shade)), 0.00055f) * thin / Mathf.Max(0.25f, visibility);
+            fog.Written = Mathf.Min(Mathf.Max(fog.Base * LastFogMultiplier + atmosFloor * 0.55f, Mathf.Max(RainSkyMath.HazeFloor(rain, shade), atmosFloor)), 0.00055f) * thin / Mathf.Max(0.25f, visibility);
             // Cloud extinction belongs to the ray-marched volume. Applying it to global
             // fog as well erased gaps and local geometry as soon as the camera crossed an edge.
             // Dark nights: ambient, fog and sky dome take one factor, so near terrain, far haze and the sky stay in step at the horizon.
@@ -112,7 +114,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             ambient.Written = ambient.Base * dim * night;
             // At night the fog colours turn grey too: vanilla's night fog is a saturated teal far brighter than its night sky, and the far
             // sea (Boscali/Ocean fogs to it) and the distant deck seen from above glowed cyan along the horizon (2026-10-19).
-            fogColor.Written = Dim(NightGrey(ShadeTint(Tint(fogColor.Base, rain), shade), sunHeight, shade), night);
+            fogColor.Written = Dim(NightGrey(GoldenTint(ShadeTint(Tint(fogColor.Base, rain), shade), atmosphericHaze, sunHeight, shade, height), sunHeight, shade), night);
             // Under a deck the ground loses the blue sky fill: grey the ambient gradients so terrain reads flat and overcast, not shaded summer.
             float grey = RainSkyMath.ShadeAmbientGrey * Mathf.Max(shade, rain);
             skyColor.Written = Moonlit(Grey(Dim(skyColor.Base, dim), grey), sunHeight, moon, darkNight);
@@ -127,7 +129,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             RenderSettings.ambientGroundColor = groundColor.Written;
             if (skyMaterial != null)
             {
-                skyFog.Written = Dim(NightGrey(ShadeTint(Tint(skyFog.Base, rain), shade), sunHeight, shade), night);
+                skyFog.Written = Dim(NightGrey(GoldenTint(ShadeTint(Tint(skyFog.Base, rain), shade), atmosphericHaze, sunHeight, shade, height), sunHeight, shade), night);
                 skyMaterial.SetColor(SkyFogId, skyFog.Written);
                 if (skyMaterial.HasProperty(SkyAmbientId))
                 {
@@ -174,6 +176,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float r = c.r, g = c.g, b = c.b;
             OvercastLook.Tint(shade, ref r, ref g, ref b);
             return new Color(r, g, b, c.a);
+        }
+
+        private static Color GoldenTint(Color c, float haze, float sunHeight, float shade, float height)
+        {
+            OvercastLook.GoldenHazeTint(haze, sunHeight, shade, height, ref c.r, ref c.g, ref c.b);
+            return c;
         }
 
         private static Color NightGrey(Color c, float sunHeight, float shade)

@@ -165,9 +165,9 @@ namespace BoscaliSummer.Modules.Skylark
             RefitPropulsion(aircraft, nodes);
             definition.spawnOffset = new Vector3(0, RefitGear(aircraft, nodes) + .03f, 0);
             SkylarkLights.Refit(aircraft, nodes);
-            SkylarkCockpit.Refit(aircraft, nodes);
             RefitSensors(aircraft, nodes);
             SkylarkWeapons.Refit(aircraft, p, nodes, holder.transform, encyclopedia.weaponMounts);
+            SkylarkCockpit.Refit(aircraft, nodes);
             go.AddComponent<SkylarkAnimation>().Configure(nodes);
             go.AddComponent<SkylarkDrive>().Configure(nodes);
             go.AddComponent<SkylarkFlightMode>();
@@ -252,6 +252,7 @@ namespace BoscaliSummer.Modules.Skylark
                 }
             // Body mass follows the explicit Blender datum, not the Vagrant's engine location.
             Set(aircraft.GetComponent<AeroPart>(), "centerOfMass", nodes["CenterOfMass"]);
+            SkylarkExterior.Refit(root, nodes);
             SkylarkGeometry.Refit(aircraft, nodes);
         }
 
@@ -407,6 +408,9 @@ namespace BoscaliSummer.Modules.Skylark
         private static float RefitGear(Aircraft aircraft, Dictionary<string, Transform> nodes)
         {
             float lowest = 0f;
+            float size = Scale / 1.15f;
+            SkylarkGear.BuildWheelWells(aircraft, nodes, size);
+            var built = new List<(LandingGear Gear, string Side, Transform Hinge, Transform Unsprung, Transform Axle, Transform Spin, Transform Mount, string[] DoorNames)>();
             LandingGear[] gears = aircraft.GetComponentsInChildren<LandingGear>(true);
             foreach (LandingGear gear in gears)
             {
@@ -414,6 +418,7 @@ namespace BoscaliSummer.Modules.Skylark
                 string side = front ? "F" : gear.name.Contains("_L_") || gear.name.Contains("_L") ? "L" : "R";
                 Transform visual = nodes["Gear_" + side];
                 Transform wheel = nodes["Wheel_" + side];
+                Transform mount = nodes.TryGetValue(front ? "LG_Front_Mount" : "LG_Main_Mount_" + side, out Transform m) ? m : null;
                 AeroPart part = visual.GetComponentInParent<AeroPart>(true);
                 Transform hinge = Empty("SkylarkGearHinge_" + side, part.transform, visual.position);
                 visual.SetParent(hinge, true);
@@ -462,7 +467,9 @@ namespace BoscaliSummer.Modules.Skylark
                 }
                 Set(gear, "gearDoors", doors);
                 Get<ParticleSystem>(gear, "dust").transform.position = wheel.position;
+                built.Add((gear, side, hinge, unsprung, axle, spin, mount, doorNames));
             }
+            SkylarkGear.Install(aircraft, nodes).ConfigureLegs(aircraft, nodes, built, size);
             return -lowest;
         }
 

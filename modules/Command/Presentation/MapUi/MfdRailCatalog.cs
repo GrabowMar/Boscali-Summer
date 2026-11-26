@@ -106,6 +106,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 case "COM": return new MfdRailEntry(code, "COMMS", AvIcon.Headset, MfdRailGroup.Map, 0);
                 case "MAP": return new MfdRailEntry(code, "MAP", AvIcon.Map2, MfdRailGroup.Map, 1);
                 case "TGT": return new MfdRailEntry(code, "TARGETS", AvIcon.Designator, MfdRailGroup.Map, 2);
+                case "DRN": return new MfdRailEntry(code, "DRONES", AvIcon.Drone, MfdRailGroup.Map, 3);
                 case "SET": return new MfdRailEntry(code, "SETTINGS", AvIcon.AdjustmentsHorizontal, MfdRailGroup.System, 0);
                 case "ENV": return new MfdRailEntry(code, "WEATHER", AvIcon.Cloud, MfdRailGroup.System, 1);
                 case "RAD": return new MfdRailEntry(code, "RADIO", AvIcon.Radio, MfdRailGroup.System, 2);

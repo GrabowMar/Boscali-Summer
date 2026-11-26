@@ -67,7 +67,12 @@ namespace BoscaliSummer.Modules.Compatibility.Runtime
             string picture = (noAtmo != null) + "|" + settings.Rain.Value + "|" + settings.MoveKeys.Value + "|" +
                 (krop != null) + (field != null) + (boom != null) + "|" + settings.Overlaps.Value;
             BaseUnityPlugin expansion = settings.Expansion2082Link.Value ? ForeignMods.Find(ForeignMods.Expansion2082) : null;
+            BaseUnityPlugin uiPlus = settings.UiPlusLink.Value ? ForeignMods.Find(ForeignMods.UiPlus) : null;
+            ForeignMods.HudYielded = uiPlus != null && settings.UiPlusHud.Value;
+            ForeignMods.HudOverlaysYielded = uiPlus != null && settings.UiPlusExtraOverlays.Value;
+
             picture += "|" + (expansion != null) + settings.ShipHaze.Value + settings.ShipAaRules.Value;
+            picture += "|" + (uiPlus != null) + settings.UiPlusHud.Value + settings.UiPlusExtraOverlays.Value;
             if (picture != applied)
             {
                 applied = picture;
@@ -75,6 +80,7 @@ namespace BoscaliSummer.Modules.Compatibility.Runtime
                 Set(expansion, "Haze", "Sweat", settings.ShipHaze.Value);
                 foreach (string key in new[] { "OneShotPerMissile", "MindYourOwn", "ShellsArentMissiles" })
                     Set(expansion, "Targeting", key, settings.ShipAaRules.Value);
+                if (uiPlus != null) LogUiPlus(uiPlus);
             }
             Link(noAtmo);
         }
@@ -173,6 +179,14 @@ namespace BoscaliSummer.Modules.Compatibility.Runtime
             if (!linkWritten) return;
             linkWritten = false;
             if (apiClear != null) Call(apiClear);
+        }
+
+        private void LogUiPlus(BaseUnityPlugin uiPlus)
+        {
+            var def = new ConfigDefinition("HUD Layout", "HudStyle");
+            string style = uiPlus.Config.ContainsKey(def) ? uiPlus.Config[def].BoxedValue?.ToString() ?? "Unknown" : "Unknown";
+            log?.LogInfo("[Compatibility] UIPlus v" + uiPlus.Info.Metadata.Version + " detected (HudStyle=" + style +
+                "); HudYielded=" + ForeignMods.HudYielded + ", HudOverlaysYielded=" + ForeignMods.HudOverlaysYielded + ".");
         }
 
         private static bool Get(BaseUnityPlugin plugin, string section, string key, bool fallback) =>

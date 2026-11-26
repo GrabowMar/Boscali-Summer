@@ -5,6 +5,7 @@ using System.Reflection;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.UrbanCombat.Configuration;
 using UnityEngine;
 
@@ -143,12 +144,12 @@ namespace BoscaliSummer.Garrisons
                 Airbase airbase = FindNearestAirbase(aircraft.transform.position, owner);
                 var ground = new GlobalPosition(landing.x, landing.y, landing.z);
                 // The stick is on the ground once its first jumper touches down; the rest of the stick lands within seconds.
-                Schedule(HaloRampSeconds + plan.FirstLandingSeconds, () => ResolveParadrop(ground, owner, airbase, dropCount));
+                Schedule(HaloRampSeconds + plan.FirstLandingSeconds, () => ResolveParadrop(ground, owner, airbase, dropCount, aircraft));
             }
 
             if (GameManager.IsHeadless) return;
             BeginCargoAccess(aircraft, ResolveCargoDoors(aircraft, troops));
-            AirAssaultVisuals.SpawnHaloDrop(plan, HaloRampSeconds);
+            AirAssaultVisuals.SpawnHaloDrop(plan, HaloRampSeconds, aircraft);
         }
 
         /// <summary>The designated target in global coordinates, if any.</summary>
@@ -175,7 +176,7 @@ namespace BoscaliSummer.Garrisons
             return sea;
         }
 
-        private static void ResolveParadrop(GlobalPosition landing, FactionHQ owner, Airbase airbase, int troopCount)
+        private void ResolveParadrop(GlobalPosition landing, FactionHQ owner, Airbase airbase, int troopCount, Aircraft launcher)
         {
             ZoneGarrisonManager garrisons = ZoneGarrisonManager.Instance;
             if (owner == null || garrisons == null) return;
@@ -184,22 +185,49 @@ namespace BoscaliSummer.Garrisons
             if (!Physics.Raycast(point + Vector3.up * 300f, Vector3.down, out RaycastHit hit, 6300f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) ||
                 hit.point.y <= Datum.LocalSeaY + 0.5f)
             {
+                // Coastal drops near a shoreline search dry-ground rings up to 90 m before giving up at sea.
+                if (garrisons.TryDeployEncampment(point, owner, airbase, troopCount))
+                {
+                    Landed?.Invoke(owner.GetInstanceID(), landing.x, landing.z, 0);
+                    NotifyDropOutcome(launcher, HudTone.Info, "PARATROOPERS DOWN", "BEACHHEAD ESTABLISHED");
+                    return;
+                }
                 Plugin.Logger.LogInfo($"[Paratroopers] Stick of {troopCount} came down at sea near ({point.x:0}, {point.z:0}); no position established.");
+                NotifyDropOutcome(launcher, HudTone.Warning, "PARATROOPERS LOST", "WATER LANDING");
                 return;
             }
 
             GameObject building = ResolveCivilianBuilding(hit.collider);
+            int shellId = building != null ? building.GetInstanceID() : 0;
+            Landed?.Invoke(owner.GetInstanceID(), landing.x, landing.z, shellId);
+
             if (building != null && garrisons.TryOccupyBuilding(building, owner))
             {
                 Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratrooper squad ({troopCount} troops) secured and fortified building: {building.name}!");
+                NotifyDropOutcome(launcher, HudTone.Info, "PARATROOPERS DOWN", "ROOFTOP FORTIFIED");
                 return;
             }
 
             // Garrisons off, shell already held or no roof fit: dig in where they landed.
             if (garrisons.TryDeployEncampment(hit.point, owner, airbase, troopCount))
+            {
                 Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratroopers ({troopCount} troops) established combat encampment at ({hit.point.x:0}, {hit.point.z:0})!");
+                NotifyDropOutcome(launcher, HudTone.Info, "PARATROOPERS DOWN", "OUTPOST ESTABLISHED");
+            }
             else
+            {
                 Plugin.Logger.LogInfo($"[AIR ASSAULT] Paratroopers ({troopCount} troops) landed at ({hit.point.x:0}, {hit.point.z:0}) but found no position to hold.");
+                NotifyDropOutcome(launcher, HudTone.Caution, "PARATROOPERS DOWN", "NO POSITION AVAILABLE");
+            }
+        }
+
+        // shortcut: outcome notices only fire on the simulating host; remote clients see the live stick icon and landing smoke (add an AirAssaultNet message if client notices are ever needed).
+        private static void NotifyDropOutcome(Aircraft launcher, HudTone tone, string title, string detail)
+        {
+            if (Application.isBatchMode || launcher == null) return;
+            if (!GameManager.GetLocalAircraft(out Aircraft me) || me != launcher || me.Player == null) return;
+            if (ModuleServices.TryGet(out IHudBoard board)) board.Notice("urban.airborne", tone, title, detail);
+            else SceneSingleton<AircraftActionsReport>.i?.ReportText(title + " — " + detail, 5f);
         }
 
         private void DeployFastRope(Aircraft aircraft, MountedTroops troops, WeaponStation station)
@@ -518,12 +546,12 @@ namespace BoscaliSummer.Garrisons
 
             if (anchor != null)
             {
-                Vector3 backward = -aircraft.transform.forward * (5f + rearOffset);
-                Vector3 dropOffset = backward + -aircraft.transform.up * (1.4f + 0.08f * dropCount);
+                Vector3 backward = -aircraft.transform.forward * (2.2f + rearOffset * 0.4f);
+                Vector3 dropOffset = backward - aircraft.transform.up * 0.55f;
                 return anchor.position + dropOffset;
             }
 
-            return aircraft.transform.position - aircraft.transform.forward * (11f + rearOffset) - aircraft.transform.up * 1.8f;
+            return aircraft.transform.position - aircraft.transform.forward * (9.5f + rearOffset * 0.5f) - aircraft.transform.up * 0.9f;
         }
 
         private static bool IsIbis(string name, AircraftDefinition def)

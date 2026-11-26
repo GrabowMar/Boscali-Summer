@@ -143,6 +143,39 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             statusVector.Commit();
         }
 
+        /// <summary>AIRFRAME: compact frame and caption shelf hosting the native top-down aircraft damage schematic without overlapping SYS or ACE.</summary>
+        private void PaintAirframe(in ScopePalette pal, in BoardGeometry geo, bool flashOn)
+        {
+            BoardRect slot = ScopeLayout.AirframeSlot(geo, boardStack);
+            float hp = Whole((slot.H + PageGrow * 2f) * unit);
+            Show(airframeRect, true);
+            PlaceOnGrid(airframeRect, (slot.X - PageGrow) * unit, (slot.Y - PageGrow) * unit, Whole((slot.W + PageGrow * 2f) * unit), hp);
+
+            float topPad = ScopeLayout.SafeTop(true), padX = 4f, padBot = 4f;
+            PlaceOnGrid(airframeArtRect, (PageGrow + padX) * unit, (PageGrow + topPad) * unit, Whole(Mathf.Max(16f, slot.W - padX * 2f) * unit), Whole(Mathf.Max(16f, slot.H - topPad - padBot) * unit));
+
+            DamageState dmg = airframeDamage;
+            bool warn = (dmg.Flags & DamageFlags.Fire) != 0 || dmg.DetachedRatio >= HudDamage.StructureWarning || dmg.EnginesOut > 0;
+            bool caution = !warn && (dmg.Flags != DamageFlags.None || dmg.DetachedRatio >= HudDamage.StructureCaution);
+            airframeDamaged = warn || caution;
+            if (warn) shellBeat = true;
+
+            ScopeTone tone = warn ? Red : caution ? Amber : Dim;
+            string flag = warn ? "CRIT" : caution ? "DMG" : null;
+            float alpha = warn && !flashOn ? 0.5f : 1f;
+
+            ScopeCanvas g = airframeCanvas;
+            g.Furniture = allow.Furniture;
+            g.Open = true;
+            g.Begin(pal, unit, hp, pixel, HudType.BoardBoost);
+            g.Origin(PageGrow, PageGrow);
+            g.Raise(0f);
+            if (g.Furniture || flag != null) g.PageShelf(0f, 0f, slot.W, "AIRFRAME", flag, tone, HudType.Label, true, alpha);
+            g.Brackets(0f, topPad, slot.W, slot.H - topPad, 8f, tone, warn || caution ? 0.85f : 0.55f, BoscaliSummer.Core.Contracts.HudStroke.Hairline);
+            g.End();
+            airframeVector.Commit();
+        }
+
         /// <summary>
         /// The mission rows at the top of the spine (<see cref="BoardGeometry.Mission"/>, 50 high): the MSN shelf with the timer at its right, then the mission's name and phase (no phase while it reads IN PROGRESS), then the
         /// score or the detail. Lean drops the caption and the rule; every row keeps its y.

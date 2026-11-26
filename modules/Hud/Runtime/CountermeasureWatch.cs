@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Presentation;
 using HarmonyLib;
@@ -10,8 +12,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
     /// <summary>
     /// All-station countermeasure counts for the board's CM tiles (2026-10-10): flares, chaff and jammers with their IR /
     /// RDR / JAM tag, rounds left and full load, grouped by display name exactly as the game groups its stations. Vanilla
-    /// shows only the ACTIVE type. The station list lives in a private nested class, so this reads the public
-    /// <see cref="Countermeasure"/> components instead: the grouping is rescanned every few seconds (pods come and go),
+    /// shows only the ACTIVE type. This reads the registered dispensers and any virtual stations in the aircraft hierarchy.
+    /// The grouping is rescanned every few seconds (pods come and go),
     /// the rounds are summed every tick. Read-only: never selects a station (<c>ChooseCountermeasure</c> would change the
     /// pilot's active one).
     /// </summary>
@@ -31,7 +33,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private readonly string[] names = new string[HudCm.MaxStations];
         private Aircraft watched;
         private float nextScan;
-        private Countermeasure[] parts = Array.Empty<Countermeasure>();
+        private readonly List<Countermeasure> parts = new List<Countermeasure>();
         private int[] partStation = Array.Empty<int>();
         private int stationCount;
 
@@ -41,18 +43,20 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (aircraft == null)
             {
                 watched = null;
+                parts.Clear();
                 stationCount = 0;
                 return;
             }
             float now = Time.unscaledTime;
-            if (aircraft != watched || NeedsScan(now)) Scan(aircraft, now);
+            Countermeasure active = AircraftReadout.ActiveCountermeasure(aircraft);
+            if (aircraft != watched || (active != null && !parts.Contains(active)) || NeedsScan(now)) Scan(aircraft, now);
             for (int i = 0; i < stationCount; i++)
             {
                 frame.Cm[i] = stations[i];
                 frame.Cm[i].Ammo = 0;
                 frame.Cm[i].Active = false;
             }
-            for (int i = 0; i < parts.Length; i++)
+            for (int i = 0; i < parts.Count; i++)
             {
                 if (partStation[i] < 0 || parts[i] == null) continue;
                 frame.Cm[partStation[i]].Ammo += parts[i].ammo;
@@ -63,7 +67,6 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             for (int i = 0; i < stationCount; i++)
                 if (frame.Cm[i].Chargeable) frame.Cm[i].Charge = charge;
             // The pilot's selected dispenser is the group of the game's active countermeasure (stations group by display name).
-            Countermeasure active = BoscaliSummer.Core.Game.AircraftReadout.ActiveCountermeasure(aircraft);
             for (int i = 0; active != null && i < stationCount; i++)
                 frame.Cm[i].Selected = names[i] == active.displayName;
             frame.CmCount = stationCount;
@@ -73,20 +76,21 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private bool NeedsScan(float now)
         {
             if (now >= nextScan) return true;
-            for (int i = 0; i < parts.Length; i++)
+            for (int i = 0; i < parts.Count; i++)
                 if (parts[i] == null) return true;
-            return now >= nextScan + 25f;   // safety net: a refit can add a station without destroying an old one
+            return false;
         }
 
         private void Scan(Aircraft aircraft, float now)
         {
             watched = aircraft;
             nextScan = now + RescanSeconds;
-            parts = aircraft.GetComponentsInChildren<Countermeasure>(true);
-            Array.Sort(parts, ByName);
-            if (partStation.Length < parts.Length) partStation = new int[parts.Length];
+            aircraft.GetComponentsInChildren(true, parts);
+            AircraftReadout.AddRegisteredCountermeasures(aircraft, parts);
+            parts.Sort(ByName);
+            if (partStation.Length < parts.Count) partStation = new int[parts.Count];
             stationCount = 0;
-            for (int i = 0; i < parts.Length; i++)
+            for (int i = 0; i < parts.Count; i++)
             {
                 partStation[i] = -1;
                 Countermeasure part = parts[i];
@@ -118,7 +122,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         /// <summary>The stations in the order the game's Next Countermeasure steps through them, so the board's rows read top to bottom as the key cycles (the scan found them by name).</summary>
         private void InCycleOrder(Aircraft aircraft)
         {
-            int known = BoscaliSummer.Core.Game.AircraftReadout.CountermeasureOrder(aircraft, cycle);
+            int known = AircraftReadout.CountermeasureOrder(aircraft, cycle);
             for (int s = 0; s < stationCount; s++) rank[s] = HudCm.CycleRank(names[s], cycle, known);
             HudCm.CycleOrder(rank, stationCount, order);
             for (int k = 0; k < stationCount; k++)
@@ -128,13 +132,14 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 moved[order[k]] = k;
             }
             for (int k = 0; k < stationCount; k++) { stations[k] = sorted[k]; names[k] = sortedNames[k]; }
-            for (int i = 0; i < parts.Length; i++) if (partStation[i] >= 0) partStation[i] = moved[partStation[i]];
+            for (int i = 0; i < parts.Count; i++) if (partStation[i] >= 0) partStation[i] = moved[partStation[i]];
         }
 
-        /// <summary>The full load: the ejectors remember theirs; a jammer is one charge; anything else is unknown (0).</summary>
+        /// <summary>The full load. A jammer is one charge, and an unreported capacity is unknown (0).</summary>
         private static int MaxOf(Countermeasure part) =>
             part is FlareEjector flares ? flares.GetMaxAmmo()
             : part is ChaffEjector chaff ? chaff.GetMaxAmmo()
+            : part is ICountermeasureCapacity custom ? custom.MaxAmmo
             : part.chargeable ? 1 : 0;
 
         private static byte MaskOf(List<string> threatTypes)

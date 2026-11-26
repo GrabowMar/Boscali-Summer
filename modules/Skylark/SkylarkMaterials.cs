@@ -56,9 +56,11 @@ namespace BoscaliSummer.Modules.Skylark
             }
             foreach (Renderer renderer in skin) renderer.sharedMaterial = nativeSkin;
             // Strobe lenses stay out of the damage parts: SkylarkStrobe swaps them between this shared skin (dark) and a lit lamp material.
-            // The Halberd's coil collars and muzzle glow likewise: SkylarkTurret swaps them to a lit material on each round.
+            // Authored coil collars and muzzle glow likewise; procedural CopperCoil collars keep their own metallic finish until flashed.
             foreach (string name in new[] { "Strobe_Top", "Strobe_Bottom", "GunGlow", "GunCoil0", "GunCoil1", "GunCoil2", "GunCoil3", "GunCoil4", "GunCoil5" })
-                if (nodes.TryGetValue(name, out Transform strobe) && strobe.TryGetComponent(out Renderer lens)) lens.sharedMaterial = nativeSkin;
+                if (nodes.TryGetValue(name, out Transform strobe) && strobe.TryGetComponent(out Renderer lens)
+                    && lens.sharedMaterial != null && lens.sharedMaterial.name.StartsWith(SkinName, StringComparison.Ordinal))
+                    lens.sharedMaterial = nativeSkin;
             foreach (UnitPart part in aircraft.GetComponentsInChildren<UnitPart>(true))
             {
                 Renderer[] owned = skin.Where(r => r.GetComponentInParent<UnitPart>(true) == part).ToArray();

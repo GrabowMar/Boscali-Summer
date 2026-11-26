@@ -19,7 +19,11 @@ namespace BoscaliSummer.Modules.Skylark
         private string batteryText = "";
         private static readonly string[] Flags = { "", " HEAVY", " BOOST", " DRY" };
 
-        public void ResetForScene() => cached = null;
+        public void ResetForScene()
+        {
+            cached = null;
+            FansHeld = false;
+        }
 
         private bool Local()
         {
@@ -59,7 +63,7 @@ namespace BoscaliSummer.Modules.Skylark
 
         public void SetVector(int mode)
         {
-            if (Local() && mode >= 0 && mode <= (int)VectorMode.Manual) vector.Set((VectorMode)mode);
+            if (Local() && mode >= 0 && mode <= (int)VectorMode.Plane) vector.Set((VectorMode)mode);
         }
 
         public bool AutopilotOwnsFans { get => FansHeld; set => FansHeld = value; }

@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         public static bool OverControls(Vector2 screenPoint)
         {
-            // A full-screen window (OPS front, Met Office, UAV terminal, cinematic console) or the radial menu takes the game's own
+            // A full-screen window (OPS front, Met Office, cinematic console) or the radial menu takes the game's own
             // mouse while it is up: the map is under it everywhere, so no map click, pick or card goes through it.
             if (WindowHoldsMouse()) return true;
             if (MfdPanelDock.ContainsScreenPoint(screenPoint)) return true;

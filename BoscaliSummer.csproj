@@ -138,6 +138,9 @@
       <LogicalName>BoscaliSummer.Assets.nobp</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
+  <ItemGroup Label="Skylark cockpit">
+    <EmbeddedResource Include="modules\Skylark\Assets\SkylarkFrontProfile.png" LogicalName="BoscaliSummer.Skylark.FrontProfile.png" />
+  </ItemGroup>
   <ItemGroup Label="Custom maps">
     <!-- Per map, written by `nomod map gen` + `nomod map bake` (tools/Build-MapBundle.ps1): the bundle <id>.bsmap, its
          sidecar <id>.map.json (the manifest plus the bundle's hash) and the preview <id>.card.png. The Maps module lists

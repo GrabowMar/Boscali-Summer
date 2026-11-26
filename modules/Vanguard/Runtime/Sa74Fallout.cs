@@ -196,18 +196,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             blast.AddComponent<Sa74BlastTag>().SiteId = siteId;
             Shockwave shockwave = blast.GetComponentInChildren<Shockwave>(true);
             blast.AddComponent<Sa74NativeGroundLifetime>().Initialize(shockwave, siteId);
-            if (waterContact && shockwave != null)
-            {
-                // Preserve the true damage origin while the visible fireball sits above the contact surface.
-                shockwave.enabled = false;
-                UnityEngine.Object.Destroy(shockwave);
-                var front = new GameObject("SA-74N shock front");
-                front.transform.SetParent(Datum.origin, false); front.transform.position = at;
-                front.AddComponent<Sa74BlastTag>().SiteId = siteId;
-                shockwave = front.AddComponent<Shockwave>();
-                blasts.Add(front);
-                UnityEngine.Object.Destroy(front, Sa74BlastShape.ArrivalSeconds(ShockRadius) + 45f);
-            }
             if (shockwave == null) shockwave = blast.AddComponent<Shockwave>();
             shockwave.SetOwner(new PersistentID { Id = owner }, YieldKilotons);
             NativeBlasts++;
@@ -611,6 +599,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             { "thermalPulse", thermalPulse }, { "flashExposure", flashExposure }, { "winterBlend", winterBlend }, { "falloutBlend", falloutBlend }, { "darkBlend", darkBlend }, { "smolderPlumes", Presentation.Sa74Smolder.ActivePlumes },
             { "smolderFires", Presentation.Sa74Smolder.ActiveFires }, { "smolderEmbers", Presentation.Sa74Smolder.ActiveEmbers },
             { "smolderDeck", Presentation.Sa74Smolder.ActiveDeck },
+            { "smolderVanillaBurn", Presentation.Sa74Smolder.VanillaBurnReady },
+            { "smolderVanillaSmoke", Presentation.Sa74Smolder.VanillaSmokeReady },
             { "charMaterials", Presentation.Sa74Smolder.CharMaterials }, { "charDetails", Presentation.Sa74Smolder.CharDetails },
             { "charStep", Presentation.Sa74Smolder.CharStep },
             { "charReach", Presentation.Sa74Smolder.CharReach }, { "charWrites", Presentation.Sa74Smolder.CharWrites },
@@ -643,6 +633,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             { "blastSoundOutputRms", Presentation.Sa74BlastAudio.OutputRms }, { "nativeAudioSuppressed", Presentation.Sa74BlastAudio.NativeSuppressed },
             { "nativeSootCount", Sa74NativeGround.ConfiguredCount }, { "nativeSootDiameter", Sa74NativeGround.ConfiguredDiameter },
             { "nativeGroundSourceKt", Sa74NativeGround.SourceYieldKilotons },
+            { "nativeGroundRenderers", Sa74NativeGround.ActiveGroundRenderers },
             { "particleRadius", Presentation.Sa74Particles.OuterRadius },
             { "cloudClearanceCount", Core.Math.CloudClearance.Current.Length },
             { "cloudClearancePublications", Sa74CloudClearance.Publications },

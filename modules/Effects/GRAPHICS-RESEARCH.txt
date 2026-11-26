@@ -6,10 +6,15 @@ renderer features or recover shader variants stripped from that game.
 
 Current implemented effects
 --------------------------
-Optional BF4-inspired cinematic preset, default off: cool shadows, restrained
-warm highlights, deeper shadow contrast, exposure-relative bloom, horizontal
-HDR light streaks, subtle vignette and custom grain. Strength and LIGHT GLOW
-are adjustable in SET > WORLD > COLOUR GRADE. No motion blur or depth of field.
+Optional multi-preset cinematic grade (`ATMOSPHERIC` default, `REALISTIC`,
+`TACTICAL`), default off: sun- and weather-reactive cool shadows and golden-hour
+highlights (`SplitToning`, `ShadowsMidtonesHighlights`, `LiftGammaGain`,
+`ColorCurves` lum-vs-sat / sat-vs-sat rolloff), wide exposure-relative bloom
+(with night-bloom damping), horizontal HDR light streaks, and independent
+`LENS VIGNETTE` / `FILM GRAIN` dials in SET > VISUALS > COLOUR GRADE. Weather
+also adds a client-local `ATMOS HAZE` dial under SET > VISUALS > SKY for
+low-altitude aerial mist, warm golden-hour horizon scatter and dawn/dusk sun
+shaft lift. No motion blur or depth of field.
 The streak pass runs on the world base camera before the final overlay's post.
 The native URP volume runs below night vision, and it never owns exposure or
 the saturation parameter used by G-LOC. Built-in RCAS sharpening and display

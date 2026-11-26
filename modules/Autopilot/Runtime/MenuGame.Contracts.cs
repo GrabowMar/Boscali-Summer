@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Autopilot.Domain;
 
 namespace BoscaliSummer.Modules.Autopilot.Runtime
@@ -230,11 +231,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "hud/reset": return OnBoard(board => board.ResetToDefaults());
                 case "weapons/drones/attack": return StrikeOrScreen;
                 case "weapons/drones/ram": return () => Service<IDroneCommand>()?.ToggleRamMode();
-                case "weapons/drones/look": return () => Service<IDroneCommand>()?.SendToLook();
-                case "weapons/drones/nose": return () => Service<IDroneCommand>()?.MatchNose();
-                case "weapons/drones/auto": return () => Service<IDroneCommand>()?.Release();
+                case "weapons/drones/return": return () => Service<IDroneCommand>()?.StopPiloting();
                 case "weapons/drones/feed": return () => Service<IDroneCommand>()?.ToggleFeed();
-                case "weapons/drones/terminal": return () => Service<IDroneCommand>()?.OpenTerminal();
+                case "weapons/drones/map": return () => { OpenMap(); NOAvionics.AvConsole.Open(MfdSlots.Drones, "DRONES"); };
             }
             if (row.Id.StartsWith("comms/c", StringComparison.Ordinal)) return () => Service<IQuickCalls>()?.Call(index);
             if (row.Id.StartsWith("weapons/drones/pick/", StringComparison.Ordinal)) return () => Service<IDroneCommand>()?.Link(index);

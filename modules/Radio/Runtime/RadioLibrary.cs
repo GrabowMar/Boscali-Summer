@@ -103,6 +103,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         }
 
         public static bool IsSupportedExtension(string extension) =>
+            string.Equals(extension, ".mp3", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(extension, ".ogg", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(extension, ".wav", StringComparison.OrdinalIgnoreCase);
 

@@ -33,7 +33,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         /// <summary>GLAIVE family (gun drones carried as missiles).</summary>
         public static bool IsGunDrone(VanguardRole role) => role == VanguardRole.Sentinel || role == VanguardRole.Gunship;
 
-        /// <summary>Hand-steerable from the CMenu (STEER DRONES BY HAND). AEGIS darts, the ORCA torpedo and the ALE-X kite are never hand-flown.</summary>
+        /// <summary>Aircraft stores that support a remote pilot from the tactical map.</summary>
         public static bool IsSteerable(VanguardRole role) =>
             role == VanguardRole.Decoy || role == VanguardRole.Jammer || role == VanguardRole.Drone || role == VanguardRole.Glider ||
             role == VanguardRole.Sentinel || role == VanguardRole.Gunship || role == VanguardRole.Scout || role == VanguardRole.Lander;

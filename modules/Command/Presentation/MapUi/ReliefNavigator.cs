@@ -319,6 +319,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static void Fit()
         {
             follow = false;
+            MfdTerrainRelief.Rig.AllowFocus(0f, 0f);
             FocusOn(0f, 0f);
             ZoomTo(MfdTerrainRelief.Rig, ReliefRig.MinZoom, .5f, .5f, 0f);
         }
@@ -330,6 +331,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             FocusOn(x, z);
             if (zoom) ZoomTo(MfdTerrainRelief.Rig,
                 Mathf.Max(3f, MfdTerrainRelief.Rig.Zoom), .5f, .5f, 0f);
+        }
+
+        internal static bool FocusAirTrack(GlobalPosition point, bool zoom)
+        {
+            if (!MfdTerrainRelief.WorldToModel(point, out float x, out float z)) return false;
+            ReliefRig rig = MfdTerrainRelief.Rig;
+            rig.FocusFor(x, MfdTerrainRelief.AirTrackHeight(point), z, out float focusX, out float focusZ);
+            rig.AllowFocus(focusX, focusZ);
+            follow = angleEasing = false;
+            coast = Vector2.zero;
+            FocusOn(focusX, focusZ);
+            if (zoom) ZoomTo(rig, Mathf.Max(3f, rig.Zoom), .5f, .5f, 0f);
+            return true;
         }
 
         internal static void ToggleFollow()

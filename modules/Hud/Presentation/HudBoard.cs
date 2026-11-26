@@ -83,6 +83,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private string identityCallsign = "", identityAirframe = "";
         private float nextIdentity;
         private float nextRead;
+        private bool hudYielded;
         private System.Func<int, bool> missileFlying;
         private HudSettings settings;
         /// <summary>The pilot's options as of the last 10 Hz tick (the defaults until the module configures the board); what later features of the board read.</summary>
@@ -155,7 +156,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The aircraft whose native HUD the layer repairs this frame: the pilot's own, seen from outside (where the HUD is forced open) or from its cockpit; null otherwise.</summary>
         private Aircraft RepairAircraft()
         {
-            if (!isActiveAndEnabled) return null;
+            if (!isActiveAndEnabled || BoscaliSummer.Core.Game.ForeignMods.HudYielded) return null;
             if (OwnExternalView(out Aircraft outside)) return ExternalHudEnabler.CanShowExternalHud(true) ? outside : null;
             CameraStateManager cams = SceneSingleton<CameraStateManager>.i;
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
@@ -168,7 +169,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private void OnLayerPaint(HudView view)
         {
-            if (!isActiveAndEnabled || Application.isBatchMode) return;
+            if (!isActiveAndEnabled || Application.isBatchMode || BoscaliSummer.Core.Game.ForeignMods.HudYielded) return;
             PaintWorld(view);
         }
 
@@ -234,6 +235,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void LateUpdate()
         {
             if (Application.isBatchMode) return;
+            if (BoscaliSummer.Core.Game.ForeignMods.HudYielded)
+            {
+                if (!hudYielded) { hudYielded = true; StandDownHud(); }
+                return;
+            }
+            hudYielded = false;
             try { Tick(); }
             catch (Exception e) { PatchGuard.Report("Hud.Tick", e); }
             // The centre combat layer's blink and pop, every frame (its data comes with the 10 Hz read); its ring and the AR layer are world-locked: the AV layer's Paint phase draws them.
@@ -336,6 +343,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             VisorGlitch.Attach(tape?.Root);
             VisorGlitch.Attach(rim?.Root);
             VisorGlitch.Attach(arcs?.Root);
+            VisorGlitch.Attach(ar?.Root);
+            VisorGlitch.Attach(cluster?.Root);
             VisorGlitch.Scan(Time.unscaledTime);
             VisorGlitch.SetCalm(panel?.PageRect);
             VisorGlitch.Drive(fx);
@@ -468,22 +477,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool viewingOwnExternally = ExternalHudEnabler.IsOwnAircraftExternalView(out Aircraft ownAircraft);
             Aircraft missileOwner = null;
             bool viewingMissile = !viewingOwnExternally && MissileCam.IsOwnMissileView(out missileOwner, out _);
-            externalHud.Tick(viewingOwnExternally || viewingMissile);
+            bool inMissilePov = missileView.Active;
+            externalHud.Tick(!inMissilePov && (viewingOwnExternally || viewingMissile));
 
             // Same gate as the forced-canvas condition above: the third-person HUD (hidden
             // native numbers, screen-fixed cluster, releveled HUDCenter) only ever shows where
-            // the native HUDCanvas is actually up. Riding a missile gets the same canvas (the board's MISSILE CAM page is its readout).
-            bool canShow = ExternalHudEnabler.CanShowExternalHud(viewingOwnExternally || viewingMissile);
+            // the native HUDCanvas is actually up. Missile POV shows the nose camera and nothing else.
+            bool canShow = !inMissilePov && ExternalHudEnabler.CanShowExternalHud(viewingOwnExternally || viewingMissile);
             bool thirdPerson = canShow && viewingOwnExternally;
             bool missileCam = canShow && viewingMissile;
             flightNumberHider.Tick(thirdPerson || missileCam, thirdPerson ? ownAircraft : missileOwner);
-            arcsExternal = viewingOwnExternally || viewingMissile;      // any external view or missile ride: the arcs are not drawn, the game's gauges are the hider's
+            arcsExternal = viewingOwnExternally || viewingMissile || inMissilePov;      // any external view or missile ride: the arcs are not drawn, the game's gauges are the hider's
             arcsAt = Time.unscaledTime;
 
             // The missile feed: a camera on the last own weapon in the air, every frame (its pose must follow the weapon), wherever the HUD is up; riding a missile the screen is the feed already.
             CombatHUD nativeHud = SceneSingleton<CombatHUD>.i;
             bool hudUp = nativeHud != null && nativeHud.iconLayer != null && nativeHud.iconLayer.gameObject.activeInHierarchy;
-            missileFeed.Tick(missileTracker.Missiles, (settings?.PageMissileCam.Value ?? options.PageMissileCam) && hudUp && !viewingMissile, Time.unscaledTime);
+            missileFeed.Tick(missileTracker.Missiles, (settings?.PageMissileCam.Value ?? options.PageMissileCam) && hudUp && !viewingMissile && !inMissilePov, Time.unscaledTime);
             if (!thirdPerson)
             {
                 // The feed and target cards stay in the cockpit; the flight boxes around them go the same frame third person ends (the read below runs now).
@@ -557,10 +567,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             catch (Exception e) { PatchGuard.Report("Hud.Present", e); }
             cluster.Board = panel.KeepClearBox;      // the third-person cluster keeps clear of the board's box
 
-            // The centre combat layer: its switch, a live aircraft, and only where an overlay may show (no pause, map or cinematic). Independent of the board's own switch.
+            // The centre combat layer: its switch, a live aircraft, and only where an overlay may show (no pause, map, cinematic or missile POV). Independent of the board's own switch.
             try
             {
-                bool showAlerts = options.CentreAlerts && hudAircraft != null && !hudAircraft.disabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
+                bool showAlerts = !inMissilePov && options.CentreAlerts && hudAircraft != null && !hudAircraft.disabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
                 alerts ??= new CombatAlerts();
                 alerts.Read(showAlerts && alerts.Ensure(), hudAircraft, frame, threats, now);
                 alertAircraft = showAlerts ? hudAircraft : null;
@@ -571,7 +581,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             try
             {
                 bool anyAr = options.ArPath || options.ArDomes || options.ArMissiles || options.ArBeacons || options.HudFx;
-                bool showAr = anyAr && hudAircraft != null && !hudAircraft.disabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
+                bool showAr = !inMissilePov && anyAr && hudAircraft != null && !hudAircraft.disabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
                 ar ??= new ArLayer();
                 ar.Read(showAr && ar.Ensure(), options, hudAircraft, frame, fuelWatch.Field, now);
             }
@@ -582,7 +592,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The visor's brow rail and furniture: cockpit view only (the external views have the third-person boxes, a missile ride has no nose to take bearings from). The lane under it rises where it is not drawn.
             try
             {
-                bool showBrow = options.Brow && hudAircraft != null && !hudAircraft.disabled && !thirdPerson && !missileCam && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
+                bool showBrow = !inMissilePov && options.Brow && hudAircraft != null && !hudAircraft.disabled && !thirdPerson && !missileCam && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
                 tape ??= new TapeHud();
                 tape.Read(showBrow && tape.Ensure(), hudAircraft);
                 TopCentre.Lift = thirdPerson || missileCam ? TopCentre.ExternalLift : 0f;
@@ -602,7 +612,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 else if (hudAircraft != bootedFor)
                 {
                     if (boot.Active) { boot.Abort(); ReleaseBoot(); }
-                    if (BootAllowed(hudAircraft, thirdPerson || missileCam))
+                    if (BootAllowed(hudAircraft, thirdPerson || missileCam || inMissilePov))
                     {
                         if (bootWarning || (alerts != null && alerts.WarningUp)) bootedFor = hudAircraft;      // a warning is up as the pilot sits down: no boot for this aircraft
                         else StartBoot(hudAircraft, VisorBoot.ModeFor(everBooted));
@@ -633,7 +643,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 bool seenOne = targetReadout.Read(camOwner, out Unit seen, out range, out closure) && seen != null;
                 // External: the card is up whenever the pod has a picture (its header names the camera mode with no target). Cockpit: only while a target is locked.
                 // The cockpit card has no canvas gate of its own: off while paused, on the big map, in cinematic mode and on a missile ride.
-                if (viewingOwnExternally || (seenOne && !viewingMissile && BoscaliSummer.Core.Game.CockpitOverlayGate.Open()))
+                if (!inMissilePov && (viewingOwnExternally || (seenOne && !viewingMissile && BoscaliSummer.Core.Game.CockpitOverlayGate.Open())))
                 {
                     cameraTexture = camera.targetTexture;
                     cameraCode = seenOne ? targetReadout.NameOf(seen) : mode;
@@ -803,9 +813,40 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             externalHud.Release();
             wingview.Reset();
             flightNumberHider.Dispose();
+            hudYielded = false;
+        }
+
+        /// <summary>Hides Boscali's flight HUD surfaces and restores native boxes/gauges while another HUD mod (UIPlus) owns the HUD; live-reversible when the yield clears.</summary>
+        private void StandDownHud()
+        {
+            missileFeed.Release();
+            panel?.Hide();
+            cluster?.Hide();
+            alerts?.Hide();
+            ar?.Hide();
+            alertAircraft = null;
+            tape?.Hide();
+            rim?.Hide();
+            boot.Abort();
+            ReleaseBoot();
+            fx.Reset();
+            VisorGlitch.Off();
+            tape?.ApplyGlitch(0f);
+            panel?.ApplyLook(BoardLook.Rest);
+            LeftHudStack.BootAlpha = 1f;
+            tape?.ApplyFx(1f);
+            rim?.ApplyFx(1f, 0f, FlashKind.None);
+            arcs?.ApplyFx(1f, 0f, 0f);
+            arcs?.Down();
+            TopCentre.Lift = 0f;
+            externalHud.Release();
+            flightNumberHider.Tick(false, null);
+            LeftHudStack.ShiftX = LeftHudStack.ShiftY = 0f;
+            LeftHudStack.TearLeft = false;
         }
         private void OnDisable()
         {
+            hudYielded = false;
             ScopeFeeds.Unregister(systemsProvider);
             ScopeFeeds.Unregister(storesProvider);
             ScopeFeeds.Unregister(cargoProvider);

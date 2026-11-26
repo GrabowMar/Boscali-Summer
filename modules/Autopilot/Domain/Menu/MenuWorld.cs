@@ -124,14 +124,13 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool HasChaff;
         public int Chaff, ChaffMax;
         /// <summary>The countermeasure button also dispenses chaff while a radar missile is inbound.</summary>
-        public bool HasDrones, DronesStriking, DronesCanStrike;
+        public bool HasDrones, OwnDrones, OwnRemora, DronesStriking, DronesCanStrike;
         /// <summary>Drone link (WEAPONS > DRONES): the linkable drones flying (not AEGIS/ORCA/ALE-X) as callsigns and state lines in
         /// launch order, the linked one (-1 none), whether it flies an order (HAND or WPT), whether the HUD feed card is on.</summary>
         public List<string> DroneNames = new List<string>(), DroneStates = new List<string>();
         public int DroneLinked = -1;
-        public bool DroneOrdered, DroneFeed, DroneRamMode;
+        public bool DronePiloting, DroneFeed, DroneRamMode;
         /// <summary>REMORA drones flying now.</summary>
-        public int Drones;
 
         // VIEW
         public bool CameraFollowing = true;
@@ -180,7 +179,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool PerksAvailable;
         public List<WorldPerk> Perks = new List<WorldPerk>();
         public bool SkywellCarried, SkywellDeployed;
-        /// <summary>The VS-4 Skylark's own page: drive 0 AUTO/1 EV/2 HYBRID, vector 0 AUTO/1 DRONE/2 PLANE/3 MANUAL, C2 mast out.</summary>
+        /// <summary>The VS-4 Skylark's flight page: drive 0 AUTO/1 EV/2 HYBRID, flight mode 0 DRONE/1 PLANE, C2 mast out.</summary>
         public bool SkylarkActive, SkylarkMast;
         public int SkylarkDrive, SkylarkVector;
         public string SkylarkBattery = "";

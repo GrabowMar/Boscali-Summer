@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Hud.Domain;
@@ -96,7 +97,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             canvasRoot = (RectTransform)canvas.transform;
             VanillaHudStyle.TryHudFont(out TMPro.TMP_FontAsset font, out Material fontMaterial);
             root = CombatAlerts.Holder(BoscaliSummer.Core.Ui.HudLayer.Ensure() ? BoscaliSummer.Core.Ui.HudLayer.Static : canvasRoot, "BoscaliBoot");
-            mesh = AvVector.Create(root, "Boot", Quads);
+            mesh = AvVector.Create(root, "Boot", Quads, HudGlow.Stroke, HudGlow.Alpha);
             text = new ScopeText(CombatAlerts.Holder(root, "Words"), font, fontMaterial);
             lastK = 0f;
             return true;
@@ -111,7 +112,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float refW = canvasRoot.rect.width / k;
             VanillaHudStyle.Palette palette = VanillaHudStyle.Colours;
             Color ink = palette.AllClear;
-            Color bright = Color.Lerp(ink, Color.white, ScopePalette.HiLift);
+            Color bright = VanillaHudStyle.InkHi;
             BootMode mode = clock.Mode;
 
             AvQuadBuffer b = mesh.Buffer;
@@ -156,7 +157,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 // The closing line is the one thing left on the screen: centred where the list was, a size up and full ink so it reads on bright sky.
                 text.Draw(new System.ReadOnlySpan<char>(online, 0, onlineLen), 0f, FirstY - 540f, OnlinePt, ScopeAlign.Center, ink.WithAlpha(onlineAlpha), false);
                 float w = onlineLen * OnlinePt * ScopeText.DesignAdvance;
-                AvStrokes.Line(b, -w * 0.5f, Y(FirstY + 13f), w * 0.5f, Y(FirstY + 13f), 1.2f, ink.ToRgba().WithAlpha(onlineAlpha * 0.8f));
+                AvStrokes.Line(b, -w * 0.5f, Y(FirstY + 13f), w * 0.5f, Y(FirstY + 13f), HudStroke.Hairline, ink.ToRgba().WithAlpha(onlineAlpha * 0.8f));
             }
             if (alignAlpha > 0f)
                 text.Draw("ALIGN", 0f, -(box + 12f), 10f, ScopeAlign.Center, bright.WithAlpha(alignAlpha), false);

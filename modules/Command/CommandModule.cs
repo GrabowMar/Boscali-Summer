@@ -6,6 +6,7 @@ using BoscaliSummer.Modules.Command.Networking;
 using BoscaliSummer.Modules.Command.Presentation;
 using BoscaliSummer.Modules.Command.Runtime;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Modules;
 using NOAvionics;
 
@@ -51,7 +52,7 @@ namespace BoscaliSummer.Modules.Command
             AvUiSound.Route = source => { if (SoundManager.i != null) source.outputAudioMixerGroup = SoundManager.i.InterfaceMixer; };
             // Every console's header names it with its rail key's words; menus and automation open a key through the rail.
             AvConsole.KeyName = code => MfdRailCatalog.For(code).Name;
-            AvConsole.PressKey = MfdRail.Open;
+            AvConsole.PressKey = code => MfdRail.Open(code) || (code == MfdSlots.Drones && DroneMfdPanel.OpenBezel());
             context.AddSceneService<AvionicsSettingsBridge>(48).Configure(context.Settings.Command);
             TargetPresetRuntime.Configure(context.Settings.Command);
             context.AddSceneService<TargetPresetHotkeys>(49).Configure(context.Settings.Command);
@@ -89,6 +90,7 @@ namespace BoscaliSummer.Modules.Command
                     context.HostSettings, context.ClientSettings);
             // EXTRAS (ARES, DEBUG) for every player in dev and player builds (2026-11-15 ruling: no gate).
             context.AddSceneService<MiscMfdPanel>(58).Configure(context.Settings, context.Logger);
+            context.AddSceneService<DroneMfdPanel>(58).Configure(context.Logger);
             context.AddSceneService<TerrainGhostOverlay>(61).Configure(context.Settings.Command);
             context.AddSceneService<MapHoldKey>(62).Configure(context.Settings.Command);
 

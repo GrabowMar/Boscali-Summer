@@ -204,6 +204,12 @@
       "order": [["wing", "spooktober"]],
       "reason": "Wing's WingPilotFatalDamagePatch rewrites the ref damage arguments and both Wing prefixes read them to judge lethality; Spooktober's FallenAcePilotDamagePatch rewrites them for the ace. Squad's prefix reads only `dead`."
     },
+    "PilotPlayerState.FixedUpdateState": {
+      "owners": ["Autopilot", "Vanguard"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["autopilot", "vanguard"]],
+      "reason": "When the pilot is flying a drone, Vanguard writes the unattended aircraft's hold inputs after the landing autopilot."
+    },
     "PilotDismounted.Capture": {
       "owners": ["DynamicOperations", "Wing"],
       "classification": "INDEPENDENT",

@@ -17,6 +17,22 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         internal static int ConfiguredCount { get; private set; }
         internal static float ConfiguredDiameter { get; private set; }
         internal static float SourceYieldKilotons { get; private set; }
+        private static readonly List<Sa74NativeGroundLifetime> Lifetimes = new List<Sa74NativeGroundLifetime>();
+        internal static int ActiveGroundRenderers
+        {
+            get
+            {
+                int count = 0;
+                for (int i = Lifetimes.Count - 1; i >= 0; i--)
+                {
+                    if (Lifetimes[i] == null) { Lifetimes.RemoveAt(i); continue; }
+                    count += Lifetimes[i].EnabledGroundRenderers;
+                }
+                return count;
+            }
+        }
+        internal static void Track(Sa74NativeGroundLifetime lifetime) { if (lifetime != null && !Lifetimes.Contains(lifetime)) Lifetimes.Add(lifetime); }
+        internal static void Untrack(Sa74NativeGroundLifetime lifetime) => Lifetimes.Remove(lifetime);
         private static Material soot;
         internal static Material SootMaterial
         {
@@ -41,6 +57,16 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             float originalKilotons = source != null ? Yield(source) : 0f;
             if (originalKilotons <= 0f) return;
             float scale = Mathf.Pow(targetKilotons / originalKilotons, 1f / 3f);
+            if (source != null)
+            {
+                GameObject decalObj = AccessTools.Field(typeof(Shockwave), "groundDecal")?.GetValue(source) as GameObject;
+                DecalProjector projector = decalObj != null ? decalObj.GetComponent<DecalProjector>() : null;
+                if (projector != null)
+                {
+                    projector.drawDistance = Mathf.Max(projector.drawDistance, 90000f);
+                    projector.fadeScale = Mathf.Min(projector.fadeScale, 0.25f);
+                }
+            }
             foreach (DecalSpawner spawner in blast.GetComponentsInChildren<DecalSpawner>(true))
             {
                 Material material = MaterialRef(spawner);
@@ -60,11 +86,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             ConfiguredCount = 0;
             ConfiguredDiameter = SourceYieldKilotons = 0f;
+            Lifetimes.Clear();
             soot = null;
         }
     }
 
-    /// <summary>Retires only cloned native presentation; Shockwave continues its authoritative damage updates.</summary>
+    /// <summary>Retires only overlapping upper-cap native presentation; keeps vanilla ground effects running.</summary>
     [DefaultExecutionOrder(2050)]
     internal sealed class Sa74NativeGroundLifetime : MonoBehaviour
     {
@@ -76,23 +103,45 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private bool[] ringsSuppressed, ringsWereVisible;
         private Renderer[] supports;
         private bool[] supportSuppressed, supportWasVisible;
-        private ParticleSystemForceField[] updrafts;
-        private bool[] updraftSuppressed, updraftWasEnabled;
+        private Renderer[] groundRenderers;
+        private ParticleSystem[] groundParticles;
         private GameObject dustObject;
         private uint siteId;
         private float created;
         private bool vaporSuppressed, vaporWasVisible;
 
+        internal int EnabledGroundRenderers
+        {
+            get
+            {
+                if (groundRenderers == null) return 0;
+                int count = 0;
+                for (int i = 0; i < groundRenderers.Length; i++)
+                    if (groundRenderers[i] != null && groundRenderers[i].enabled) count++;
+                return count;
+            }
+        }
+
         internal void Initialize(Shockwave shockwave, uint id)
         {
             siteId = id; created = Time.time;
+            Sa74NativeGround.Track(this);
             mushroomVisuals = GetComponentsInChildren<Renderer>(true);
             mushroomParticles = GetComponentsInChildren<ParticleSystem>(true);
             var support = new List<Renderer>();
+            var ground = new List<Renderer>();
+            var groundPs = new List<ParticleSystem>();
             foreach (Renderer renderer in mushroomVisuals)
-                if (renderer.name == "BaseCloud" || renderer.name == "stemParticles" || renderer.name == "stemTop") support.Add(renderer);
-            updrafts = GetComponentsInChildren<ParticleSystemForceField>(true);
-            updraftSuppressed = new bool[updrafts.Length]; updraftWasEnabled = new bool[updrafts.Length];
+            {
+                if (renderer.name == "BaseCloud")
+                {
+                    ground.Add(renderer);
+                    if (renderer.TryGetComponent(out ParticleSystem ps)) groundPs.Add(ps);
+                }
+                else if (renderer.name == "stemParticles" || renderer.name == "stemTop") support.Add(renderer);
+            }
+            groundRenderers = ground.ToArray();
+            groundParticles = groundPs.ToArray();
             var condensation = new List<Renderer>();
             foreach (MushroomCloud mushroom in GetComponentsInChildren<MushroomCloud>(true))
             {
@@ -113,6 +162,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (shockwave == null) return;
             dustObject = AccessTools.Field(typeof(Shockwave), "groundDecal")?.GetValue(shockwave) as GameObject;
             dust = dustObject != null ? dustObject.GetComponent<DecalProjector>() : null;
+            if (dust != null) dust.drawDistance = Mathf.Max(dust.drawDistance, 90000f);
             GameObject cloud = AccessTools.Field(typeof(Shockwave), "vaporCloud")?.GetValue(shockwave) as GameObject;
             vapor = cloud != null ? cloud.GetComponent<Renderer>() : null;
         }
@@ -124,6 +174,16 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (site.Id == siteId) { age = Mathf.Max(0f, Time.time - site.Started); break; }
             bool retired = age > Sa74BlastShape.ArrivalSeconds(Sa74Fallout.ShockRadius) + 15f;
             if (retired && dust != null) dust.enabled = false;
+            if (retired)
+            {
+                foreach (Renderer renderer in groundRenderers) if (renderer != null && renderer.enabled) renderer.enabled = false;
+                foreach (ParticleSystem particles in groundParticles)
+                    if (particles != null && particles.isPlaying) particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            }
+            else if (age < Sa74BlastShape.MaximumVisualAge)
+            {
+                foreach (Renderer renderer in groundRenderers) if (renderer != null && !renderer.enabled) renderer.enabled = true;
+            }
             if (age >= Sa74BlastShape.MaximumVisualAge)
             {
                 foreach (Renderer renderer in mushroomVisuals) if (renderer != null) renderer.enabled = false;
@@ -143,19 +203,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 else if (!supportHidden && supportSuppressed[i])
                 {
                     renderer.enabled = supportWasVisible[i]; supportSuppressed[i] = false;
-                }
-            }
-            for (int i = 0; i < updrafts.Length; i++)
-            {
-                ParticleSystemForceField force = updrafts[i];
-                if (force == null) continue;
-                if (supportHidden && !updraftSuppressed[i])
-                {
-                    updraftWasEnabled[i] = force.enabled; force.enabled = false; updraftSuppressed[i] = true;
-                }
-                else if (!supportHidden && updraftSuppressed[i])
-                {
-                    force.enabled = updraftWasEnabled[i]; updraftSuppressed[i] = false;
                 }
             }
             bool hidden = retired || replaced || Sa74Particles.DrawsPressure(siteId);
@@ -187,6 +234,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private void OnDestroy()
         {
+            Sa74NativeGround.Untrack(this);
             // Native Start reparents this projector under Datum, outside the cloned explosion root.
             if (dustObject != null) Destroy(dustObject);
             if (mushroomParticles == null || Datum.origin == null) return;

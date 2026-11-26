@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private Camera camera;
         private Vector3 toSun;
         private Color tint;
-        private float fallbackTransmission = 1f;
+        private float fallbackTransmission = 1f, hazeScale = 1f;
         private bool active, hooked, shaderMissing;
 
         /// <summary>Automation: frame of the last draw.</summary>
@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             ConfigureInput(ScriptableRenderPassInput.Depth);
         }
 
-        internal void Tick(LevelInfo level, Camera view, bool enabled, float transmission = 1f)
+        internal void Tick(LevelInfo level, Camera view, bool enabled, float transmission = 1f, float haze = 0f)
         {
             active = enabled && view != null && level != null && level.sun != null && level.sunObject != null &&
                 level.sunObject.activeInHierarchy && !shaderMissing &&
@@ -58,6 +58,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             toSun = -level.sun.transform.forward;
             // The same air as the disc: white overhead, orange and dim at the horizon, gone once it has set.
             float elevation = Mathf.Asin(Mathf.Clamp(toSun.y, -1f, 1f)) * Mathf.Rad2Deg;
+            float golden = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-2f, 5f, elevation)) *
+                (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(10f, 26f, elevation)));
+            hazeScale = 1f + Mathf.Clamp01(haze) * (0.35f + 0.65f * golden);
             float altitude = view.transform.GlobalPosition().y;
             SunDiscMath.Transmission(elevation, altitude, out float r, out float g, out float b);
             tint = new Color(r, g, b) * (SunDiscMath.AboveHorizon(elevation) * SunDiscMath.AirDensity(altitude));
@@ -83,7 +86,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 new Vector4(toSun.x, toSun.y, toSun.z, 0f);
             if (clip.w <= 1e-4f) return; // the sun is behind the camera
             float u = clip.x / clip.w * 0.5f + 0.5f, v = clip.y / clip.w * 0.5f + 0.5f;
-            float strength = Strength * SunDiscMath.ScreenFade(u, v);
+            float strength = Strength * hazeScale * SunDiscMath.ScreenFade(u, v);
             if (strength <= 0f) return;
 
             RenderTextureDescriptor frame = renderingData.cameraData.cameraTargetDescriptor;

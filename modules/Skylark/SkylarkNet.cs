@@ -76,8 +76,8 @@ namespace BoscaliSummer.Modules.Skylark
         private static void Apply(Aircraft aircraft, byte action, byte value)
         {
             if (aircraft == null) return;
-            if (action == DriveAction && value <= (byte)DriveMode.Hybrid) aircraft.GetComponent<SkylarkDrive>()?.SetMode((DriveMode)value);
-            else if (action == MastAction) aircraft.GetComponent<SkylarkMast>()?.Set(value != 0);
+            if (action == DriveAction && value <= (byte)DriveMode.Hybrid && aircraft.TryGetComponent(out SkylarkDrive drive)) drive.SetMode((DriveMode)value);
+            else if (action == MastAction && value <= 1 && aircraft.TryGetComponent(out SkylarkMast mast)) mast.SetRequested(value == 1);
             else return;
             Broadcast(aircraft);
         }
@@ -119,10 +119,12 @@ namespace BoscaliSummer.Modules.Skylark
         {
             if (message.Protocol != ProtocolVersion || GameAccess.IsServer()) return;
             if (!UnitRegistry.TryGetUnit(new PersistentID { Id = message.Aircraft }, out Unit unit) || !(unit is Aircraft aircraft)) return;
-            SkylarkDrive drive = aircraft.GetComponent<SkylarkDrive>();
-            drive?.SyncCharge(message.Charge / 255f);
-            if (message.Drive <= (byte)DriveMode.Hybrid) drive?.SetMode((DriveMode)message.Drive);
-            aircraft.GetComponent<SkylarkMast>()?.Set(message.Mast != 0);
+            if (aircraft.TryGetComponent(out SkylarkDrive drive))
+            {
+                drive.SyncCharge(message.Charge / 255f);
+                if (message.Drive <= (byte)DriveMode.Hybrid) drive.SetMode((DriveMode)message.Drive);
+            }
+            if (message.Mast <= 1 && aircraft.TryGetComponent(out SkylarkMast mast)) mast.ApplyState(message.Mast == 1);
         }
 
         private void OnDestroy()

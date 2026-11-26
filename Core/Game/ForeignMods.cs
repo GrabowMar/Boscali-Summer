@@ -20,6 +20,8 @@ namespace BoscaliSummer.Core.Game
         public const string KellyControls = "aaron.boscali.control-unified";
         /// <summary>Expansion2082 (kingwixly): a Blueprinter ship pack - super carrier, ekranoplan, drone boats.</summary>
         public const string Expansion2082 = "Blueprinter.shippack1";
+        /// <summary>UIPlus: custom flight HUD and chase HUD.</summary>
+        public const string UiPlus = "UIPlus";
 
         /// <summary>Another mod draws the clouds: our volumetric clouds, sun shafts and lightning stand down.</summary>
         public static bool SkyYielded;
@@ -33,9 +35,13 @@ namespace BoscaliSummer.Core.Game
         public static bool MuffleYielded;
         public static bool AirfieldYielded;
         public static bool MissileBoomYielded;
+        /// <summary>Another mod (UIPlus) draws the flight HUD: Boscali's HUD board, visor, arcs, brow, alerts, third-person cluster and native marker repair stand down.</summary>
+        public static bool HudYielded;
+        /// <summary>Another mod owns the HUD canvas: extra Boscali HUD-space overlays stand down too.</summary>
+        public static bool HudOverlaysYielded;
 
         public static void ClearYields() =>
-            SkyYielded = RainYielded = FrostYielded = WorldFxYielded = MuffleYielded = AirfieldYielded = MissileBoomYielded = false;
+            SkyYielded = RainYielded = FrostYielded = WorldFxYielded = MuffleYielded = AirfieldYielded = MissileBoomYielded = HudYielded = HudOverlaysYielded = false;
 
         /// <summary>The loaded plugin with this GUID, or null. Plugins after ours in load order appear only once the chainloader reaches them.</summary>
         public static BaseUnityPlugin Find(string guid) =>

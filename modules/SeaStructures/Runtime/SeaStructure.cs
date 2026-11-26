@@ -155,6 +155,29 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
         private void Start()
         {
             if (Ship == null || health == null) return;
+            // Seat the platform at its replicated sea-level startPosition on every peer. On remote clients, Mirage
+            // initially instantiates at the host's local coordinates (wrong FloatingOrigin frame) and Airbase.Awake
+            // caches SavedAirbase.Center there; making the client Rigidbody kinematic also stops NetworkPIDSmoother
+            // from fighting a FreezeAll body.
+            if (GameManager.gameState != GameState.Encyclopedia)
+            {
+                Vector3 local = Ship.startPosition.ToLocalPosition();
+                local.y = Datum.LocalSeaY;
+                transform.SetPositionAndRotation(local, Ship.startRotation);
+                Rigidbody body = Ship.rb;
+                if (body != null)
+                {
+                    if (!GameAccess.IsServer()) body.isKinematic = true;
+                    body.position = local;
+                    body.rotation = Ship.startRotation;
+                }
+                if (TryGetComponent(out Airbase airbase) && airbase.SavedAirbase != null)
+                {
+                    if (airbase.center != null) airbase.SavedAirbase.Center = airbase.center.GlobalPosition();
+                    if (airbase.aircraftSelectionTransform != null)
+                        airbase.SavedAirbase.SelectionPosition = airbase.aircraftSelectionTransform.GlobalPosition();
+                }
+            }
             // Awake has reset every native pool to 100; apply the plan's capacities before any hit lands.
             // A client that somehow already took damage keeps its replicated value.
             for (int i = 0; i < views.Length; i++)

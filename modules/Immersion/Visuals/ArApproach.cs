@@ -1,12 +1,15 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Ui;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Immersion.Visuals
 {
     /// <summary>
-    /// AR approach tunnel (2026-11-06): on final to a runway end, the helmet draws a "highway in the sky", eight HUD-green
+    /// AR approach tunnel (2026-11-06): on final to a runway end, the helmet draws a "highway in the sky", eight HUD-ink
     /// frames on the 3 degree glide path (15 m over the threshold), every 600 m out to 4.8 km. Only frames still ahead of the
     /// aircraft show; far frames fade. The frames are world-locked but drawn on the helmet layer (a Screen Space Overlay canvas
     /// just under the vanilla HUD), so the instrument panel never hides them: on a slow approach the nose is up about 8 degrees
@@ -16,9 +19,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
     internal sealed class ArApproach
     {
         private const int Frames = 8;
-        private const float Spacing = 600f, HalfWidth = 30f, HalfHeight = 18f, Crossing = 15f, Stroke = 2.4f;
+        private const float Spacing = 600f, HalfWidth = 30f, HalfHeight = 18f, Crossing = 15f, Stroke = HudStroke.Standard;
         private static readonly float Slope = Mathf.Tan(3f * Mathf.Deg2Rad);
-        private static readonly Color Ink = new Color(.35f, 1f, .55f, 1f);
 
         private GameObject root;
         private Canvas canvas;
@@ -34,7 +36,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         internal void Tick(Vector3 eye, bool enabled, AirfieldLights airfield, Camera camera)
         {
             // The approach geometry is read here (Update, global coordinates); the projection is painted at the layer's late point so it sits on the rendered pose.
-            active = enabled && camera != null && Datum.origin != null &&
+            active = !BoscaliSummer.Core.Game.ForeignMods.HudOverlaysYielded && enabled && camera != null && Datum.origin != null &&
                      airfield.TryApproach(eye, out threshold, out outward) &&
                      Vector3.Dot(camera.transform.forward, -outward) > .5f && eye.y - threshold.y <= 1500f;
             eyeGlobal = eye;
@@ -64,6 +66,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             List<ArFrameGraphic.Quad> quads = graphic.Frames;
             quads.Clear();
             float sig = 0f;
+            Color baseInk = VanillaHudStyle.Ink;
+            Rgba baseRgba = new Rgba(baseInk.r, baseInk.g, baseInk.b, 0.9f);
             for (int i = 0; i < Frames; i++)
             {
                 float d = (i + 1) * Spacing;
@@ -88,10 +92,10 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                     if (inFront) { q[k] = local; sig = sig * 1.0001f + local.x + local.y * 1.7f; }
                 }
                 if (!inFront) continue;
-                Color ink = Ink;
-                ink.a = Mathf.Lerp(.9f, .3f, Mathf.InverseLerp(800f, 4500f, Vector3.Distance(eyeGlobal, c)));
+                Rgba ranged = HudInk.Range(baseRgba, Vector3.Distance(eyeGlobal, c));
+                Color ink = new Color(ranged.R, ranged.G, ranged.B, ranged.A);
                 q.Ink = ink;
-                sig += ink.a;
+                sig += ink.r + ink.g + ink.b + ink.a;
                 quads.Add(q);
             }
             float scale = layer ? view.Scale : canvas.scaleFactor;

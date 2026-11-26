@@ -30,6 +30,17 @@ namespace BoscaliSummer.Modules.Ares.Runtime
 
         private float nextCheatTick, nextRevealTick, nextFollowTick;
 
+        public string SetGodMode(bool on)
+        {
+            AresCheats.God = on;
+            if (on && GameAccess.IsServer() && LocalAircraft(out Aircraft me))
+            {
+                RepairUnit(me);
+                return Say("GOD MODE ON: aircraft repaired.");
+            }
+            return Say(on ? "GOD MODE ON." : "GOD MODE OFF.");
+        }
+
         public string SetLowGravity(bool on)
         {
             AresCheats.LowGravity = on;
@@ -63,6 +74,14 @@ namespace BoscaliSummer.Modules.Ares.Runtime
             foreach (Unit unit in thaw)
                 if (Thaw(unit)) n++;
             return Say("TIME RUNS: " + n + " unit(s) thawed.");
+        }
+
+        public string RepairMe()
+        {
+            if (!Host(out string refusal)) return Say(refusal);
+            if (!LocalAircraft(out Aircraft me)) return Say("You are not flying.");
+            RepairUnit(me);
+            return Say("REPAIRED: aircraft restored.");
         }
 
         public string FixMe()

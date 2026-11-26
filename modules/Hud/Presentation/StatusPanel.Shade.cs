@@ -26,6 +26,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void BuildShade()
         {
             shadeRect = Pinned(root, "Shade", false);
+            shadeRect.gameObject.AddComponent<VisorGlitchExempt>();
             CanvasGroup group = shadeRect.gameObject.AddComponent<CanvasGroup>();
             group.ignoreParentGroups = true;
             group.interactable = group.blocksRaycasts = false;

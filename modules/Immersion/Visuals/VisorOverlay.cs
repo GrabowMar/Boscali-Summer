@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             bool temperatureKnown, bool enabled, float dt, Vector3 sunViewport, float sunFacing01,
             float curvature01, float reflection01)
         {
-            if (!enabled || p == null) { Hide(); return; }
+            if (!enabled || p == null || BoscaliSummer.Core.Game.ForeignMods.HudOverlaysYielded) { Hide(); return; }
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             Light sun = level != null ? level.sun : null;
             float elevation = sun != null ? Mathf.Asin(Mathf.Clamp(-sun.transform.forward.y, -1f, 1f)) * Mathf.Rad2Deg : -90f;
@@ -70,7 +70,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             light = Mathf.Clamp01(light01); sunLit = Mathf.Clamp01(sunLit01);
             sunView = new Vector4(sunViewport.x, sunViewport.y, sunViewport.z, 0f);
             if ((cues & PilotCue.Exhale) != 0 && VisorMath.FogsOnExhale(p.Exertion01, temperatureC, temperatureKnown))
-                fog.Trigger(.6f + .4f * p.Exertion01);
+                fog.Trigger(.22f + .18f * p.Exertion01);
             fog.Step(dt);
             brow = VisorMath.Ease(brow, VisorMath.Brow(p.LoadG), dt, .4f);
             bool active = Mathf.Max(Mathf.Max(tint, sunLit), Mathf.Max(fog.Value, brow)) > VisorMath.Idle;

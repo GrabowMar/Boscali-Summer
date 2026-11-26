@@ -128,13 +128,15 @@ namespace BoscaliSummer.Garrisons
         private static Dictionary<string, object> Halo(Aircraft lead, float ahead)
         {
             if (lead == null) return Failure("AirborneAutomation", "halo", "no friendly aircraft");
-            Vector3 exit = lead.GlobalPosition().AsVector3() - lead.transform.forward * 12f;
+            CargoRamp ramp = lead.GetComponentInChildren<CargoRamp>(true);
+            if (ramp != null) ramp.OpenDoor(10f);
+            Vector3 exit = lead.GlobalPosition().AsVector3() - lead.transform.forward * 10f;
             Vector3 velocity = lead.rb != null ? lead.rb.velocity : lead.transform.forward * 80f;
             Vector3 flat = new Vector3(lead.transform.forward.x, 0f, lead.transform.forward.z).normalized;
             Vector3 aim = exit + flat * ahead + Vector3.Cross(Vector3.up, flat) * (ahead * 0.3f);
             aim.y = AirAssaultController.HaloGroundAt(aim);
             HaloGlidePlan plan = HaloGlidePlan.Build(exit, velocity, aim, AirAssaultController.HaloGroundAt, 8);
-            AirAssaultVisuals.SpawnHaloDrop(plan, 0f);
+            AirAssaultVisuals.SpawnHaloDrop(plan, 0f, lead);
             Vector3 miss = plan.StickLanding - aim;
             miss.y = 0f;
             return new Dictionary<string, object>

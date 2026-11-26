@@ -23,14 +23,15 @@ namespace BoscaliSummer.Modules.Skylark
         private static object Flight(Aircraft aircraft)
         {
             DuctedThrustSystem duct = aircraft.GetComponent<DuctedThrustSystem>();
+            SkylarkFlightMode flightMode = aircraft.GetComponent<SkylarkFlightMode>();
             JetNozzle[] nozzles = SkylarkTemplate.Get<JetNozzle[]>(duct, "nozzles");
             ControlInputs inputs = aircraft.GetInputs();
             return new
             {
                 speed = aircraft.speed, altitude = aircraft.radarAlt, fuel = aircraft.fuelLevel,
-                disabled = aircraft.disabled, mass = aircraft.GetMass(), angle = duct.angle,
+                disabled = aircraft.disabled, mass = aircraft.GetMass(), angle = duct.angle, commandedAngle = flightMode.CommandedAngle,
                 pitch = inputs.pitch, roll = inputs.roll, yaw = inputs.yaw, throttle = inputs.throttle,
-                vector = SkylarkFlightMode.Name(aircraft.GetComponent<SkylarkFlightMode>().Mode), drive = aircraft.GetComponent<SkylarkDrive>().Mode.ToString(),
+                vector = SkylarkFlightMode.Name(flightMode.Mode), drive = aircraft.GetComponent<SkylarkDrive>().Mode.ToString(),
                 electric = aircraft.GetComponent<SkylarkDrive>().Electric, charge = aircraft.GetComponent<SkylarkDrive>().Charge, irSignature = aircraft.HasIRSignature(),
                 mast = aircraft.GetComponent<SkylarkMast>().Deployed, turret = TurretReport(aircraft),
                 rcs = aircraft.RCS, commandPlatform = BoscaliSummer.Core.Contracts.CommandPlatform.Is(aircraft),
@@ -43,6 +44,9 @@ namespace BoscaliSummer.Modules.Skylark
                 strobeAge = aircraft.GetComponent<SkylarkStrobe>() != null ? Time.time - aircraft.GetComponent<SkylarkStrobe>().LastFlash : -1f,
                 halberd = Halberd(aircraft), fansHeld = SkylarkControl.FansHeld, landed = aircraft.IsLanded(),
                 loadoutName = SkylarkWeapons.LoadoutName(aircraft),
+                gearRig = aircraft.GetComponent<SkylarkGear>() != null ? aircraft.GetComponent<SkylarkGear>().Inspect() : null,
+                flaps = aircraft.GetComponent<SkylarkAnimation>() != null ? aircraft.GetComponent<SkylarkAnimation>().FlapAngle : 0f,
+                airbrakes = aircraft.GetComponent<SkylarkAnimation>() != null ? aircraft.GetComponent<SkylarkAnimation>().AirbrakeAngle : 0f,
                 gears = UnityEngine.Object.FindObjectsOfType<LandingGear>().Where(g => SkylarkTemplate.Get<Aircraft>(g, "aircraft") == aircraft).Select(g => new
                 {
                     g.name, g.enabled, active = g.gameObject.activeInHierarchy, fold = SkylarkTemplate.Get<float>(g, "foldAmount"),
@@ -89,12 +93,14 @@ namespace BoscaliSummer.Modules.Skylark
             SkylarkDrive drive = aircraft.GetComponent<SkylarkDrive>();
             int ammo = aircraft.weaponStations.Count > 0 ? aircraft.weaponStations[0].Ammo : 0;
             WeaponInfo info = aircraft.weaponStations.Count > 0 ? aircraft.weaponStations[0].WeaponInfo : null;
+            (float gap, float angle) fit = turret != null ? turret.MuzzleFit() : (-1f, -1f);
             return new
             {
                 name = info != null ? info.weaponName : null, shortName = info != null ? info.shortName : null, muzzleVelocity = info != null ? info.muzzleVelocity : 0f,
                 pierce = info != null ? info.pierceDamage : 0f, ammo, lastBurst = BurstStart.TryGetValue(aircraft, out int start) ? start - ammo : -1,
                 rate = turret != null ? turret.Rate : -1f, shots = turret != null ? turret.Shots : -1, ripples = turret != null ? turret.Ripples : -1,
-                deploy = turret != null ? turret.Deploy : -1f, refused = SkylarkCoilsDryPatch.Refused,
+                deploy = turret != null ? turret.Deploy : -1f, coils = turret != null ? turret.CoilCount : 0, doors = turret != null && turret.HasBayDoors,
+                muzzleGap = fit.gap, muzzleAngle = fit.angle, refused = SkylarkCoilsDryPatch.Refused,
                 gunShots = drive.GunShots, gunDrain = drive.GunDrain, drainPerShot = drive.GunShots > 0 ? drive.GunDrain / drive.GunShots : 0f
             };
         }
@@ -152,8 +158,8 @@ namespace BoscaliSummer.Modules.Skylark
             float throttle = args.TryGetValue("throttle", out object power) ? Mathf.Clamp01(Convert.ToSingle(power)) : .5f;
             bool auto = !args.TryGetValue("autoHover", out object enabled) || Convert.ToBoolean(enabled);
             float Axis(string key) => args.TryGetValue(key, out object v) ? Mathf.Clamp(Convert.ToSingle(v), -1f, 1f) : 0f;
-            aircraft.pilots[0].SwitchStateNew(new SkylarkHoverHold(throttle, auto, Axis("pitch"), Axis("roll")));
-            return new { ok = true, mode = "native player auto-hover with neutral controls" };
+            aircraft.pilots[0].SwitchStateNew(new SkylarkHoverHold(throttle, auto, Axis("pitch"), Axis("roll"), Axis("yaw")));
+            return new { ok = true, mode = auto ? "native auto-hover" : "direct pilot controls" };
         }
 
         /// <summary>Hands the aircraft back to the native player state (ends a Hold), as a pilot at the controls.</summary>
@@ -200,10 +206,10 @@ namespace BoscaliSummer.Modules.Skylark
             if (aircraft == null || aircraft.definition.jsonKey != SkylarkTemplate.Key)
                 return new Dictionary<string, object> { ["ok"] = false, ["error"] = "expected spawned Skylark id" };
             DuctedThrustSystem system = aircraft.GetComponent<DuctedThrustSystem>();
-            aircraft.GetComponent<SkylarkFlightMode>().Set(VectorMode.Manual, false);
+            float degrees = args.TryGetValue("degrees", out object angle) ? Convert.ToSingle(angle) : 90f;
+            aircraft.GetComponent<SkylarkFlightMode>().SetSimAngle(degrees);
             object mode = SkylarkTemplate.Get<object>(system, "mode");
             SkylarkTemplate.Set(system, "mode", Enum.Parse(mode.GetType(), "Manual"));
-            float degrees = args.TryGetValue("degrees", out object angle) ? Convert.ToSingle(angle) : 90f;
             aircraft.GetInputs().customAxis1 = 1f - Mathf.Clamp(degrees, 0f, 90f) / 90f;
             return new Dictionary<string, object> { ["ok"] = true, ["commandedDegrees"] = degrees };
         }
@@ -270,13 +276,19 @@ namespace BoscaliSummer.Modules.Skylark
             };
         }
 
-        /// <summary>Drives the same entry points as the C menu:{id, vector auto|drone|plane|manual, drive auto|ev|hybrid, mast bool}.</summary>
+        /// <summary>Drives the same entry points as the C menu:{id, vector drone|plane, drive auto|ev|hybrid, mast bool}.</summary>
         public static object Modes(Dictionary<string, object> args)
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO"))) return new { ok = false };
             Aircraft aircraft = args.TryGetValue("idUnit", out object unit) ? unit as Aircraft : null;
             if (aircraft == null || aircraft.definition.jsonKey != SkylarkTemplate.Key) return new { ok = false, error = "expected Skylark id" };
-            if (args.TryGetValue("vector", out object vector)) aircraft.GetComponent<SkylarkFlightMode>().Set((VectorMode)Enum.Parse(typeof(VectorMode), (string)vector, true));
+            if (args.TryGetValue("vector", out object vector))
+            {
+                string name = ((string)vector ?? "").Trim();
+                if (!Enum.TryParse(name, true, out VectorMode parsed) || (parsed != VectorMode.Drone && parsed != VectorMode.Plane))
+                    return new { ok = false, error = "expected DRONE or PLANE" };
+                aircraft.GetComponent<SkylarkFlightMode>().Set(parsed);
+            }
             if (args.TryGetValue("drive", out object drive)) SkylarkNet.Request(aircraft, SkylarkNet.DriveAction, (byte)(DriveMode)Enum.Parse(typeof(DriveMode), (string)drive, true));
             if (args.TryGetValue("mast", out object mast)) aircraft.GetComponent<SkylarkMast>().Request(Convert.ToBoolean(mast));
             if (args.TryGetValue("gear", out object gear)) aircraft.SetGear(Convert.ToBoolean(gear));
@@ -337,11 +349,11 @@ namespace BoscaliSummer.Modules.Skylark
 
     internal sealed class SkylarkHoverHold : PilotBaseState
     {
-        private readonly float throttle, pitch, roll;
+        private readonly float throttle, pitch, roll, yaw;
         private readonly bool autoHover;
         /// <summary>Neutral sticks by default; pitch / roll hold a fixed stick deflection (agility runs).</summary>
-        internal SkylarkHoverHold(float throttle = .5f, bool autoHover = true, float pitch = 0f, float roll = 0f)
-        { this.throttle = throttle; this.autoHover = autoHover; this.pitch = pitch; this.roll = roll; }
+        internal SkylarkHoverHold(float throttle = .5f, bool autoHover = true, float pitch = 0f, float roll = 0f, float yaw = 0f)
+        { this.throttle = throttle; this.autoHover = autoHover; this.pitch = pitch; this.roll = roll; this.yaw = yaw; }
         public override void EnterState(Pilot pilot)
         {
             this.pilot = pilot; aircraft = pilot.aircraft; controlInputs = aircraft.GetInputs();
@@ -351,7 +363,7 @@ namespace BoscaliSummer.Modules.Skylark
         public override void UpdateState(Pilot pilot) { }
         public override void FixedUpdateState(Pilot pilot)
         {
-            controlInputs.pitch = pitch; controlInputs.roll = roll; controlInputs.yaw = 0; controlInputs.throttle = throttle;
+            controlInputs.pitch = pitch; controlInputs.roll = roll; controlInputs.yaw = yaw; controlInputs.throttle = throttle;
             aircraft.FilterInputs();
         }
         public override void LeaveState()

@@ -131,6 +131,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float RwrClear = ShelfRow, ShotH = 150f, WingH = 168f;
         /// <summary>The board's room in board units from the box's top: the BOARD TOP zone's top (12) to the BOARD SPINE zone's bottom (666 reference px) at the default Scale 0.85.</summary>
         public const float SpineH = (666f - 12f) / 0.85f;
+        /// <summary>Compact AIRFRAME schematic slot: tucked under CM in WIDE and to the left of the bars in STACK so it never overlaps SYS or ACE.</summary>
+        public const float AirframeW = 150f, AirframeStackW = 140f, AirframeH = 156f;
+
+        /// <summary>Slot rect for the docked native aircraft schematic in board units (top-left origin).</summary>
+        public static BoardRect AirframeSlot(in BoardGeometry geo, bool stack) => stack
+            ? new BoardRect(StackX - CellGap - AirframeStackW, 0f, AirframeStackW, AirframeH)
+            : new BoardRect((geo.Sys.Present ? geo.Sys.X : geo.Width - WingW) - CellGap - AirframeW, BarH + PageGap, AirframeW, AirframeH);
 
         /// <summary>The bar's height: one line WIDE; two lines and their gap STACK.</summary>
         public static float BarLinesH(bool stack) => stack ? BarH * 2f + StackLineGap : BarH;

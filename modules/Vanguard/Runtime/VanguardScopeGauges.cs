@@ -6,16 +6,16 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
     /// <summary>
     /// Vanguard's gauges of the TAC BOARD's row (HUD v8), each answering from state the module already holds and showing only while it has something to say:
-    /// LANCE (the RG-12 capacitor: charge while the trigger is held, recharge after a shot), AEGIS (darts left) and REMORA (drones flying, on STRIKE or SCREEN). The LANCE and AEGIS
-    /// figures are the local aircraft's own; the REMORA count is the server's registry, so it shows on the host and in solo only. SKYWELL's gauge is <see cref="Presentation.SkywellScopeFeed"/>'s.
+    /// LANCE (the RG-12 capacitor) and REMORA (drones flying, on STRIKE or SCREEN). REMORA reads the server's registry,
+    /// so it shows on the host and in solo only. SKYWELL's gauge is <see cref="Presentation.SkywellScopeFeed"/>'s.
     /// The LANCE gauge stays after the corner takeover: the RG-12 keeps its own charge bank and never draws the aircraft capacitor, so the stores header's capacitor row cannot show it.
     /// </summary>
     internal sealed class VanguardScopeGauges
     {
         private readonly IDroneCommand drones;
-        private readonly string[] percents = new string[101], lanceRounds = new string[100], dartRounds = new string[100];
+        private readonly string[] percents = new string[101], lanceRounds = new string[100];
         private Aircraft stationsFor;
-        private WeaponStation lance, aegis;
+        private WeaponStation lance;
         private int droneKey = -1;
         private string droneSub;
 
@@ -24,14 +24,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public void Register()
         {
             ScopeGauges.Register("lance", ReadLance);
-            ScopeGauges.Register("aegis", ReadAegis);
             ScopeGauges.Register("remora", ReadRemora);
         }
 
         public void Unregister()
         {
             ScopeGauges.Unregister("lance", ReadLance);
-            ScopeGauges.Unregister("aegis", ReadAegis);
             ScopeGauges.Unregister("remora", ReadRemora);
         }
 
@@ -42,13 +40,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             if (stationsFor == me) return;
             stationsFor = me;
-            lance = aegis = null;
+            lance = null;
             for (int i = 0; me.weaponStations != null && i < me.weaponStations.Count; i++)
             {
                 WeaponStation s = me.weaponStations[i];
                 if (s?.WeaponInfo == null) continue;
                 if (lance == null && s.WeaponInfo.name.Contains(VanguardKeys.LanceInfo)) lance = s;
-                if (aegis == null && s.WeaponInfo.name.Contains(VanguardKeys.AegisInfo)) aegis = s;
             }
         }
 
@@ -77,22 +74,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 Id = "lance", Label = "LANCE", Kind = GaugeKind.Arc, Value = empty ? 0f : Mathf.Clamp01(value), Text = empty ? "EMPTY" : charging && value >= 1f ? "FIRE" : Percent(value),
                 Sub = Rounds(lance.Ammo, lanceRounds, " RDS"), Tone = empty ? ScopeTone.Amber : recharging ? ScopeTone.Dim : ScopeTone.Ink, Ready = !empty && charging && value >= 1f, Rank = 60,
-            };
-            return true;
-        }
-
-        /// <summary>AEGIS: the darts left of the pod, as an arc of what it was loaded with.</summary>
-        public bool ReadAegis(out GaugeSpec gauge)
-        {
-            gauge = default;
-            if (!Local(out Aircraft me)) return false;
-            Stations(me);
-            if (aegis == null) return false;
-            int left = aegis.Ammo;
-            gauge = new GaugeSpec
-            {
-                Id = "aegis", Label = "AEGIS", Kind = GaugeKind.Arc, Value = aegis.FullAmmo > 0 ? Mathf.Clamp01((float)left / aegis.FullAmmo) : 0f, Text = left <= 0 ? "EMPTY" : Rounds(left, dartRounds, ""), Sub = "DARTS",
-                Tone = left <= 0 ? ScopeTone.Amber : ScopeTone.Ink, Rank = 48,
             };
             return true;
         }

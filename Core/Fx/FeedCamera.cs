@@ -8,7 +8,7 @@ namespace BoscaliSummer.Core.Fx
     /// <summary>How a <see cref="FeedCamera"/> picture is graded.</summary>
     internal enum FeedLook : byte
     {
-        /// <summary>A seeker video link: black and white, hard contrast, white-hot bloom, heavy coarse grain, a dark lens rim.</summary>
+        /// <summary>A clean nose-mounted optical seeker feed: natural colour with ACES tonemapping, no grain/vignette/aberration/bloom.</summary>
         Seeker,
         /// <summary>A daylight sensor ball: muted colour, light grain, a soft rim.</summary>
         Eo,
@@ -88,10 +88,10 @@ namespace BoscaliSummer.Core.Fx
             nextFrame = now + 1f / Mathf.Max(1f, Fps);
             if (Hdr && ours != null)
             {
-                float exposure = Exposure() + (look == FeedLook.WhiteHot ? -1.0f : -0.2f);
+                float exposure = Exposure() + (look == FeedLook.WhiteHot ? -1.0f : look == FeedLook.Seeker ? 0f : -0.2f);
                 ours.postExposure.value = exposure;
                 // URP tests the bloom threshold on the raw HDR frame, before exposure: in daylight (about -4 EV) the whole picture passed it and the feed went milky.
-                if (glow != null) glow.threshold.value = Threshold(look) * Mathf.Pow(2f, -exposure);
+                if (glow != null && glow.active) glow.threshold.value = Threshold(look) * Mathf.Pow(2f, -exposure);
             }
             cam.enabled = true;
             enabledFrame = Time.frameCount;
@@ -174,25 +174,31 @@ namespace BoscaliSummer.Core.Fx
 
         private static void Grade(VolumeStack s, FeedLook look)
         {
-            bool mono = look != FeedLook.Eo;
+            bool seeker = look == FeedLook.Seeker;
+            bool mono = look == FeedLook.WhiteHot;
             ColorAdjustments color = s.GetComponent<ColorAdjustments>();
-            color.saturation.value = mono ? -100f : -35f;
-            color.contrast.value = look == FeedLook.Seeker ? 15f : look == FeedLook.WhiteHot ? 18f : 12f;
-            color.postExposure.value = look == FeedLook.Seeker ? -0.2f : look == FeedLook.WhiteHot ? 0.15f : 0f;
+            color.saturation.value = mono ? -100f : seeker ? -15f : -35f;
+            color.contrast.value = seeker ? 6f : look == FeedLook.WhiteHot ? 18f : 12f;
+            color.postExposure.value = seeker ? 0f : look == FeedLook.WhiteHot ? 0.15f : 0f;
             s.GetComponent<Tonemapping>().mode.value = TonemappingMode.ACES;
             Bloom bloom = s.GetComponent<Bloom>();
+            bloom.active = !seeker;
             bloom.threshold.value = Threshold(look);
-            bloom.intensity.value = look == FeedLook.WhiteHot ? 0.25f : 0.1f;
+            bloom.intensity.value = seeker ? 0f : look == FeedLook.WhiteHot ? 0.25f : 0.1f;
             bloom.scatter.value = 0.6f;
             FilmGrain grain = s.GetComponent<FilmGrain>();
+            grain.active = !seeker;
             grain.type.value = FilmGrainLookup.Custom;      // built-in lookups are stripped from the game (NRE in SetupGrain)
             grain.texture.value = Noise();
-            grain.intensity.value = look == FeedLook.Eo ? 0.3f : look == FeedLook.WhiteHot ? 0.45f : 0.3f;
+            grain.intensity.value = seeker ? 0f : look == FeedLook.WhiteHot ? 0.45f : 0.3f;
             grain.response.value = 0.4f;
             Vignette rim = s.GetComponent<Vignette>();
-            rim.intensity.value = look == FeedLook.Eo ? 0.28f : look == FeedLook.WhiteHot ? 0.38f : 0.25f;
+            rim.active = !seeker;
+            rim.intensity.value = seeker ? 0f : look == FeedLook.WhiteHot ? 0.38f : 0.28f;
             rim.smoothness.value = 0.4f;
-            s.GetComponent<ChromaticAberration>().intensity.value = look == FeedLook.WhiteHot ? 0.25f : 0.1f;
+            ChromaticAberration ca = s.GetComponent<ChromaticAberration>();
+            ca.active = !seeker;
+            ca.intensity.value = seeker ? 0f : look == FeedLook.WhiteHot ? 0.25f : 0.1f;
         }
 
         /// <summary>Drops the camera and its picture (scene reset, feed off). Idempotent.</summary>

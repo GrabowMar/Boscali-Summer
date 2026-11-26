@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private static void Apply(HUDUnitMarker marker)
         {
-            if (marker.image == null || marker.selected || WingSettings.Instance.MapMarkers.Value == HighlightMode.Off) return;
+            if (BoscaliSummer.Core.Game.ForeignMods.HudOverlaysYielded || marker.image == null || marker.selected || WingSettings.Instance.MapMarkers.Value == HighlightMode.Off) return;
             WingMarkers.Role role = WingMarkers.RoleOf(marker.unit, out int element, out _);
             if (role == WingMarkers.Role.None) return;
             // The game's alpha carries range, stale tracks and jamming.

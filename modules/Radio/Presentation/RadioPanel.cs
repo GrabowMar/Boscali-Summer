@@ -12,13 +12,13 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private const int TabReceiver = 0, TabDeck = 1, PresetRows = 6, TrackRows = 15, MinTrackRows = 1;
         private const float ListRowHeight = 33f;
         private const string PlayTip = "Play or pause the selected track.";
-        private const string PlayNoLibraryTip = "Add OGG or WAV music, then press RESCAN.";
+        private const string PlayNoLibraryTip = "Add MP3, OGG or WAV music, then press RESCAN.";
         private const string PlayNoTracksTip = "This folder has no tracks.";
         private const string FolderPreviousTip = "Previous music folder.", FolderNextTip = "Next music folder.";
         private const string FirstFolderTip = "First folder.", LastFolderTip = "Last folder.";
         private const string TrackPreviousTip = "Previous track page.", TrackNextTip = "Next track page.";
         private const string FirstPageTip = "First page.", LastPageTip = "Last page.";
-        private const string OpenFolderTip = "Open the local OGG/WAV music folder.";
+        private const string OpenFolderTip = "Open the local MP3/OGG/WAV music folder.";
         private const string RescanTip = "Stop music and rescan the local library.";
         private static readonly MfdPanelInstaller installer = new MfdPanelInstaller(MfdSlots.Rad, "RAD", "BoscaliRadio.Screen", preferLeft: false)
             { Wrap = true, Builder = BuildScreen };
@@ -303,11 +303,11 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             }
             if (!hasFolders)
                 emptyAlert.Show(AvIcon.AlertTriangle, "NO MUSIC ON FILE",
-                    "Put OGG or WAV files in BepInEx/config/BoscaliSummer/Music, then press the rescan key. " +
+                    "Put MP3, OGG or WAV files in BepInEx/config/BoscaliSummer/Music, then press the rescan key. " +
                     "The folder key opens it.", AvState.Caution);
             else if (trackCount == 0)
                 emptyAlert.Show(AvIcon.Music, "FOLDER EMPTY",
-                    "Choose another folder with the arrow keys, or add OGG/WAV files and press RESCAN.", AvState.Info);
+                    "Choose another folder with the arrow keys, or add MP3/OGG/WAV files and press RESCAN.", AvState.Info);
             else emptyAlert.Hide();
             console.Footer.Set(hasFolders ? manager.DeckStatus : string.Empty, AvState.Inert);
         }

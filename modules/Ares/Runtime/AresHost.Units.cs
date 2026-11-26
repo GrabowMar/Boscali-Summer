@@ -23,6 +23,25 @@ namespace BoscaliSummer.Modules.Ares.Runtime
 
         private static readonly FieldInfo ImpactPrev = AccessTools.Field(typeof(ImpactDetector), "velocityPrev");
         private static readonly FieldInfo FuelPrev = AccessTools.Field(typeof(FuelTank), "velocityPrev");
+        private static readonly FieldInfo PartDamageMaterial = AccessTools.Field(typeof(UnitPart), "damageMaterial");
+        private static readonly FieldInfo PartHostedParticles = AccessTools.Field(typeof(UnitPart), "hostedParticles");
+        private static readonly FieldInfo FuelLeakRate = AccessTools.Field(typeof(FuelTank), "leakRate");
+        private static readonly FieldInfo FuelIsLeaking = AccessTools.Field(typeof(FuelTank), "isLeaking");
+        private static readonly FieldInfo FuelOnFire = AccessTools.Field(typeof(FuelTank), "onFire");
+        private static readonly FieldInfo FuelRuptured = AccessTools.Field(typeof(FuelTank), "ruptured");
+        private static readonly FieldInfo FuelLeakSystem = AccessTools.Field(typeof(FuelTank), "leakSystem");
+        private static readonly FieldInfo FuelFireEffectSpawn = AccessTools.Field(typeof(FuelTank), "fireEffectSpawn");
+        private static readonly FieldInfo FuelFireParticles = AccessTools.Field(typeof(FuelTank), "fireParticles");
+        private static readonly FieldInfo JetCondition = AccessTools.Field(typeof(Turbojet), "condition");
+        private static readonly FieldInfo JetOperable = AccessTools.Field(typeof(Turbojet), "operable");
+        private static readonly FieldInfo JetFire = AccessTools.Field(typeof(Turbojet), "engineFire");
+        private static readonly FieldInfo JetParasiticLoss = AccessTools.Field(typeof(Turbojet), "parasiticThrustLoss");
+        private static readonly FieldInfo FanCondition = AccessTools.Field(typeof(Turbofan), "condition");
+        private static readonly FieldInfo FanOperable = AccessTools.Field(typeof(Turbofan), "operable");
+        private static readonly FieldInfo FanHitPoints = AccessTools.Field(typeof(Turbofan), "hitPoints");
+        private static readonly FieldInfo FanParasiticLoss = AccessTools.Field(typeof(Turbofan), "parasiticThrustLoss");
+        private static readonly FieldInfo TurbineCondition = AccessTools.Field(typeof(TurbineEngine), "condition");
+        private static readonly FieldInfo TurbineOperable = AccessTools.Field(typeof(TurbineEngine), "operable");
 
         public int FrozenCount => frozen.Count;
         public int ProtectedCount => protectedUnits.Count;
@@ -169,8 +188,8 @@ namespace BoscaliSummer.Modules.Ares.Runtime
 
         // ------------------------------------------------------------------ per-unit actions
 
-        /// <summary>Every attached part to full hit points; a destroyed building comes back. Damage textures and fires stay (no vanilla
-        /// repair for vehicles exists, this is the closest).</summary>
+        /// <summary>Every attached part to full hit points, damage materials reset, fires/smoke cleared, fuel leaks stopped and
+        /// engines restored; a destroyed building comes back.</summary>
         internal static bool RepairUnit(Unit unit)
         {
             if (unit is Building building)
@@ -179,9 +198,79 @@ namespace BoscaliSummer.Modules.Ares.Runtime
                 building.Repair(null, 1e9f);
             }
             if (unit.partLookup != null)
+            {
                 foreach (UnitPart part in unit.partLookup)
-                    if (part != null && !part.IsDetached()) part.Repair();
+                {
+                    if (part == null || part.IsDetached()) continue;
+                    part.Repair();
+                    if (PartDamageMaterial?.GetValue(part) is DamageMaterial damageMaterial && damageMaterial.renderers != null)
+                    {
+                        foreach (Renderer renderer in damageMaterial.renderers)
+                            if (renderer != null && renderer.material != null) renderer.material.SetFloat("_HitPoints", 100f);
+                    }
+                    if (PartHostedParticles?.GetValue(part) is List<DamageParticles> hosted)
+                    {
+                        foreach (DamageParticles fx in hosted)
+                            if (fx != null) Destroy(fx.gameObject);
+                        hosted.Clear();
+                    }
+                }
+            }
+            if (unit.spawnedEffects != null)
+            {
+                foreach (DamageParticles fx in unit.spawnedEffects)
+                    if (fx != null) Destroy(fx.gameObject);
+                unit.spawnedEffects.Clear();
+            }
+            if (unit is Aircraft aircraft) RepairAircraftSystems(aircraft);
             return true;
+        }
+
+        private static void RepairAircraftSystems(Aircraft aircraft)
+        {
+            foreach (FuelTank tank in aircraft.GetComponentsInChildren<FuelTank>(true))
+            {
+                if (tank == null) continue;
+                FuelLeakRate?.SetValue(tank, 0f);
+                FuelIsLeaking?.SetValue(tank, false);
+                FuelOnFire?.SetValue(tank, false);
+                FuelRuptured?.SetValue(tank, false);
+                if (FuelLeakSystem?.GetValue(tank) is ParticleSystem leak && leak != null)
+                {
+                    leak.Stop();
+                    Destroy(leak.gameObject);
+                    FuelLeakSystem.SetValue(tank, null);
+                }
+                if (FuelFireEffectSpawn?.GetValue(tank) is GameObject fire && fire != null)
+                {
+                    Destroy(fire);
+                    FuelFireEffectSpawn.SetValue(tank, null);
+                }
+                FuelFireParticles?.SetValue(tank, null);
+            }
+            if (aircraft.engineStates == null) return;
+            foreach (IEngine engine in aircraft.engineStates)
+            {
+                if (engine is Turbojet jet && jet != null)
+                {
+                    JetCondition?.SetValue(jet, 1f);
+                    JetOperable?.SetValue(jet, true);
+                    JetFire?.SetValue(jet, false);
+                    JetParasiticLoss?.SetValue(jet, 0f);
+                }
+                else if (engine is Turbofan fan && fan != null)
+                {
+                    FanCondition?.SetValue(fan, 1f);
+                    FanOperable?.SetValue(fan, true);
+                    FanHitPoints?.SetValue(fan, 100f);
+                    FanParasiticLoss?.SetValue(fan, 0f);
+                }
+                else if (engine is TurbineEngine turbine && turbine != null)
+                {
+                    TurbineCondition?.SetValue(turbine, 1f);
+                    TurbineOperable?.SetValue(turbine, true);
+                }
+            }
         }
 
         internal static bool RearmUnit(Unit unit) => RearmUnit(unit, true);

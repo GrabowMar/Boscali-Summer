@@ -30,6 +30,9 @@ namespace BoscaliSummer.Modules.Radio
             var gauge = new RadioScopeGauge(radio);
             gauge.Register();      // the TAC BOARD's RADIO gauge
             context.OnTeardown(gauge.Unregister);
+            context.AddClientSetting("RADIO COMMS", "CIVILIAN RADIO",
+                "Play civilian station adverts and news bulletins between radio music tracks.",
+                context.Settings.Radio.BroadcastTalk);
         }
     }
 }

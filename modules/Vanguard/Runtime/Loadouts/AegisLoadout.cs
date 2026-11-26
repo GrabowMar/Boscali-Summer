@@ -1,83 +1,353 @@
+using System;
 using System.Collections.Generic;
+using System.Reflection;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Networking;
 using BoscaliSummer.Modules.Vanguard.Presentation;
+using Cysharp.Threading.Tasks;
+using HarmonyLib;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
     /// <summary>
-    /// AEGIS-3 SNAP trigger. Runs where the aircraft is simulated (owner client for players, server for AI) in place of
-    /// WeaponManager.Fire for the AEGIS station (AegisSnapPatch). One dart per press goes through the vanilla
-    /// LaunchMount path, so the rail, the Cmd/Rpc replay on every peer and the server spawn stay native.
+    /// AEGIS-3 countermeasure pod. Attached to each spawned VG_Aegis_Pod and registered with the aircraft's
+    /// CountermeasureManager so it appears in the countermeasures cycle/menu. When triggered, automatically
+    /// targets and destroys the closest inbound missile heading at the carrier.
+    /// </summary>
+    internal sealed class AegisCountermeasure : Countermeasure, ICountermeasureCapacity
+    {
+        private static readonly FieldInfo Fired = AccessTools.Field(typeof(MountedMissile), "fired");
+        private static readonly FieldInfo RailDirection = AccessTools.Field(typeof(MountedMissile), "railDirection");
+        private static readonly FieldInfo RailVector = AccessTools.Field(typeof(MountedMissile), "railVector");
+        private static readonly MethodInfo RemoveFromHardpoint = AccessTools.Method(typeof(MountedMissile), "RemoveFromHardpoint");
+        private static readonly MethodInfo RailLaunch = AccessTools.Method(typeof(MountedMissile), "RailLaunch", new[] { typeof(Unit), typeof(Unit) });
+
+        private readonly List<MountedMissile> cells = new List<MountedMissile>();
+        private Hardpoint mount;
+        private bool rearmPending;
+
+        public int MaxAmmo { get; private set; }
+        public int PodIndex { get; internal set; }
+
+        internal static bool HasNativeRail => Fired?.FieldType == typeof(bool) &&
+            RailDirection?.FieldType == typeof(MountedMissile.RailDirection) && RailVector?.FieldType == typeof(Vector3) &&
+            RemoveFromHardpoint != null && RailLaunch?.ReturnType == typeof(UniTask);
+
+        internal void AddCell(MountedMissile cell, Aircraft carrier, Hardpoint hardpoint)
+        {
+            if (cell == null) return;
+            if (!cells.Contains(cell)) cells.Add(cell);
+            if (aircraft != null || carrier == null) return;
+
+            mount = hardpoint;
+            if (mount.part != null) mount.part.onPartDetached += OnHardpointDetached;
+            displayName = AegisIntercept.DisplayName;
+            displayImage = cell.info != null ? cell.info.weaponIcon : null;
+            ammo = MaxAmmo = GetComponentsInChildren<MountedMissile>(true).Length;
+            AegisDoors.AttachPod(transform);
+            AegisTrigger.RegisterPod(carrier, this);
+            AttachToUnit(carrier);
+        }
+
+        public override void Fire() => AegisTrigger.Fire(aircraft);
+
+        public override void UpdateHUD()
+        {
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            if (hud != null && aircraft != null && hud.aircraft == aircraft &&
+                AircraftReadout.ActiveCountermeasure(aircraft) is AegisCountermeasure)
+                hud.DisplayCountermeasures(displayName, displayImage, AegisTrigger.TotalAmmo(aircraft));
+        }
+
+        public override void Rearm(Aircraft carrier, Unit rearmer)
+        {
+            rearmPending = false;
+            bool rearmed = false;
+            foreach (MountedMissile cell in cells)
+            {
+                if (cell == null || cell.ammo > 0 || !cell.IsAttached()) continue;
+                // A rearm event can arrive during the rail animation on either peer.
+                if (cell.gameObject.activeSelf)
+                {
+                    rearmPending = true;
+                    continue;
+                }
+                cell.Rearm(1, null);
+                rearmed = true;
+            }
+            RecountAmmo();
+            if (rearmed && rearmer != null && GameManager.IsLocalAircraft(carrier) && SceneSingleton<AircraftActionsReport>.i != null)
+                SceneSingleton<AircraftActionsReport>.i.ReportText("AEGIS rearmed by " + rearmer.unitName, 5f);
+        }
+
+        private void RecountAmmo()
+        {
+            ammo = 0;
+            foreach (MountedMissile cell in cells)
+                if (cell != null) ammo += cell.ammo;
+        }
+
+        internal int ReadyCell()
+        {
+            for (int i = 0; i < cells.Count; i++)
+            {
+                MountedMissile cell = cells[i];
+                if (cell != null && cell.ammo > 0 && cell.IsAttached()) return i;
+            }
+            return -1;
+        }
+
+#if !PUBLIC_RELEASE
+        internal void TrimTo(int keep)
+        {
+            for (int i = cells.Count - 1; i >= keep; i--)
+            {
+                MountedMissile cell = cells[i];
+                if (cell == null || cell.ammo <= 0) continue;
+                Spend(cell);
+                cell.gameObject.SetActive(false);
+            }
+            RefreshSelectedHud();
+        }
+#endif
+
+        internal bool LaunchCell(int cellIndex, Missile threat)
+        {
+            if (cellIndex < 0 || cellIndex >= cells.Count) return false;
+            MountedMissile cell = cells[cellIndex];
+            if (cell == null || cell.ammo <= 0 || !cell.IsAttached()) return false;
+
+            RailVector.SetValue(cell, (MountedMissile.RailDirection)RailDirection.GetValue(cell) switch
+            {
+                MountedMissile.RailDirection.Forward => Vector3.forward,
+                MountedMissile.RailDirection.Backward => Vector3.back,
+                MountedMissile.RailDirection.Up => Vector3.up,
+                MountedMissile.RailDirection.Left => Vector3.left,
+                MountedMissile.RailDirection.Right => Vector3.right,
+                _ => Vector3.down,
+            });
+            Spend(cell);
+            if (mount.bayDoors != null) mount.SpringOpenBayDoors();
+            AegisDoors.Open(cell);
+            Release(cell, threat).Forget();
+            return true;
+        }
+
+        private void Spend(MountedMissile cell)
+        {
+            RemoveFromHardpoint.Invoke(cell, null);
+            Fired.SetValue(cell, true);
+            cell.ammo = 0;
+            RecountAmmo();
+        }
+
+        private async UniTask Release(MountedMissile cell, Missile threat)
+        {
+            // Use the game's rail animation, launch FX and server spawn without its weapon-station RPC.
+            await (UniTask)RailLaunch.Invoke(cell, new object[] { aircraft, threat });
+            if (this != null && aircraft != null && rearmPending)
+            {
+                Rearm(aircraft, null);
+                RefreshSelectedHud();
+            }
+        }
+
+        internal void RefreshSelectedHud()
+        {
+            if (aircraft != null && GameManager.IsLocalAircraft(aircraft) &&
+                AircraftReadout.ActiveCountermeasure(aircraft) is AegisCountermeasure)
+                aircraft.countermeasureManager.UpdateHUD();
+        }
+
+        private void OnHardpointDetached(UnitPart part) => Destroy(this);
+
+        protected override void OnDestroy()
+        {
+            if (mount?.part != null) mount.part.onPartDetached -= OnHardpointDetached;
+            if (aircraft != null) AegisTrigger.UnregisterPod(aircraft, this);
+            base.OnDestroy();
+        }
+    }
+
+    /// <summary>
+    /// AEGIS-3 countermeasure coordinator. Manages per-aircraft pods, tap/cooldown gating, and closest inbound
+    /// missile selection when the pilot triggers the AEGIS countermeasure.
     /// </summary>
     internal static class AegisTrigger
     {
-        private static readonly Dictionary<WeaponStation, float> LastPress = new Dictionary<WeaponStation, float>();
-        private static readonly List<WeaponStation> Dead = new List<WeaponStation>();
-        private static readonly Dictionary<WeaponInfo, bool> Known = new Dictionary<WeaponInfo, bool>();
-
-        // Per-frame callers (HUD, the WeaponManager.Fire patch): WeaponInfo.name allocates a string, so cache it per info asset.
-        public static bool IsAegis(WeaponStation station)
+        private sealed class DeployState
         {
-            WeaponInfo info = station?.WeaponInfo;
-            if (info == null) return false;
-            if (!Known.TryGetValue(info, out bool aegis)) Known[info] = aegis = info.name.Contains(VanguardKeys.AegisInfo);
-            return aegis;
+            public readonly List<AegisCountermeasure> Pods = new List<AegisCountermeasure>();
+            public int LastFrame = -1;
+            public float LastSeen = -1f;
+            public float NextFire;
+            public float NextNotice;
         }
+
+        private static readonly Dictionary<Aircraft, DeployState> States = new Dictionary<Aircraft, DeployState>();
+        private static readonly List<Aircraft> DeadAircraft = new List<Aircraft>();
+        private static readonly List<Missile> CandidateMissiles = new List<Missile>();
+        private static AegisThreat[] candidateBuf = new AegisThreat[32];
+
+        public static bool IsAegis(WeaponInfo info) =>
+            info != null && info.name.StartsWith(VanguardKeys.AegisInfo, StringComparison.Ordinal);
 
         public static void Clear()
         {
-            LastPress.Clear();
-            Known.Clear();
+            States.Clear();
+            CandidateMissiles.Clear();
         }
 
-        // Stations are rebuilt on every loadout change or respawn; their old WeaponStation objects hold dead cells.
+        internal static void RegisterPod(Aircraft aircraft, AegisCountermeasure pod)
+        {
+            if (aircraft == null || pod == null) return;
+            PruneDead();
+            if (!States.TryGetValue(aircraft, out DeployState state))
+                States[aircraft] = state = new DeployState();
+            pod.PodIndex = state.Pods.Count;
+            state.Pods.Add(pod);
+        }
+
+        internal static void UnregisterPod(Aircraft aircraft, AegisCountermeasure pod)
+        {
+            if (aircraft == null || !States.TryGetValue(aircraft, out DeployState state)) return;
+            state.Pods.Remove(pod);
+            for (int i = 0; i < state.Pods.Count; i++)
+                if (state.Pods[i] != null) state.Pods[i].PodIndex = i;
+            if (state.Pods.Count == 0) States.Remove(aircraft);
+        }
+
+        internal static bool HasPods(Aircraft aircraft) =>
+            aircraft != null && States.ContainsKey(aircraft);
+
+        internal static int TotalAmmo(Aircraft aircraft)
+        {
+            if (aircraft == null || !States.TryGetValue(aircraft, out DeployState state)) return 0;
+            int sum = 0;
+            foreach (AegisCountermeasure pod in state.Pods)
+                if (pod != null) sum += pod.ammo;
+            return sum;
+        }
+
+#if !PUBLIC_RELEASE
+        internal static void TrimAircraftDarts(Aircraft aircraft, int keep)
+        {
+            if (aircraft == null || !States.TryGetValue(aircraft, out DeployState state)) return;
+            int remaining = Mathf.Max(0, keep);
+            foreach (AegisCountermeasure pod in state.Pods)
+            {
+                if (pod == null) continue;
+                int take = Mathf.Min(remaining, pod.MaxAmmo);
+                pod.TrimTo(take);
+                remaining -= take;
+            }
+        }
+#endif
+
+        internal static void MirrorLaunch(Aircraft aircraft, byte podIndex, byte cellIndex, byte reportedAmmo)
+        {
+            if (aircraft == null || aircraft.IsServer || !States.TryGetValue(aircraft, out DeployState state) ||
+                podIndex >= state.Pods.Count) return;
+            AegisCountermeasure pod = state.Pods[podIndex];
+            if (pod == null || !pod.LaunchCell(cellIndex, null)) return;
+            pod.ammo = Mathf.Clamp(reportedAmmo, 0, pod.MaxAmmo);
+            pod.RefreshSelectedHud();
+            VanguardStats.Bump("aegis.mirror");
+        }
+
+        internal static void Fire(Aircraft aircraft)
+        {
+            if (aircraft == null || aircraft.disabled || !aircraft.IsServer ||
+                !States.TryGetValue(aircraft, out DeployState state) || Time.frameCount == state.LastFrame) return;
+            float now = Time.timeSinceLevelLoad;
+            bool held = AegisIntercept.IsHeld(now, state.LastSeen);
+            state.LastFrame = Time.frameCount;
+            state.LastSeen = now;
+            if (now < state.NextFire) return;
+
+            AegisCountermeasure pod = null;
+            int cellIndex = -1;
+            foreach (AegisCountermeasure candidate in state.Pods)
+            {
+                if (candidate != null && (cellIndex = candidate.ReadyCell()) >= 0)
+                {
+                    pod = candidate;
+                    break;
+                }
+            }
+            if (pod == null)
+            {
+                Notice(aircraft, state, AegisCue.Empty, now, held);
+                return;
+            }
+
+            Missile threat = FindClosestThreat(aircraft, allowEngagedFallback: !held);
+            if (threat == null)
+            {
+                VanguardStats.Bump("aegis.noThreat");
+                Notice(aircraft, state, AegisCue.NoThreat, now, held);
+                return;
+            }
+
+            if (!pod.LaunchCell(cellIndex, threat)) return;
+            state.NextFire = now + AegisIntercept.FireCooldown;
+            VanguardStats.Bump("aegis.cmLaunch");
+            float range = FastMath.Distance(threat.GlobalPosition(), aircraft.GlobalPosition());
+            AegisNet.RaiseLaunch(aircraft, (byte)pod.PodIndex, (byte)cellIndex, (byte)Mathf.Clamp(pod.ammo, 0, byte.MaxValue), range);
+        }
+
+        private static void Notice(Aircraft aircraft, DeployState state, AegisCue cue, float now, bool held)
+        {
+            if (held || now < state.NextNotice) return;
+            state.NextNotice = now + AegisIntercept.NoticeCooldown;
+            AegisNet.Raise(aircraft, cue);
+        }
+
+        private static Missile FindClosestThreat(Aircraft aircraft, bool allowEngagedFallback)
+        {
+            CandidateMissiles.Clear();
+            GlobalPosition hostPos = aircraft.GlobalPosition();
+            Vector3 hostVel = aircraft.rb != null ? aircraft.rb.velocity : Vector3.zero;
+            List<Unit> units = UnitRegistry.allUnits;
+            int count = 0;
+
+            for (int i = 0; i < units.Count; i++)
+            {
+                if (!(units[i] is Missile m) || m == null || m.disabled || m.owner == aircraft) continue;
+                if (m.definition != null && VanguardKeys.RoleOf(m.definition.jsonKey) == VanguardRole.Interceptor) continue;
+
+                if (count >= candidateBuf.Length) Array.Resize(ref candidateBuf, candidateBuf.Length * 2);
+                Vector3 mVel = m.rb != null ? m.rb.velocity : Vector3.zero;
+                candidateBuf[count] = new AegisThreat
+                {
+                    RelativePosition = m.GlobalPosition() - hostPos,
+                    RelativeVelocity = mVel - hostVel,
+                    MissileVelocity = mVel,
+                    TrackingHost = m.targetID == aircraft.persistentID,
+                    EnemyFaction = m.NetworkHQ != aircraft.NetworkHQ,
+                    AlreadyEngaged = VanguardRegistry.IsAegisTargeting(aircraft, m),
+                };
+                CandidateMissiles.Add(m);
+                count++;
+            }
+
+            int pick = AegisIntercept.PickClosest(candidateBuf, count, allowEngagedFallback);
+            return pick >= 0 ? CandidateMissiles[pick] : null;
+        }
+
         private static void PruneDead()
         {
-            foreach (WeaponStation s in LastPress.Keys)
-                if (s.Weapons.Count == 0 || s.Weapons[0] == null) Dead.Add(s);
-            for (int i = 0; i < Dead.Count; i++) LastPress.Remove(Dead[i]);
-            Dead.Clear();
+            foreach (Aircraft a in States.Keys)
+                if (a == null) DeadAircraft.Add(a);
+            foreach (Aircraft a in DeadAircraft) States.Remove(a);
+            DeadAircraft.Clear();
         }
-
-        public static SnapVerdict Press(Aircraft aircraft, WeaponStation station, Unit target)
-        {
-            float now = Time.timeSinceLevelLoad;
-            bool known = LastPress.TryGetValue(station, out float last);
-            if (!known) PruneDead();
-            bool held = known && now - last < AegisSnap.HeldGap;
-            LastPress[station] = now;
-            // Tap to fire: holding the trigger must not dump the pod's darts.
-            if (held || aircraft.remoteSim || station.SafetyIsOn(aircraft) || station.SalvoInProgress) return SnapVerdict.Busy;
-            if (station.Ammo > 0 && !station.Ready())
-            {
-                // Also covers a dart the pilot just launched by hand, which is still cycling the cell.
-                AegisHud.Notify(aircraft, HudTone.Caution, "SNAP — NO SOLUTION", "POD CYCLING");
-                return SnapVerdict.Busy;
-            }
-
-            bool has = target != null && !target.disabled;
-            Vector3 to = has ? target.GlobalPosition() - aircraft.GlobalPosition() : Vector3.zero;
-            float range = to.magnitude;
-            SnapVerdict verdict = AegisSnap.Judge(has, target is Aircraft, range, Vector3.Angle(aircraft.transform.forward, to),
-                station.Ammo);
-            if (verdict != SnapVerdict.Fire)
-            {
-                VanguardStats.Bump("aegis.noSolution");
-                AegisHud.Notify(aircraft, HudTone.Caution, "SNAP — NO SOLUTION", AegisSnap.Reason(verdict, range));
-                return verdict;
-            }
-            station.LaunchMount(aircraft, target, target.GlobalPosition());
-            VanguardStats.Bump("aegis.snapPress");
-            AegisHud.Notify(aircraft, HudTone.Info, "SNAP AWAY", AegisSnap.Km(range) + " km");
-            return verdict;
-        }
-
     }
 
-    /// <summary>AEGIS dart flight (server): cold-launch slew, lead pursuit and hit-to-kill contact for both uses.</summary>
+    /// <summary>AEGIS dart flight (server): cold-launch slew, lead pursuit and hit-to-kill contact.</summary>
     internal sealed partial class VanguardFlight
     {
         private bool snap; // manual SNAP at an air unit; a rejected snap flies out as a plain dart
@@ -104,7 +374,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             missile.rb.angularVelocity = Vector3.zero;
         }
 
-        private float AegisLifetime() => snap ? AegisSnap.Lifetime : AegisSnap.DefenceLifetime;
+        private float AegisLifetime() => snap ? AegisSnap.Lifetime : AegisIntercept.DefenceLifetime;
 
         private bool SnapInEnvelope()
         {
@@ -157,8 +427,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 }
                 if (target is Missile threat && AegisEnvelope.Contact(previousInterceptRelative, relative, AegisEnvelope.ProximityRadius))
                 {
-                    threat.TakeDamage(AegisSnap.Damage(PierceDamage(missile), closing.magnitude, 1f), 0f, 1f, 0f, 0f, Dealer());
+                    float damage = Mathf.Max(AegisSnap.Damage(PierceDamage(missile), closing.magnitude, 1f), AegisIntercept.MinKillDamage);
+                    threat.TakeDamage(damage, 0f, 1f, 0f, 0f, Dealer());
                     VanguardStats.Bump("aegis.defenceContact");
+                    AegisNet.Raise(launcher, AegisCue.Destroyed);
                     Detonate();
                     return;
                 }

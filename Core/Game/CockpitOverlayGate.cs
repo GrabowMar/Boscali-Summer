@@ -11,7 +11,7 @@ namespace BoscaliSummer.Core.Game
     /// </summary>
     internal static class CockpitOverlayGate
     {
-        public static bool Open() => NotSuppressed() && HudUp();
+        public static bool Open() => !ForeignMods.HudOverlaysYielded && NotSuppressed() && HudUp();
 
         /// <summary>Not a batch run, the maximized map, a pause or cinematic mode: the one list every HUD-space overlay (and the Hud module's forced external view) respects.</summary>
         public static bool NotSuppressed() =>

@@ -2,18 +2,28 @@ using System;
 
 namespace BoscaliSummer.Modules.Vanguard.Domain
 {
-    /// <summary>The thermal flash and firestorm scorch the land itself, not a 60 km disc. The reach
-    /// passes the map corners so every terrain chunk receives soot; strength follows the first minute.</summary>
+    /// <summary>The thermal flash and firestorm char only the affected land around ground zero;
+    /// strength ramps up over the first minute.</summary>
     internal static class Sa74Burn
     {
-        public const float StartSeconds = 2f, FullSeconds = 60f;
+        public const float StartSeconds = 2f, FullSeconds = 60f, MaxRadius = 22000f;
         public const int Steps = 10;
-        private const float ReachFactor = 1.4f;
+        private const float MapShare = .35f;
 
         public static float Reach(float spanX, float spanY)
         {
-            float span = Math.Max(Finite(spanX) ? Math.Abs(spanX) : 0f, Finite(spanY) ? Math.Abs(spanY) : 0f);
-            return span * ReachFactor;
+            if (!Finite(spanX) || !Finite(spanY)) return 0f;
+            float span = Math.Max(Math.Abs(spanX), Math.Abs(spanY));
+            return span <= 0f ? 0f : Math.Min(MaxRadius, span * MapShare);
+        }
+
+        public static float EffectiveRadius(float maxReach, float frontRadius, float groundClearance)
+        {
+            if (!Finite(maxReach) || !Finite(frontRadius) || !Finite(groundClearance) || maxReach <= 0f || frontRadius <= 0f)
+                return 0f;
+            float r = Math.Min(maxReach, frontRadius);
+            float c = Math.Max(0f, groundClearance);
+            return c >= r ? 0f : (float)Math.Sqrt(r * r - c * c);
         }
 
         public static float Strength(float age)

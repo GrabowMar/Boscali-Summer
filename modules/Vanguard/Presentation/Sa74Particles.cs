@@ -308,6 +308,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                         color = Color.Lerp(new Color(.56f, .43f, .29f), new Color(.39f, .38f, .35f), Mathf.Clamp01(age / 180f));
                         color.a = (band == 0 ? .62f : band == 1 ? .42f : .20f) * appear * disperse;
                         if (wet) color = new Color(.84f, .87f, .90f, color.a * .40f);
+                        else color.a *= Mathf.Lerp(.45f, 1f, Mathf.InverseLerp(1500f, 5500f, radial));
                         break;
                     }
                     case Kind.Ejecta:
@@ -339,6 +340,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                         color = Color.Lerp(new Color(.34f, .29f, .24f), new Color(.36f, .37f, .38f), rise);
                         color.a = .23f * lifeFade * appear * disperse;
                         if (wet) color = Color.Lerp(color, new Color(.80f, .82f, .84f, color.a), .7f);
+                        else color.a *= .55f;
                         break;
                     }
                     default:

@@ -236,7 +236,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             s.Holder.anchoredPosition = new Vector2(x, y);
         }
 
-        /// <summary>The mark's solid triangle hanging under the tick line (apex up), and past an end of the tape a chevron beside it pointing out. White vertices: the slot's colour tints them.</summary>
+        /// <summary>The mark's symbol hanging under the tick line (filled arrowhead for threats, diamond for emitters/aces, open caret for navigation), and past an end of the tape a chevron beside it pointing out. White vertices: the slot's colour tints them.</summary>
         private static void Shape(Slot s, int beyond, TapeTone tone)
         {
             AvQuadBuffer b = s.Shape.Buffer;
@@ -248,14 +248,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 // Past the tape's end: one crisp chevron pointing out, in place of the symbol; the word stays under it.
                 AvStrokes.Chevron(b, beyond * TapeLayout.ChevronOut * 0.5f, mid, TapeLayout.ChevronSize, beyond > 0 ? 0f : 180f, ChevronStroke, white);
             }
-            else if (tone == TapeTone.Warning) b.Add(0f, top, -h, bottom, h, bottom, h, bottom, white, white, white, white);      // threat: solid triangle
-            else if (tone == TapeTone.Caution)      // spike / ace: open triangle
+            else if (tone == TapeTone.Warning) b.Add(0f, top, -h, bottom, 0f, bottom + 2.5f, h, bottom, white, white, white, white);      // threat: filled arrowhead
+            else if (tone == TapeTone.Caution) AvStrokes.Diamond(b, 0f, mid, h * 0.95f, ChevronStroke, white);                              // spike / ace: open diamond
+            else                                                                                                                             // navigation: open caret
             {
                 AvStrokes.Line(b, 0f, top, -h, bottom, ChevronStroke, white);
                 AvStrokes.Line(b, 0f, top, h, bottom, ChevronStroke, white);
-                AvStrokes.Line(b, -h, bottom, h, bottom, ChevronStroke, white);
             }
-            else AvStrokes.Diamond(b, 0f, mid, h * 0.85f, ChevronStroke, white);      // navigation: diamond
             s.Shape.Commit();
         }
 

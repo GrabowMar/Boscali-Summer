@@ -358,7 +358,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float y = RouteLayout.Row(0).Y + RowMid;
             CargoLight light = CargoManifestRules.Light(d);
             ScopeTone lt = light == CargoLight.Green ? Hi : light == CargoLight.Amber ? Amber : Red;
-            g.Ring(8f, y, 6f, lt, 1f, 1.5f, lt, 0.9f);
+            g.ToneTick(3f, y - 6f, lt);
             bool cleared = CargoManifestRules.LoadCheck(d) == CargoCheck.Pass && CargoManifestRules.SafetyCheck(d) == CargoCheck.Pass;
             float t = CargoManifestRules.WindowSeconds(d), rw = 0f;
             if (cleared && t > 0f && float.IsPositiveInfinity(t)) rw = g.Text("NOT CLOSING", W, y, Amber, HudType.Label, ScopeAlign.Right, true);

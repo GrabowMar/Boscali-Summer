@@ -1,9 +1,7 @@
-using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Net;
-using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Runtime;
 using Mirage;
 using Mirage.Serialization;
@@ -12,86 +10,118 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Networking
 {
+    internal enum DroneAction : byte { Screen, Strike, RamOn, RamOff, Share, Private, Pilot, Release }
+
     [NetworkMessage]
     internal struct VanguardDroneOrder
     {
         public byte Protocol;
-        public bool Strike;
-        public uint TargetId;
-        /// <summary>A drone link order: DroneMode + 1 for the drone <see cref="DroneId"/> (WPT at X/Y/Z); 0 = a designation order.</summary>
-        public byte Link;
-        public uint DroneId;
-        public float X, Y, Z;
+        public byte Action;
+        public uint UnitId;
     }
 
-    /// <summary>
-    /// Client intent for the Vanguard designation bus (DroneOrders) and the drone link (SteerOrders). The host resolves the
-    /// launcher from the sender's own aircraft (never from the message), the target and the drone from their persistent ids,
-    /// and only takes a drone the sender launched.
-    /// </summary>
+    [NetworkMessage]
+    internal struct VanguardDroneState
+    {
+        public byte Protocol;
+        public uint DroneId, OwnerId, PilotId, Lease;
+        public bool Shared;
+    }
+
+    [NetworkMessage]
+    internal struct VanguardDroneControls
+    {
+        public byte Protocol;
+        public uint DroneId, Lease, Sequence;
+        public float Pitch, Roll, Yaw, Throttle;
+    }
+
+    /// <summary>The server resolves the authenticated player for each order and owns sharing and pilot leases.</summary>
     internal sealed class VanguardNet : MonoBehaviour, ISceneService
     {
-        internal const byte ProtocolVersion = 5; // 4: a HAND order carries the course (X, degrees) and altitude (Y); 5: RAM MODE (Link = RamLink)
-        internal const byte RamLink = 200;      // Link value of a RAM MODE switch: X > 0.5 = on
-        private const float OrderInterval = 0.2f; // per aircraft; a re-designate right after DESIGNATE must not be eaten
+        internal const byte ProtocolVersion = 6;
+        private const float OrderInterval = 0.2f, ResendInterval = 2f, InputInterval = 0.025f;
 
         private readonly SenderThrottle throttle = new SenderThrottle();
-        private HandlerSlot serverSlot;
-        private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<VanguardDroneOrder>(Receive);
-        private float nextRegistration;
+        private readonly SenderThrottle inputThrottle = new SenderThrottle();
+        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<VanguardDroneOrder, VanguardDroneControls>(Receive, ReceiveControls);
+        private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<VanguardDroneState>(ReceiveState);
+        private float nextRegistration, nextResend;
 
-        private Unit designated; // local view of the last order; lapses when that target dies
-        private Aircraft designatedFrom; // the local aircraft that sent it: a respawn starts clean
+        private Unit designated;
+        private Aircraft designatedFrom;
+        private bool ramMode;
+        private Aircraft ramFrom;
 
         public bool Striking => designated != null && !designated.disabled && designatedFrom != null && !designatedFrom.disabled &&
             GameManager.GetLocalAircraft(out Aircraft me) && me == designatedFrom;
 
         public bool CanStrike => LocalTarget(out _, out _);
 
-        /// <summary>RAM MODE as this client last set it (local view; the host holds the rule in DroneOrders).</summary>
         public bool RamMode => ramMode && ramFrom != null && !ramFrom.disabled && GameManager.GetLocalAircraft(out Aircraft me) && me == ramFrom;
-        private bool ramMode;
-        private Aircraft ramFrom;
 
-        /// <summary>The local pilot's first selected target, else null (DRONE LINK's SEND TO TARGET).</summary>
-        public Unit Target => LocalTarget(out _, out Unit target) ? target : null;
-
-        /// <summary>The local pilot's live designation (what the drones work on), else null: the UAV feed tracks and boxes it.</summary>
         public Unit Designated => Striking ? designated : null;
 
         private void Awake()
         {
             MirageSerializers.Strict.Install<VanguardDroneOrder>(
-                (Action<NetworkWriter, VanguardDroneOrder>)((writer, value) =>
+                (writer, value) =>
                 {
                     writer.WriteByte(value.Protocol);
-                    writer.WriteBoolean(value.Strike);
-                    writer.WritePackedUInt32(value.TargetId);
-                    writer.WriteByte(value.Link);
-                    if (value.Link == 0) return;
-                    writer.WritePackedUInt32(value.DroneId);
-                    writer.WriteSingle(value.X);
-                    writer.WriteSingle(value.Y);
-                    writer.WriteSingle(value.Z);
-                }),
-                (Func<NetworkReader, VanguardDroneOrder>)(reader =>
+                    writer.WriteByte(value.Action);
+                    writer.WritePackedUInt32(value.UnitId);
+                },
+                reader =>
                 {
                     byte protocol = reader.ReadByte();
                     if (protocol != ProtocolVersion) return new VanguardDroneOrder { Protocol = protocol };
-                    var order = new VanguardDroneOrder
+                    return new VanguardDroneOrder { Protocol = protocol, Action = reader.ReadByte(), UnitId = reader.ReadPackedUInt32() };
+                });
+
+            MirageSerializers.Strict.Install<VanguardDroneState>(
+                (writer, value) =>
+                {
+                    writer.WriteByte(value.Protocol);
+                    writer.WritePackedUInt32(value.DroneId);
+                    writer.WritePackedUInt32(value.OwnerId);
+                    writer.WritePackedUInt32(value.PilotId);
+                    writer.WritePackedUInt32(value.Lease);
+                    writer.WriteBoolean(value.Shared);
+                },
+                reader =>
+                {
+                    byte protocol = reader.ReadByte();
+                    if (protocol != ProtocolVersion) return new VanguardDroneState { Protocol = protocol };
+                    return new VanguardDroneState
                     {
-                        Protocol = protocol,
-                        Strike = reader.ReadBoolean(),
-                        TargetId = reader.ReadPackedUInt32(),
-                        Link = reader.ReadByte(),
+                        Protocol = protocol, DroneId = reader.ReadPackedUInt32(), OwnerId = reader.ReadPackedUInt32(),
+                        PilotId = reader.ReadPackedUInt32(), Lease = reader.ReadPackedUInt32(), Shared = reader.ReadBoolean(),
                     };
-                    if (order.Link == 0) return order;
-                    order.DroneId = reader.ReadPackedUInt32();
-                    order.X = reader.ReadSingle();
-                    order.Y = reader.ReadSingle();
-                    order.Z = reader.ReadSingle();
-                    return order;
-                }));
+                });
+
+            MirageSerializers.Strict.Install<VanguardDroneControls>(
+                (writer, value) =>
+                {
+                    writer.WriteByte(value.Protocol);
+                    writer.WritePackedUInt32(value.DroneId);
+                    writer.WritePackedUInt32(value.Lease);
+                    writer.WritePackedUInt32(value.Sequence);
+                    writer.WriteSingle(value.Pitch);
+                    writer.WriteSingle(value.Roll);
+                    writer.WriteSingle(value.Yaw);
+                    writer.WriteSingle(value.Throttle);
+                },
+                reader =>
+                {
+                    byte protocol = reader.ReadByte();
+                    if (protocol != ProtocolVersion) return new VanguardDroneControls { Protocol = protocol };
+                    return new VanguardDroneControls
+                    {
+                        Protocol = protocol, DroneId = reader.ReadPackedUInt32(), Lease = reader.ReadPackedUInt32(), Sequence = reader.ReadPackedUInt32(),
+                        Pitch = reader.ReadSingle(), Roll = reader.ReadSingle(), Yaw = reader.ReadSingle(), Throttle = reader.ReadSingle(),
+                    };
+                });
         }
 
         public void ResetForScene()
@@ -101,83 +131,74 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             ramMode = false;
             ramFrom = null;
             throttle.Clear();
-            pendingLinks.Clear();
+            inputThrottle.Clear();
+            DroneRoster.Clear();
         }
 
         public void Strike()
         {
-            if (!LocalTarget(out Aircraft aircraft, out Unit target)) return;
-            if (!Send(aircraft, true, target)) return;
+            if (!LocalTarget(out Aircraft aircraft, out Unit target) || !SendOrder(aircraft, DroneAction.Strike, target)) return;
             designated = target;
             designatedFrom = aircraft;
         }
 
         public void Screen()
         {
-            if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null) return;
-            if (!Send(aircraft, false, null)) return;
+            if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null || !SendOrder(aircraft, DroneAction.Screen)) return;
             designated = null;
             designatedFrom = null;
         }
 
-        /// <summary>RAM MODE on or off for the local aircraft's REMORAs: they ram instead of firing.</summary>
         public void SetRamMode(bool on)
         {
-            if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null) return;
-            bool server = GameAccess.IsServer();
-            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (!server && (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated)) return;
+            if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null ||
+                !SendOrder(aircraft, on ? DroneAction.RamOn : DroneAction.RamOff)) return;
             ramMode = on;
             ramFrom = aircraft;
-            if (server) { DroneOrders.SetRamMode(aircraft, on); return; }
-            client.Send(new VanguardDroneOrder { Protocol = ProtocolVersion, Link = RamLink, X = on ? 1f : 0f });
         }
 
-        /// <summary>A drone link order for one of the local aircraft's drones (AUTO releases it); the host applies it to SteerOrders.</summary>
-        public void SendLink(Missile drone, DroneMode mode, GlobalPosition point)
+        private static bool SendOrder(Aircraft aircraft, DroneAction action, Unit target = null)
         {
-            if (drone == null || !GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null) return;
             if (GameAccess.IsServer())
             {
-                if (Linkable(aircraft, drone)) SteerOrders.Set(drone, mode, point);
-                return;
+                if (action == DroneAction.RamOn || action == DroneAction.RamOff) DroneOrders.SetRamMode(aircraft, action == DroneAction.RamOn);
+                else DroneOrders.Order(aircraft, target);
+                return true;
             }
-            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return;
-            // The host takes one order per aircraft per OrderInterval and drops the rest without a word, while this client's mirror
-            // already shows them: queue per drone (the newest wins) and send at the host's pace (Flush).
-            pendingLinks[drone] = new VanguardDroneOrder
+            return Send(new VanguardDroneOrder
             {
-                Protocol = ProtocolVersion,
-                Link = (byte)(mode + 1),
-                DroneId = drone.persistentID.Id,
-                X = point.x, Y = point.y, Z = point.z,
-            };
-            Flush();
+                Protocol = ProtocolVersion, Action = (byte)action, UnitId = target != null ? target.persistentID.Id : 0u,
+            });
         }
 
-        private readonly Dictionary<Missile, VanguardDroneOrder> pendingLinks = new Dictionary<Missile, VanguardDroneOrder>();
-        private float nextLinkSend;
-
-        private void Flush()
+        internal bool SendDroneAction(Missile drone, DroneAction action)
         {
-            if (pendingLinks.Count == 0 || Time.unscaledTime < nextLinkSend) return;
-            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return;
-            Missile first = null;
-            foreach (Missile m in pendingLinks.Keys) { first = m; break; }
-            VanguardDroneOrder order = pendingLinks[first];
-            pendingLinks.Remove(first);
-            if (first == null || first.disabled) return;
-            nextLinkSend = Time.unscaledTime + OrderInterval + 0.05f;
-            client.Send(order);
+            if (action < DroneAction.Share || action > DroneAction.Release || !DroneRoster.TryGet(drone, out DroneRoster.Entry entry) ||
+                !GameManager.GetLocalPlayer(out Player player) || !entry.VisibleTo(player)) return false;
+            if (GameAccess.IsServer()) return ApplyDroneAction(player, entry, action);
+            return Send(new VanguardDroneOrder { Protocol = ProtocolVersion, Action = (byte)action, UnitId = drone.persistentID.Id });
         }
 
-        /// <summary>The sender's own live, steerable drone inside link range.</summary>
-        private static bool Linkable(Aircraft aircraft, Missile drone) =>
-            drone != null && !drone.disabled && drone.owner == aircraft && drone.definition != null &&
-            VanguardKeys.IsSteerable(VanguardKeys.RoleOf(drone.definition.jsonKey)) &&
-            DroneLink.InRange(FastMath.Distance(aircraft.GlobalPosition(), drone.GlobalPosition()), WatchtowerPod.LinkScale(aircraft));
+        internal static bool SendDroneControls(Missile drone, Vector3 axes, float throttle)
+        {
+            if (!DroneRoster.TryGet(drone, out DroneRoster.Entry entry) ||
+                !GameManager.GetLocalPlayer(out Player player) || !entry.ControlledBy(player)) return false;
+            var message = new VanguardDroneControls
+            {
+                Protocol = ProtocolVersion, DroneId = drone.persistentID.Id, Lease = entry.Lease, Sequence = ++entry.SentSequence,
+                Pitch = axes.x, Yaw = axes.y, Roll = axes.z, Throttle = throttle,
+            };
+            if (GameAccess.IsServer()) return ApplyControls(player, entry, message);
+            return Send(message, Channel.Unreliable);
+        }
+
+        private static bool Send<T>(T message, Channel channel = Channel.Reliable)
+        {
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return false;
+            client.Send(message, channel);
+            return true;
+        }
 
         private static bool LocalTarget(out Aircraft aircraft, out Unit target)
         {
@@ -188,63 +209,139 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             return target != null && !target.disabled;
         }
 
-        private static bool Send(Aircraft aircraft, bool strike, Unit target)
-        {
-            if (GameAccess.IsServer())
-            {
-                DroneOrders.Order(aircraft, strike ? target : null);
-                return true;
-            }
-            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return false;
-            client.Send(new VanguardDroneOrder
-            {
-                Protocol = ProtocolVersion,
-                Strike = strike,
-                TargetId = target != null ? target.persistentID.Id : 0u,
-            });
-            return true;
-        }
-
         private void Update()
         {
-            Flush();
-            if (Time.unscaledTime < nextRegistration) return;
-            nextRegistration = Time.unscaledTime + 0.5f;
-            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
-            ServerHandlers.Swap(network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null);
-            throttle.Prune(Time.unscaledTime);
+            if (!NetFeed.Poll(ServerHandlers, ClientHandlers, ref nextRegistration)) return;
+            DroneRoster.Prune();
+            float now = Time.unscaledTime;
+            throttle.Prune(now);
+            inputThrottle.Prune(now);
+            if (!GameAccess.IsServer()) return;
+            bool resend = now >= nextResend;
+            if (resend) nextResend = now + ResendInterval;
+            foreach (DroneRoster.Entry entry in DroneRoster.LiveEntries)
+            {
+                bool released = entry.Occupied && (!entry.ValidPilot || entry.InputExpired(now));
+                if (released) entry.SetPilot(null);
+                if (released || resend && entry.OwnerId != 0) Publish(entry);
+            }
         }
 
         private void Receive(INetworkPlayer sender, VanguardDroneOrder message)
         {
-            if (message.Protocol != ProtocolVersion || !sender.IsAuthenticated ||
-                !sender.TryGetPlayer<Player>(out Player player) || player == null) return;
-            Aircraft aircraft = player.Aircraft;
-            if (aircraft == null || aircraft.disabled) return;
-            if (!throttle.Allow((ulong)aircraft.persistentID.Id, Time.unscaledTime, OrderInterval)) return;
-            if (message.Link == RamLink)
+            if (!TrySender(sender, message.Protocol, out Player player) || message.Action > (byte)DroneAction.Release) return;
+            DroneAction action = (DroneAction)message.Action;
+            if (!throttle.Allow(DroneRoster.PlayerId(player), Time.unscaledTime, OrderInterval)) return;
+            if (action >= DroneAction.Share)
             {
-                DroneOrders.SetRamMode(aircraft, message.X > 0.5f);
+                if (FindDrone(message.UnitId, out DroneRoster.Entry entry)) ApplyDroneAction(player, entry, action);
                 return;
             }
-            if (message.Link > 0)
+
+            Aircraft aircraft = player.Aircraft;
+            if (aircraft == null || aircraft.disabled) return;
+            if (action == DroneAction.RamOn || action == DroneAction.RamOff)
             {
-                if (message.Link > (byte)DroneMode.Waypoint + 1 || !float.IsFinite(message.X) || !float.IsFinite(message.Y) || !float.IsFinite(message.Z)) return;
-                if (!UnitRegistry.TryGetUnit(new PersistentID { Id = message.DroneId }, out Unit unit) || !(unit is Missile drone) ||
-                    !Linkable(aircraft, drone)) return;
-                SteerOrders.Set(drone, (DroneMode)(message.Link - 1), new GlobalPosition(message.X, message.Y, message.Z));
+                DroneOrders.SetRamMode(aircraft, action == DroneAction.RamOn);
                 return;
             }
             Unit target = null;
-            if (message.Strike && !UnitRegistry.TryGetUnit(new PersistentID { Id = message.TargetId }, out target)) return;
-            if (target != null && (target.disabled || target.NetworkHQ == aircraft.NetworkHQ)) return;
-            // Only a unit the pilot's faction already tracks: the drones fly to the target's true position.
-            if (target != null && (aircraft.NetworkHQ == null || !aircraft.NetworkHQ.TryGetKnownPosition(target, out _))) return;
+            if (action == DroneAction.Strike &&
+                (!UnitRegistry.TryGetUnit(new PersistentID { Id = message.UnitId }, out target) || target == null ||
+                    target.disabled || target.NetworkHQ == aircraft.NetworkHQ || aircraft.NetworkHQ == null ||
+                    !aircraft.NetworkHQ.TryGetKnownPosition(target, out _))) return;
             DroneOrders.Order(aircraft, target);
         }
 
-        private void OnDestroy() => ServerHandlers.Release();
+        private static bool ApplyDroneAction(Player player, DroneRoster.Entry entry, DroneAction action)
+        {
+            if (!entry.VisibleTo(player)) return false;
+            switch (action)
+            {
+                case DroneAction.Share:
+                case DroneAction.Private:
+                    if (!entry.Owner(player)) return false;
+                    entry.Shared = action == DroneAction.Share;
+                    if (!entry.Shared && entry.Occupied && !entry.Owner(entry.Pilot)) entry.SetPilot(null);
+                    break;
+                case DroneAction.Pilot:
+                    if (entry.ControlledBy(player)) return true;
+                    if (entry.Occupied || !DroneRoster.InRange(player, entry) || DroneRoster.ControlledBy(player) != null) return false;
+                    entry.SetPilot(player);
+                    break;
+                case DroneAction.Release:
+                    if (!entry.ControlledBy(player)) return false;
+                    entry.SetPilot(null);
+                    break;
+                default:
+                    return false;
+            }
+            Publish(entry);
+            return true;
+        }
+
+        private void ReceiveControls(INetworkPlayer sender, VanguardDroneControls message)
+        {
+            if (!TrySender(sender, message.Protocol, out Player player) || !FindDrone(message.DroneId, out DroneRoster.Entry entry) ||
+                !entry.ControlledBy(player) || !inputThrottle.Allow(DroneRoster.PlayerId(player), Time.unscaledTime, InputInterval)) return;
+            ApplyControls(player, entry, message);
+        }
+
+        private static bool ApplyControls(Player player, DroneRoster.Entry entry, VanguardDroneControls message)
+        {
+            if (!entry.ControlledBy(player) || !entry.ValidPilot || message.Lease != entry.Lease ||
+                !Axis(message.Pitch) || !Axis(message.Roll) || !Axis(message.Yaw) ||
+                !(message.Throttle >= 0f && message.Throttle <= 1f) || !entry.AcceptInput(message.Sequence, Time.unscaledTime)) return false;
+            DronePilot.Receive(entry.Missile, player, new Vector3(message.Pitch, message.Yaw, message.Roll), message.Throttle);
+            return true;
+        }
+
+        private static bool Axis(float value) => value >= -1f && value <= 1f;
+
+        private static bool TrySender(INetworkPlayer sender, byte protocol, out Player player)
+        {
+            player = null;
+            return protocol == ProtocolVersion && sender != null && sender.IsAuthenticated && sender.IsConnected &&
+                sender.TryGetPlayer(out player) && player != null && DroneRoster.PlayerId(player) != 0;
+        }
+
+        private static bool FindDrone(uint id, out DroneRoster.Entry entry)
+        {
+            entry = null;
+            return UnitRegistry.TryGetUnit(new PersistentID { Id = id }, out Unit unit) &&
+                unit is Missile drone && DroneRoster.TryGet(drone, out entry);
+        }
+
+        private static void Publish(DroneRoster.Entry entry)
+        {
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
+            if (server == null || !server.Active) return;
+            var state = new VanguardDroneState
+            {
+                Protocol = ProtocolVersion, DroneId = entry.Missile.persistentID.Id, Shared = entry.Shared,
+                OwnerId = entry.OwnerId, PilotId = entry.PilotId, Lease = entry.Lease,
+            };
+            IReadOnlyList<INetworkPlayer> peers = server.AuthenticatedPlayers;
+            for (int i = 0; i < peers.Count; i++)
+            {
+                INetworkPlayer peer = peers[i];
+                if (peer != null && peer != server.LocalPlayer && peer.IsConnected &&
+                    peer.TryGetPlayer<Player>(out Player player) && entry.Friendly(player)) peer.Send(state);
+            }
+        }
+
+        private void ReceiveState(INetworkPlayer sender, VanguardDroneState message)
+        {
+            if (message.Protocol != ProtocolVersion || GameAccess.IsServer() || !FindDrone(message.DroneId, out DroneRoster.Entry entry)) return;
+            entry.Mirror(message.OwnerId, message.PilotId, message.Lease, message.Shared);
+        }
+
+        private void OnDestroy()
+        {
+            ServerHandlers.Release();
+            ClientHandlers.Release();
+            DroneRoster.Clear();
+        }
     }
 
     /// <summary>What every Vanguard net service repeats: the 2 Hz handler poll and the host-to-clients send.</summary>

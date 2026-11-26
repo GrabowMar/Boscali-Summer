@@ -7,42 +7,51 @@ namespace BoscaliSummer.Modules.Skylark
     /// <summary>
     /// The C2 mast: a command-and-control antenna that rises out of the spine. Out, and only then, the aircraft is a command platform
     /// (Core CommandPlatform: longer strike reach, cheaper and quicker calls), at a price: the mast adds radar cross-section on every peer.
-    /// It raises itself in a steady hover unless the pilot stowed it or the drive runs silent on the battery, and lowers itself above
-    /// 70 m/s. The art node is optional, the state, the bonus and the signature work without it. Replicated by SkylarkNet.
+    /// The mast stays flush until the pilot deploys it, and lowers itself above 70 m/s.
+    /// The optional art and the radar signature follow the state replicated by SkylarkNet.
     /// </summary>
     internal sealed class SkylarkMast : MonoBehaviour
     {
         private const float Travel = .45f, FoldSeconds = 1.5f, RetractSpeed = 70f; // art: authored flush (stowed), rises 0.45 m
         internal const float Signature = .05f; // radar cross-section of the raised mast (the Skylark's own is 0.03)
-        private const float HoverSpeed = 8f, HoverAlt = 3f, HoverSeconds = 2f, AskInterval = 3f;
         [SerializeField] private Transform mast;
+        [SerializeField] private Renderer beacon;
         private SkylarkHinge hinge;
+        private MaterialPropertyBlock beaconBlock;
         private Aircraft aircraft;
-        private SkylarkDrive drive;
-        private float hovering, nextAsk;
-        private bool pilotStowed, signed;
+        private bool signed, beaconLit;
 
         internal bool Deployed { get; private set; }
 
-        internal void Configure(Dictionary<string, Transform> nodes) => nodes.TryGetValue("C2_Mast", out mast);
+        internal void Configure(Dictionary<string, Transform> nodes)
+        {
+            nodes.TryGetValue("C2_Mast", out mast);
+            beacon = nodes.TryGetValue("C2_Mast_Beacon", out Transform b) ? b.GetComponent<Renderer>() : null;
+        }
 
         private void Awake()
         {
             aircraft = GetComponent<Aircraft>();
-            drive = GetComponent<SkylarkDrive>();
+            beaconBlock = new MaterialPropertyBlock();
             if (mast != null) hinge = new SkylarkHinge(transform, mast, Vector3.up, 0f, Vector3.up * Travel);
         }
 
-        /// <summary>Owner peer: the pilot's own choice (C menu). A stow holds until the pilot raises it again or lands.</summary>
+        /// <summary>Owner peer: the pilot's own choice on the C menu.</summary>
         internal void Request(bool deploy)
         {
             if (deploy && aircraft.speed > RetractSpeed) { SkylarkControl.Say("C2 MAST: TOO FAST TO RAISE"); return; }
-            pilotStowed = !deploy;
             SkylarkNet.Request(aircraft, SkylarkNet.MastAction, (byte)(deploy ? 1 : 0));
         }
 
-        /// <summary>Any peer: the replicated state.</summary>
-        internal void Set(bool deployed) => Flip(deployed, false);
+        /// <summary>The host checks the aircraft's current limit before accepting a pilot request.</summary>
+        internal void SetRequested(bool deployed)
+        {
+            if (deployed && (aircraft.disabled || aircraft.speed > RetractSpeed)) return;
+            ApplyState(deployed);
+        }
+
+        /// <summary>Apply the state approved by the host, including on observers.</summary>
+        internal void ApplyState(bool deployed) => Flip(deployed, false);
 
         private void Flip(bool deployed, bool tooFast)
         {
@@ -61,21 +70,25 @@ namespace BoscaliSummer.Modules.Skylark
             aircraft.ModifyRCS(on ? Signature : -Signature);
         }
 
-        private void Update()
-        {
-            if (aircraft.disabled || !GameManager.IsLocalAircraft(aircraft)) return;
-            if (aircraft.radarAlt < .5f) pilotStowed = false;
-            bool hover = aircraft.speed < HoverSpeed && aircraft.radarAlt > HoverAlt && aircraft.Ignition;
-            hovering = hover ? hovering + Time.deltaTime : 0f;
-            if (Deployed || pilotStowed || hovering < HoverSeconds || drive != null && drive.Electric || Time.time < nextAsk) return;
-            nextAsk = Time.time + AskInterval;
-            SkylarkNet.Request(aircraft, SkylarkNet.MastAction, 1);
-        }
-
         private void LateUpdate()
         {
-            if (Deployed && aircraft.speed > RetractSpeed) Flip(false, true);
+            if (Deployed && (aircraft.disabled || aircraft.speed > RetractSpeed) && GameAccess.IsServer())
+            {
+                Flip(false, !aircraft.disabled);
+                SkylarkNet.Broadcast(aircraft);
+            }
             hinge?.Step(Deployed ? 1f : 0f, FoldSeconds, Time.deltaTime);
+            if (beacon != null)
+            {
+                bool on = Deployed && !aircraft.disabled && aircraft.Ignition && Mathf.FloorToInt(Time.time * 2.5f) % 2 == 0;
+                if (on != beaconLit)
+                {
+                    beaconLit = on;
+                    SkylarkMeshKit.SetLamp(beacon, beaconBlock,
+                        on ? new Color(.95f, .58f, .10f) : new Color(.08f, .07f, .06f),
+                        on ? new Color(1.4f, .80f, .12f) : Color.black);
+                }
+            }
         }
 
         private void OnDestroy() => Sign(false);

@@ -30,6 +30,10 @@ namespace BoscaliSummer.Modules.Skylark
                 .Select(r => new { owner = part.name, renderer = r.name, hp = r.sharedMaterial.GetFloat("_HitPoints"),
                     damage = r.sharedMaterial.GetTexture("_BasecolorDmg")?.name })).ToArray();
             Canopy[] canopies = SkylarkTemplate.Get<Canopy[]>(aircraft, "canopies");
+            Canopy primaryCanopy = canopies.FirstOrDefault(c => c != null);
+            Renderer windscreen = primaryCanopy != null && primaryCanopy.ejectionTransform != null
+                ? primaryCanopy.ejectionTransform.GetComponent<Renderer>() : null;
+            Bounds glassBounds = windscreen != null ? SkylarkTemplate.LocalBounds(aircraft.transform, new[] { windscreen }) : default;
             var pilots = UnityEngine.Object.FindObjectsOfType<PilotDismounted>().Where(p => p.parentUnit.Equals(aircraft.persistentID))
                 .Select(p => new { state = p.animationState.ToString(), onRail = p.IsOnEjectionRail, position = V(p.transform.position),
                     velocity = V(p.rb.velocity), separation = Vector3.Distance(p.transform.position, aircraft.transform.position) }).ToArray();
@@ -50,7 +54,11 @@ namespace BoscaliSummer.Modules.Skylark
                 stores, allStoresClear = stores.Length > 0 && stores.All(s => s.fanBoundsDisjoint), skin,
                 damagedWingHp = skin.Where(s => s.owner == "wing1_L").Select(s => s.hp).DefaultIfEmpty(-1f).Min(),
                 neighborWingHp = skin.Where(s => s.owner == "wing1_R").Select(s => s.hp).DefaultIfEmpty(-1f).Min(),
-                ejected = aircraft.HasEjected(), canopyUpSpeed = canopies.Where(c => c != null).Select(c => SkylarkTemplate.Get<Rigidbody>(c, "rb"))
+                ejected = aircraft.HasEjected(),
+                canopyOpen = primaryCanopy != null ? SkylarkTemplate.Get<float>(primaryCanopy, "openAmount") : -1f,
+                canopyRoof = windscreen != null ? glassBounds.max.y : -1f,
+                canopySill = windscreen != null ? glassBounds.min.y : -1f,
+                canopyUpSpeed = canopies.Where(c => c != null).Select(c => SkylarkTemplate.Get<Rigidbody>(c, "rb"))
                     .Where(rb => rb != null).Select(rb => rb.velocity.y - aircraft.rb.velocity.y).DefaultIfEmpty(0f).Max(), // relative: the airframe may be sinking
                 pilots, separatedPilots = pilots.Count(p => !p.onRail && p.separation > 3f),
                 unparentedCanopies = canopies.Count(c => c != null && c.ejectionTransform != null && c.ejectionTransform.parent == null),

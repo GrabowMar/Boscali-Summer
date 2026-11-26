@@ -148,10 +148,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The other corners are the board's too: they follow its life (a stale or hidden board stands them down) and the board's gate (a pause, the maximised map, cinematic mode).
             cornersSuppressed = !CockpitOverlayGate.NotSuppressed();
             CornersFrame(root != null && hasBoard && !stale, false);
-            if (corner == null) return;
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
-            bool alive = Options.Enabled && Options.ShowStores && root != null && hasBoard && !stale && !headerFault && root.gameObject.activeInHierarchy;
             bool hudUp = hud != null && hud.iconLayer != null && hud.iconLayer.gameObject.activeInHierarchy, batch = Application.isBatchMode;
+            bool boardLive = Options.Enabled && root != null && hasBoard && !stale && root.gameObject.activeInHierarchy;
+            bool airframeWant = boardLive && allow.ShowSystems && !underNative && hudUp && !batch;
+            if (airframeWant && airframeArtRect != null && nativeStatus != null && nativeStatus.Sync(airframeArtRect, Palette(), airframeDamaged))
+            {
+                Show(airframeRect, true);
+            }
+            else
+            {
+                nativeStatus?.Release();
+                Show(airframeRect, false);
+            }
+            if (corner == null) return;
+            bool alive = boardLive && Options.ShowStores && !headerFault;
             corner.Apply(NativeTakeover.Hide(alive, true, hudUp, batch, header.WeaponDrawn), NativeTakeover.Hide(alive, true, hudUp, batch, header.CmDrawn), NativeTakeover.Hide(alive, true, hudUp, batch, header.CapDrawn));
         }
     }

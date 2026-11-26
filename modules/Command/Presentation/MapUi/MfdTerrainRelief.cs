@@ -1274,6 +1274,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return ProjectAt(worldX, worldZ, GroundHeight(worldX, worldZ) + SurfaceClearance, out point);
         }
 
+        internal static float AirTrackHeight(GlobalPosition point)
+        {
+            float ground = GroundHeight(point.x, point.z);
+            float lift = AirLift(point.y, ground);
+            return ground + SurfaceClearance + (lift > .5f ? lift : 0f);
+        }
+
+        internal static bool TryProjectAirTrack(GlobalPosition fix, out Vector2 point)
+        {
+            point = default;
+            return IsDrawing && source != null && ProjectAt(fix.x, fix.z, AirTrackHeight(fix), out point);
+        }
+
+        private static float AirLift(float altitude, float ground) =>
+            Mathf.Clamp((altitude - seaLevel) * VerticalScale * ModelWidth / 81920f - ground, 0f, MaximumAirLift);
+
         private static bool TryProjectAtHeight(float worldX, float worldZ, float modelY,
             out Vector2 point)
         {
@@ -1595,9 +1611,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             float groundHeight = GroundHeight(fix.X, fix.Z);
             Transform symbol = icon.iconImage.transform;
-            float lift = fix.Airborne ? Mathf.Clamp(
-                (fix.Altitude - seaLevel) * VerticalScale * ModelWidth / 81920f -
-                groundHeight, 0f, MaximumAirLift) : 0f;
+            float lift = fix.Airborne ? AirLift(fix.Altitude, groundHeight) : 0f;
             Vector2 point = default;
             Vector3 groundPoint, parentPoint;
             if (fast)

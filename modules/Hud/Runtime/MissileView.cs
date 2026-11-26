@@ -1,19 +1,27 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace BoscaliSummer.Modules.Hud.Runtime
 {
     /// <summary>
-    /// Missile follow-camera: points the orbit camera at one of our missiles, cycling with the
-    /// C-menu. Saves the previous following unit + state on entry and restores both on exit;
-    /// if the followed missile dies or leaves the tracked list, steps to the next live one or
-    /// drops back to the aircraft. Client-local, no networking.
+    /// Missile POV camera: mounts the main camera on the nose of one of our missiles looking
+    /// forward with all HUD/map overlays hidden. Saves the previous following unit + state on
+    /// entry and restores both on exit; when the followed missile hits or is destroyed, returns
+    /// to the player's aircraft automatically. Client-local, no networking.
     /// </summary>
     internal sealed class MissileView
     {
+        private const float PovFov = 55f;
+        private const float PovNearClip = 0.5f;
+
+        private readonly MissilePovState povState;
         private Missile current;
         private Unit returnTo;
         private CameraBaseState returnState;
         private int index = -1;
+        private bool exiting;
+
+        public MissileView() => povState = new MissilePovState(this);
 
         public bool Active => current != null;
 
@@ -26,14 +34,14 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (missiles == null || missiles.Count == 0) return false;
             CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
             if (cam == null) return false;
-            Missile first = FirstLive(missiles);
-            if (first == null) return false;
+            Missile latest = LastLive(missiles);
+            if (latest == null) return false;
             if (current == null)
             {
-                returnTo = cam.followingUnit;
-                returnState = cam.currentState;
+                returnTo = cam.followingUnit != null ? cam.followingUnit : LocalAircraft();
+                returnState = cam.currentState != povState ? cam.currentState : cam.cockpitState;
             }
-            return Follow(cam, missiles, IndexOf(missiles, first));
+            return Follow(cam, missiles, IndexOf(missiles, latest));
         }
 
         public bool Next(IReadOnlyList<Missile> missiles) => Step(missiles, 1, index >= 0 ? index : 0);
@@ -42,30 +50,45 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         public void Exit()
         {
-            CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
-            Missile was = current;
-            current = null;
-            index = -1;
-            if (cam == null) { returnTo = null; returnState = null; return; }
-            // Only restore when we still own the camera; the pilot may have switched away.
-            if (was != null && cam.followingUnit == was)
+            if (exiting) return;
+            exiting = true;
+            try
             {
-                if (returnTo != null && !returnTo.disabled) cam.SetFollowingUnit(returnTo);
-                if (returnState != null) cam.SwitchState(returnState);
+                CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
+                Missile was = current;
+                Unit backUnit = returnTo;
+                CameraBaseState backState = returnState;
+                if (was != null) was.onDisableUnit -= OnFollowedDisabled;
+                current = null;
+                index = -1;
+                returnTo = null;
+                returnState = null;
+                if (cam == null) return;
+                // Restore when we still own the camera OR vanilla's Cam_OnFollowingUnitDisabled already dropped it to null/freeState.
+                bool owned = was == null || cam.followingUnit == was || cam.followingUnit == null || cam.currentState == povState;
+                if (!owned) return;
+                Unit target = backUnit != null && !backUnit.disabled ? backUnit : LocalAircraft();
+                if (target != null && !target.disabled)
+                {
+                    cam.SetFollowingUnit(target);
+                    CameraBaseState state = backState != null && backState != povState ? backState : cam.cockpitState;
+                    if (state != null && cam.currentState != state) cam.SwitchState(state);
+                }
             }
-            returnTo = null;
-            returnState = null;
+            finally
+            {
+                exiting = false;
+            }
         }
 
-        /// <summary>Call each board tick: drops a dead follow, and clears if the pilot took the camera back.</summary>
+        /// <summary>Call each board tick: returns to plane if the missile ended, or releases if the pilot switched camera away.</summary>
         public void Tick(IReadOnlyList<Missile> missiles)
         {
             if (current == null) return;
             CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
-            if (cam == null) { current = null; index = -1; return; }
-            if (cam.followingUnit != current)
+            if (cam == null)
             {
-                // Pilot switched camera manually (or a cutscene did): release quietly.
+                current.onDisableUnit -= OnFollowedDisabled;
                 current = null;
                 index = -1;
                 returnTo = null;
@@ -75,11 +98,25 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             int at = IndexOf(missiles, current);
             if (current.disabled || at < 0)
             {
-                // The followed one is gone: the missile that slid into its slot is next, not the one after it.
-                if (!Step(missiles, 1, index - 1)) Exit();
+                Exit();
+                return;
+            }
+            if (cam.followingUnit != current || cam.currentState != povState)
+            {
+                // Pilot switched camera manually (or a cutscene did): release quietly.
+                current.onDisableUnit -= OnFollowedDisabled;
+                current = null;
+                index = -1;
+                returnTo = null;
+                returnState = null;
                 return;
             }
             index = at;   // the list can reorder or shrink under us; the index must never go stale
+        }
+
+        private void OnFollowedDisabled(Unit unit)
+        {
+            if (ReferenceEquals(unit, current)) Exit();
         }
 
         private bool Step(IReadOnlyList<Missile> missiles, int delta, int start)
@@ -106,19 +143,28 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (m == null || m.disabled) return false;
             if (current == null)
             {
-                returnTo = cam.followingUnit;
-                returnState = cam.currentState;
+                returnTo = cam.followingUnit != null ? cam.followingUnit : LocalAircraft();
+                returnState = cam.currentState != povState ? cam.currentState : cam.cockpitState;
+            }
+            else
+            {
+                current.onDisableUnit -= OnFollowedDisabled;
             }
             current = m;
             index = at;
             cam.SetFollowingUnit(m);
-            if (cam.orbitState != null) cam.SwitchState(cam.orbitState);
+            // Subscribe after SetFollowingUnit so vanilla's Cam_OnFollowingUnitDisabled runs first and Exit() immediately re-attaches to the plane.
+            m.onDisableUnit += OnFollowedDisabled;
+            cam.SwitchState(povState);
             return true;
         }
 
-        private static Missile FirstLive(IReadOnlyList<Missile> missiles)
+        private static Aircraft LocalAircraft() =>
+            GameManager.GetLocalAircraft(out Aircraft local) && local != null && !local.disabled ? local : null;
+
+        private static Missile LastLive(IReadOnlyList<Missile> missiles)
         {
-            for (int i = 0; i < missiles.Count; i++)
+            for (int i = missiles.Count - 1; i >= 0; i--)
                 if (missiles[i] != null && !missiles[i].disabled) return missiles[i];
             return null;
         }
@@ -129,6 +175,69 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             for (int i = 0; i < missiles.Count; i++)
                 if (ReferenceEquals(missiles[i], m)) return i;
             return -1;
+        }
+
+        private sealed class MissilePovState : CameraBaseState
+        {
+            private readonly MissileView owner;
+            private bool hidMap;
+
+            public MissilePovState(MissileView owner) => this.owner = owner;
+
+            public override void EnterState(CameraStateManager cam)
+            {
+                cam.followingUnit?.SetDoppler(false);
+                cam.cameraPivot.SetParent(Datum.origin);
+                cam.transform.SetParent(cam.cameraPivot);
+                cam.transform.localPosition = Vector3.zero;
+                cam.transform.localRotation = Quaternion.identity;
+                cam.mainCamera.nearClipPlane = PovNearClip;
+                cam.mainCamera.fieldOfView = PovFov;
+                CameraStateManager.cameraMode = CameraMode.orbit;
+                FlightHud.EnableCanvas(false);
+                DynamicMap map = SceneSingleton<DynamicMap>.i;
+                if (map != null && map.gameObject.activeSelf && !DynamicMap.mapMaximized)
+                {
+                    hidMap = true;
+                    DynamicMap.EnableCanvas(false);
+                }
+                SnapPose(cam);
+            }
+
+            public override void LeaveState(CameraStateManager cam)
+            {
+                cam.mainCamera.fieldOfView = cam.desiredFOV;
+                if (hidMap)
+                {
+                    hidMap = false;
+                    DynamicMap map = SceneSingleton<DynamicMap>.i;
+                    if (map != null && !DynamicMap.mapMaximized) DynamicMap.EnableCanvas(true);
+                }
+            }
+
+            public override void UpdateState(CameraStateManager cam)
+            {
+                Missile m = owner.current;
+                if (m == null || m.disabled)
+                {
+                    owner.Exit();
+                    return;
+                }
+                SnapPose(cam);
+            }
+
+            public override void FixedUpdateState(CameraStateManager cam) { }
+
+            private void SnapPose(CameraStateManager cam)
+            {
+                Missile m = owner.current;
+                if (m == null || m.disabled) return;
+                Transform t = m.transform;
+                cam.cameraPivot.SetPositionAndRotation(t.position + t.forward * (m.maxRadius + 0.5f), t.rotation);
+                cam.transform.localPosition = Vector3.zero;
+                cam.transform.localRotation = Quaternion.identity;
+                cam.cameraVelocity = m.rb != null ? m.rb.velocity : Vector3.zero;
+            }
         }
     }
 }

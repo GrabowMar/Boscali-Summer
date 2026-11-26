@@ -492,6 +492,10 @@ namespace BoscaliSummer.Garrisons
                 defense.unitPrefab, position.ToGlobalPosition(), rotation, owner, airbase,
                 RooftopPlacement.BuildMarkerName(nameHead, roofExtents), false, null);
             if (core == null) return false;
+            // Air-assault rooftop occupations (no airbase membership) carry their squad's capture
+            // strength so troops dropped onto enemy towns actively capture the area.
+            if (airbase == null)
+                core.ModifyCaptureStrength(TroopDeploymentMath.DefaultSquadSize);
             NestRegistry.Add(core);
             if (previous == null)
             {

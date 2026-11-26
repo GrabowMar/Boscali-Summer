@@ -84,7 +84,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public static void Rescan() => dirty = true;
 
         // TMP owns its labels and fallback submeshes; their material getter may clone a null shared material.
-        private static bool IsLineArt(Graphic graphic) => graphic != null && !(graphic is TMP_Text) && !(graphic is TMP_SubMeshUI);
+        // HUD shade/backdrop layers carry VisorGlitchExempt so damage/jam noise never tears or splits the shadow.
+        private static bool IsLineArt(Graphic graphic) =>
+            graphic != null && !(graphic is TMP_Text) && !(graphic is TMP_SubMeshUI) &&
+            graphic.GetComponentInParent<VisorGlitchExempt>() == null;
 
         /// <summary>
         /// On a (re)build (<see cref="Attach"/> of a new holder, <see cref="Rescan"/>) and, while the glitch runs, twice a second: every graphic under an attached holder that still has the stock UI material takes the glitch material (a graphic with a material of its own, and every label, is left alone).
@@ -196,6 +199,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (staticGo != null && staticGo.activeSelf) staticGo.SetActive(false);
         }
     }
+
+    /// <summary>Marks a HUD backdrop/shade subtree so <see cref="VisorGlitch"/> never swaps its material for the noise/glitch shader.</summary>
+    internal sealed class VisorGlitchExempt : MonoBehaviour { }
 
     /// <summary>One white quad over its rect: the carrier of the static shader pass (the pass draws what it draws from the screen position, not from the quad).</summary>
     internal sealed class VisorStaticGraphic : MaskableGraphic

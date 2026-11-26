@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Core.Math;
 using HarmonyLib;
@@ -30,6 +31,22 @@ namespace BoscaliSummer.Core.Game
         }
 
         private static FieldInfo stationName;
+        private static FieldInfo stationParts;
+
+        /// <summary>Add registered dispensers outside the aircraft hierarchy, such as stores on physics parts.</summary>
+        public static void AddRegisteredCountermeasures(Aircraft aircraft, List<Countermeasure> parts)
+        {
+            CountermeasureManager manager = aircraft != null ? aircraft.countermeasureManager : null;
+            if (manager == null || !(CountermeasureStations?.GetValue(manager) is IList stations)) return;
+            foreach (object station in stations)
+            {
+                if (station == null) continue;
+                stationParts ??= AccessTools.Field(station.GetType(), "countermeasures");
+                if (!(stationParts?.GetValue(station) is List<Countermeasure> registered)) continue;
+                foreach (Countermeasure part in registered)
+                    if (part != null && !parts.Contains(part)) parts.Add(part);
+            }
+        }
 
         /// <summary>
         /// The display names of the aircraft's countermeasure stations in the order the game's Next Countermeasure steps through them, written into <paramref name="names"/>; the count written, 0 when the list cannot be read.

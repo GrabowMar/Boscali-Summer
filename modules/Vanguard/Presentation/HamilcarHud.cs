@@ -13,10 +13,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private const string Owner = "vanguard.hamilcar";
         private const string Channel = "vg.hamilcar";
 
-        public static void Held(string gliderKey, float metres, HamilcarPhase phase)
+        public static void Held(string gliderKey, float metres, HamilcarPhase phase, float progress = 0f)
         {
             if (Board(out IHudBoard board))
-                VanguardHudFeeds.Acquire(board, Owner, Channel, gliderKey)?.Set(HudTone.Info, HamilcarProfile.HudText(metres), HamilcarProfile.HudDetail(phase), 0f);
+                VanguardHudFeeds.Acquire(board, Owner, Channel, gliderKey)?.Set(HudTone.Info, HamilcarProfile.HudText(metres), HamilcarProfile.HudDetail(phase), progress);
         }
 
         public static void Notice(HudTone tone, string text, string detail)

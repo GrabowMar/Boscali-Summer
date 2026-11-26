@@ -1,9 +1,8 @@
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Ui;
-using BoscaliSummer.Modules.Vanguard.Domain;
 using NOAvionics;
-using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -12,10 +11,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
     /// The drone feed card on the HUD (bottom right, the bottom of the feed column: the HUD's target and missile cards stack on it through
-    /// <see cref="FeedCorner"/>): the linked drone's video and symbology while it is hand-flown, or whenever the
-    /// pilot switched HUD FEED on. Same size and chrome as the HUD's MSL and TGT cards (<see cref="FeedCorner.Frame"/>, the HUD theme's ink and the
-    /// native weapon font; 2026-10-20 rework). It stands down while the UAV terminal is open or the map is maximised (the UAV MFD shows the feed
-    /// there). Client-local, never takes input.
+    /// <see cref="FeedCorner"/>): the selected drone's video and symbology while HUD FEED is on.
+    /// The DRONES panel shows the feed when the map is maximised.
     /// </summary>
     internal sealed class DroneFeedHud : MonoBehaviour, ISceneService
     {
@@ -55,8 +52,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             bool lost = link.Lost;
             if (lost && !wasLost) lostFlashUntil = Time.unscaledTime + 1.2f;
             wasLost = lost;
-            bool show = link.HasAircraft && !link.TerminalOpen && !DynamicMap.mapMaximized &&
-                (link.Linked != null || lost) && (link.Linked?.Mode == DroneMode.Hand || link.FeedShown || lost);
+            bool show = !ForeignMods.HudOverlaysYielded && link.Own != null && !DynamicMap.mapMaximized &&
+                !link.Piloting && link.FeedShown && (link.Linked != null || lost);
             if (!show)
             {
                 FeedCorner.Uav = default;
@@ -71,16 +68,15 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             // The bottom of the feed column, every view.
             card.GetWorldCorners(corners);
             FeedCorner.Uav = new Rect(corners[0].x, corners[0].y, corners[2].x - corners[0].x, corners[2].y - corners[0].y);
-            ColorTheme theme = ThemeManager.Active.ColorTheme;
             feed.Ink = VanillaHudStyle.Ink;
             feed.Paint(link);
 
             DroneView v = link.Linked;
             bool flash = Time.unscaledTime < lostFlashUntil && ((int)(Time.unscaledTime * 6f) & 1) == 0;
             Color ink = VanillaHudStyle.Ink;
-            Color tone = lost || (v != null && v.Quality <= 0f) ? theme.Alert : v != null && v.Mode == DroneMode.Hand ? theme.Warning : ink;
-            // The shelf's state word: callsign and order ("UAV-2 · HAND"), rebuilt only when either changed; its width sets where the shelf rule stops.
-            string callsign = v != null ? v.Callsign : link.LostName ?? "", word = lost ? "LOST" : v == null ? "" : DroneLink.Word(v.Mode);
+            Color alert = VanillaHudStyle.WarningRed;
+            Color tone = lost || (v != null && v.Quality <= 0f) ? alert : v != null && v.Occupied ? VanillaHudStyle.Caution : ink;
+            string callsign = v != null ? v.Callsign : link.LostName, word = lost ? "LOST" : v == null ? "" : v.FlightState;
             if (state == null || callsign != lastCallsign || word != lastWord)
             {
                 lastCallsign = callsign;
@@ -91,7 +87,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             nameText.color = VanillaHudStyle.InkDim;
             stateText.color = tone;
             Strip(v, ink);
-            Color frameInk = flash ? theme.Alert : ink;
+            Color frameInk = flash ? alert : ink;
             if (frameInk != lastInk)
             {
                 lastInk = frameInk;
@@ -154,7 +150,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             feed = new DroneFeedView(card, "Feed", 10f);
             // The picture takes what the shelf above and the data strip below leave (the card keeps its total height: the missile card stands on it).
             feed.Place(new AvSlot(0f, FeedCorner.Header, w, cardH - FeedCorner.Header - FeedCorner.Strip));
-            chrome = AvVector.Create(card, "Chrome", 64);
+            chrome = AvVector.Create(card, "Chrome", 64, HudGlow.Stroke, HudGlow.Alpha);
             lastInk = Color.clear;
             state = null;
             nameText = Word("Name", FeedCorner.ShelfText, 150f, TextAlignmentOptions.MidlineLeft);

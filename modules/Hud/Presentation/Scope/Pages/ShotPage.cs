@@ -468,11 +468,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return float.NaN;
         }
 
-        /// <summary>HIT: a filled diamond with a cross cut out; MISS: a hollow dim diamond; DEFEATED: a hollow amber diamond struck through; in flight: an arrowhead.</summary>
+        /// <summary>HIT: a filled Hi diamond; MISS: a hollow dim diamond; DEFEATED: a hollow amber diamond struck through; in flight: an arrowhead.</summary>
         private static void Glyph(ScopeCanvas g, float x, float y, ShotState st, bool fly, ScopeTone flyTone)
         {
             if (fly) { g.Chevron(x, y + 1f, 0f, 5f, flyTone, true); return; }
-            if (st == ShotState.Hit) { g.Diamond(x, y, 4.5f, Hi, true); g.Cross(x, y, 4f, Bg); }
+            if (st == ShotState.Hit) g.Diamond(x, y, 4.5f, Hi, true);
             else if (st == ShotState.Defeated) { g.Diamond(x, y, 4.5f, Amber, false); g.Line(x - 3f, y + 3f, x + 3f, y - 3f, Amber); }
             else g.Diamond(x, y, 4.5f, Dim, false);
         }

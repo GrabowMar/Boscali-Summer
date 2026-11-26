@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ("COCKPIT MOTION", CVisuals, AvIcon.Activity),
             ("COCKPIT VISUALS", CVisuals, AvIcon.Eye),
             ("COCKPIT AUDIO", CVisuals, AvIcon.Volume),
+            ("RADIO COMMS", CVisuals, AvIcon.Radio),
             ("SKY", CVisuals, AvIcon.Cloud),
             ("RAIN", CVisuals, AvIcon.CloudRain),
             ("GROUND", CVisuals, AvIcon.Map2),
@@ -37,6 +38,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ("FAR UNITS", CPerf, AvIcon.Radar2),
             ("NOATMOFX", CCompat, AvIcon.Cloud),
             ("KELLY'S FX", CCompat, AvIcon.Bolt),
+            ("UIPLUS", CCompat, AvIcon.Gauge),
             ("KEY CLASHES", CCompat, AvIcon.AdjustmentsHorizontal),
         };
 

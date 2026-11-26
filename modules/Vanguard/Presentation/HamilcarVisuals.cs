@@ -1,7 +1,9 @@
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Runtime;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
@@ -39,10 +41,16 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private float axleFront = 0.01f, axleRear = -0.01f;
         private float rolled, rollGround;
         private HamilcarPhase phase;
+        private HamilcarPhase lastPhase = HamilcarPhase.Release;
         private float phaseAt, agl = 1000f, speed = HamilcarProfile.GlideSpeed, seenTime, nextProbe, nextHud;
+        private float startDist = -1f, lastRange, lastPhaseAge, slideEmitAccum, nextStrobeAt;
         private GlobalPosition seenAt;
         private bool mine, flightShort;
         private string hudKey;
+        private TrailRenderer trailL, trailR;
+        private ParticleSystem slideDust, slideSparks, strobe;
+        private Light bayLight;
+        private AudioSource sfx;
 
         /// <summary>Sim hook: the cradle Hexhound was handed over to the live unit (or never drew).</summary>
         internal bool PayloadHidden { get; private set; }
@@ -106,8 +114,128 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 warned = true;
                 Plugin.Logger?.LogWarning("[Vanguard] HAMILCAR rig has no " + missing + ": those parts stay still");
             }
+            if (!Application.isBatchMode) SetupFx();
             // Stowed from the very first frame: it leaves the hold with the outer panels folded back beside the booms.
             Apply(HamilcarProfile.Pose(HamilcarPhase.Release, glider.timeSinceSpawn, 0f));
+        }
+
+        private void SetupFx()
+        {
+            trailL = CreateWingtipTrail(outerL.Part, "WingtipTrailL", -1f);
+            trailR = CreateWingtipTrail(outerR.Part, "WingtipTrailR", 1f);
+
+            var lightGo = new GameObject("CargoBayFloodlight");
+            lightGo.transform.SetParent(body, false);
+            lightGo.transform.localPosition = new Vector3(0f, 1.3f, 1.2f);
+            bayLight = lightGo.AddComponent<Light>();
+            bayLight.type = LightType.Point;
+            bayLight.color = new Color(1f, 0.88f, 0.65f);
+            bayLight.range = 14f;
+            bayLight.intensity = 0f;
+            bayLight.shadows = LightShadows.None;
+            bayLight.enabled = false;
+
+            sfx = body.gameObject.AddComponent<AudioSource>();
+            sfx.spatialBlend = 1f;
+            sfx.minDistance = 20f;
+            sfx.maxDistance = 450f;
+            sfx.rolloffMode = AudioRolloffMode.Logarithmic;
+            sfx.dopplerLevel = 0f;
+            sfx.playOnAwake = false;
+
+            // shortcut: world-space slide dust/sparks live 1.4 s on the glider transform; parent under Datum.origin if long-lived ground FX are added.
+            if (SmokeFx.Puff != null)
+                slideDust = CreateParticleLayer("SlideDust", SmokeFx.Puff, 128, ParticleSystemSimulationSpace.World, ParticleSystemRenderMode.Billboard, -0.08f);
+            if (GlowFx.Glow != null)
+            {
+                slideSparks = CreateParticleLayer("SlideSparks", GlowFx.Glow, 128, ParticleSystemSimulationSpace.World, ParticleSystemRenderMode.Stretch, 0.5f);
+                var sr = slideSparks.GetComponent<ParticleSystemRenderer>();
+                sr.lengthScale = 2.2f;
+                sr.velocityScale = 0.04f;
+                strobe = CreateParticleLayer("NavStrobe", GlowFx.Glow, 16, ParticleSystemSimulationSpace.Local, ParticleSystemRenderMode.Billboard, 0f);
+            }
+        }
+
+        private TrailRenderer CreateWingtipTrail(Transform wingPart, string trailName, float side)
+        {
+            if (wingPart == null || SmokeFx.Puff == null) return null;
+            Renderer[] renderers = wingPart.GetComponentsInChildren<Renderer>(true);
+            bool found = false;
+            float bestDot = float.MinValue;
+            Vector3 bestWorld = Vector3.zero;
+            Vector3 axis = body.right * side;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] == null) continue;
+                Bounds b = renderers[i].bounds;
+                Vector3 c = b.center, e = b.extents;
+                for (int mask = 0; mask < 8; mask++)
+                {
+                    Vector3 corner = new Vector3(
+                        c.x + ((mask & 1) != 0 ? e.x : -e.x),
+                        c.y + ((mask & 2) != 0 ? e.y : -e.y),
+                        c.z + ((mask & 4) != 0 ? e.z : -e.z));
+                    float dot = Vector3.Dot(corner - body.position, axis);
+                    if (dot > bestDot) { bestDot = dot; bestWorld = corner; found = true; }
+                }
+            }
+            if (!found) return null;
+            var go = new GameObject(trailName);
+            go.transform.SetParent(wingPart, false);
+            go.transform.localPosition = wingPart.InverseTransformPoint(bestWorld - body.forward * 0.2f);
+            var tr = go.AddComponent<TrailRenderer>();
+            tr.time = 0.55f;
+            tr.startWidth = 0.14f;
+            tr.endWidth = 0.01f;
+            tr.minVertexDistance = 0.8f;
+            tr.sharedMaterial = SmokeFx.Puff;
+            var grad = new Gradient();
+            grad.SetKeys(
+                new[] { new GradientColorKey(new Color(0.88f, 0.94f, 1f), 0f), new GradientColorKey(new Color(0.88f, 0.94f, 1f), 1f) },
+                new[] { new GradientAlphaKey(0.35f, 0f), new GradientAlphaKey(0f, 1f) });
+            tr.colorGradient = grad;
+            tr.shadowCastingMode = ShadowCastingMode.Off;
+            tr.receiveShadows = false;
+            tr.emitting = false;
+            return tr;
+        }
+
+        private ParticleSystem CreateParticleLayer(string layerName, Material mat, int budget,
+            ParticleSystemSimulationSpace space, ParticleSystemRenderMode renderMode, float gravity)
+        {
+            var go = new GameObject(layerName);
+            go.SetActive(false);
+            go.transform.SetParent(body, false);
+            var ps = go.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.playOnAwake = false;
+            main.loop = true;
+            main.startSpeed = 0f;
+            main.gravityModifier = gravity;
+            main.maxParticles = budget;
+            main.simulationSpace = space;
+            main.cullingMode = ParticleSystemCullingMode.PauseAndCatchup;
+            var emission = ps.emission;
+            emission.enabled = false;
+            var shape = ps.shape;
+            shape.enabled = false;
+            var pr = ps.GetComponent<ParticleSystemRenderer>();
+            pr.sharedMaterial = mat;
+            pr.renderMode = renderMode;
+            pr.maxParticleSize = 0.6f;
+            pr.minParticleSize = 0f;
+            pr.shadowCastingMode = ShadowCastingMode.Off;
+            pr.receiveShadows = false;
+            go.SetActive(true);
+            ps.Play(false);
+            return ps;
+        }
+
+        private void PlaySfx(string clipName, float volume)
+        {
+            if (sfx == null || Application.isBatchMode) return;
+            AudioClip clip = SfxClips.Get(clipName);
+            if (clip != null) sfx.PlayOneShot(clip, volume);
         }
 
         private void LateUpdate()
@@ -119,11 +247,106 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
             float age = missile.timeSinceSpawn, phaseAge;
             if (flight == null) VanguardRegistry.TryGet(missile, out flight); // made after Attach, and only where the glider is simulated
-            if (flight != null) flight.HamilcarState(out phase, out phaseAge, out _, out flightShort, out _);
+            if (flight != null)
+            {
+                flight.HamilcarState(out phase, out phaseAge, out float rangeToSpot, out flightShort, out _);
+                if (startDist < 0f && rangeToSpot > HamilcarProfile.GateRange) startDist = rangeToSpot;
+                lastRange = rangeToSpot;
+            }
             else phaseAge = Observe(age);
-            Apply(HamilcarProfile.Pose(phase, age, phaseAge));
+            lastPhaseAge = phaseAge;
+
+            if (phase != lastPhase)
+            {
+                if (lastPhase == HamilcarPhase.Release && phase == HamilcarPhase.Glide) PlaySfx("gear-lever", 0.6f);
+                else if (phase == HamilcarPhase.Slide)
+                {
+                    if (!Application.isBatchMode && GameAssets.i != null && GameAssets.i.contactDust != null)
+                    {
+                        GameObject dust = Instantiate(GameAssets.i.contactDust, body.position, Quaternion.identity);
+                        dust.SetActive(true);
+                        Destroy(dust, 3.5f);
+                    }
+                    PlaySfx("hull-thud", 0.85f);
+                }
+                else if (phase == HamilcarPhase.Unload) PlaySfx("canopy-close", 0.75f);
+                lastPhase = phase;
+            }
+
+            HamilcarPose pose = HamilcarProfile.Pose(phase, age, phaseAge);
+            Apply(pose);
+            UpdateFx(pose, phaseAge);
             if (phase == HamilcarPhase.Husk) Husk(phaseAge);
             if (Time.unscaledTime >= nextHud) Hud();
+        }
+
+        private void UpdateFx(HamilcarPose pose, float phaseAge)
+        {
+            float curSpeed = flight != null && missile.rb != null ? missile.rb.velocity.magnitude : speed;
+            bool emitTrails = pose.Fold < 0.05f && phase <= HamilcarPhase.Flare && curSpeed > 45f;
+            if (trailL != null && trailL.emitting != emitTrails) trailL.emitting = emitTrails;
+            if (trailR != null && trailR.emitting != emitTrails) trailR.emitting = emitTrails;
+
+            if (bayLight != null)
+            {
+                float sink = phase == HamilcarPhase.Husk ? Mathf.InverseLerp(VanguardFlight.HamilcarHusk - HuskSinkSeconds, VanguardFlight.HamilcarHusk, phaseAge) : 0f;
+                float intensity = 2.6f * pose.Visor * (1f - sink);
+                bayLight.enabled = intensity > 0.02f;
+                if (bayLight.enabled) bayLight.intensity = intensity;
+            }
+
+            if (strobe != null && phase <= HamilcarPhase.Flare && Time.time >= nextStrobeAt)
+            {
+                nextStrobeAt = Time.time + 1.6f;
+                var localTail = new Vector3(0f, 0.9f, -1.8f);
+                strobe.Emit(new ParticleSystem.EmitParams
+                {
+                    position = localTail,
+                    startSize = 1.6f,
+                    startLifetime = 0.12f,
+                    startColor = new Color(1f, 0.85f, 0.55f, 0.35f),
+                }, 1);
+                strobe.Emit(new ParticleSystem.EmitParams
+                {
+                    position = localTail,
+                    startSize = 0.45f,
+                    startLifetime = 0.12f,
+                    startColor = new Color(1f, 0.98f, 0.90f, 0.95f),
+                }, 1);
+            }
+
+            if (phase == HamilcarPhase.Slide && !Application.isBatchMode)
+            {
+                slideEmitAccum += Time.deltaTime * curSpeed;
+                int steps = Mathf.Min(6, (int)(slideEmitAccum / 1.2f));
+                if (steps > 0)
+                {
+                    slideEmitAccum -= steps * 1.2f;
+                    Vector3 keel = body.position - body.forward * 1.2f + Vector3.up * 0.2f;
+                    for (int s = 0; s < steps; s++)
+                    {
+                        if (slideDust != null && curSpeed > 1.5f)
+                            slideDust.Emit(new ParticleSystem.EmitParams
+                            {
+                                position = keel + body.right * Random.Range(-0.8f, 0.8f),
+                                velocity = -body.forward * (curSpeed * 0.15f) + Vector3.up * 1.4f + body.right * Random.Range(-1.2f, 1.2f),
+                                startSize = Random.Range(1.6f, 2.8f),
+                                startLifetime = Random.Range(1.0f, 1.6f),
+                                startColor = new Color(0.58f, 0.52f, 0.43f, 0.55f),
+                            }, 1);
+                        if (slideSparks != null && curSpeed > 6f)
+                            for (int k = 0; k < 2; k++)
+                                slideSparks.Emit(new ParticleSystem.EmitParams
+                                {
+                                    position = keel + body.right * Random.Range(-0.4f, 0.4f),
+                                    velocity = -body.forward * (curSpeed * 0.45f) + Vector3.up * Random.Range(1.5f, 4.5f) + body.right * Random.Range(-3f, 3f),
+                                    startSize = Random.Range(0.08f, 0.15f),
+                                    startLifetime = Random.Range(0.28f, 0.55f),
+                                    startColor = new Color(1f, 0.72f, 0.28f, 1f),
+                                }, 1);
+                    }
+                }
+            }
         }
 
         // A client's estimate: the same phase machine, fed by what the glider is seen doing. Height stands in for the
@@ -219,7 +442,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 hudKey = missile.persistentID.Id.ToString();
                 ShortNotice(here);
             }
-            if (phase < HamilcarPhase.Husk) HamilcarHud.Held(hudKey, FastMath.Distance(here, me.GlobalPosition()), phase);
+            if (phase < HamilcarPhase.Husk)
+            {
+                float progress = HamilcarProfile.HudProgress(phase, flight != null ? lastRange : 0f, flight != null ? startDist : 0f, lastPhaseAge);
+                HamilcarHud.Held(hudKey, FastMath.Distance(here, me.GlobalPosition()), phase, progress);
+            }
         }
 
         // SHORT, once at release: the flight's own verdict on the host, the same sum from the synced target on a client.

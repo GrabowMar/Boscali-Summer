@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     // The visor's power-on and reactions (VisorBootHud, VisorFx) bring the board and the left column up block by block and dim, flicker and shift them: only the mod's own groups are touched, by alpha (the game's HUD is never dimmed, moved or switched off).
     internal sealed partial class StatusPanel
     {
-        private CanvasGroup routeGroup, cornerGroup, storesGroup, shellGroup, scopeGroup, statusGroup;
+        private CanvasGroup routeGroup, cornerGroup, storesGroup, shellGroup, scopeGroup, statusGroup, airframeGroup;
         private bool bootDimmed;
 
         /// <summary>A group the board owns that never takes input and combines with the one above it.</summary>
@@ -41,6 +41,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (shellVector != null && shellVector.canvasRenderer.GetAlpha() != look.Shell) shellVector.canvasRenderer.SetAlpha(look.Shell);
             Set(scopeGroup, look.Page);
             Set(statusGroup, look.Page);
+            Set(airframeGroup, look.Page);
             for (int i = 1; i < pageSurfaces.Length; i++) if (pageSurfaces[i] != null) Set(pageSurfaces[i].Group, look.Wing);
             Set(logGroup, look.Log * look.All);
             Set(cueGroup, look.Cue * look.All);

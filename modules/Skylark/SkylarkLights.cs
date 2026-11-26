@@ -38,10 +38,19 @@ namespace BoscaliSummer.Modules.Skylark
             LandingGear gear = aircraft.GetComponentsInChildren<LandingGear>(true)
                 .First(g => SkylarkTemplate.Get<bool>(g, "steering"));
             Transform lamp = new GameObject("SkylarkLandingLightAnchor").transform;
-            lamp.SetParent(nodes["Gear_F"], false);
-            lamp.position = nodes["Wheel_F"].position + aircraft.transform.up * .29f
-                + aircraft.transform.forward * .08f;
-            lamp.rotation = aircraft.transform.rotation;
+            if (nodes.TryGetValue("LandingLight_Steer", out Transform steerLamp))
+            {
+                lamp.SetParent(steerLamp, false);
+                lamp.localPosition = Vector3.zero;
+                lamp.localRotation = Quaternion.identity;
+            }
+            else
+            {
+                lamp.SetParent(nodes["Gear_F"], false);
+                lamp.position = nodes["Wheel_F"].position + aircraft.transform.up * .29f
+                    + aircraft.transform.forward * .08f;
+                lamp.rotation = aircraft.transform.rotation;
+            }
             records.SetValue(Bind(manager, aircraft, lamp, landing, recordType,
                 "Landing", Color.white, gear), 3);
             SkylarkTemplate.Set(manager, "aircraft", aircraft);
