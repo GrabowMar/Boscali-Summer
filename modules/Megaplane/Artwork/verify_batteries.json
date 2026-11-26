@@ -1,0 +1,42 @@
+{
+  "name": "ky44-batteries",
+  "description": "Check wing battery locations and repeated fire from the paired Groza VLS magazines.",
+  "mission": "Free Flight",
+  "mods": ["boscalisummer"],
+  "timeout_s": 90,
+  "environment": {"config": {"boscalisummer": {"Trenches": {"Enabled": false}, "TheaterOps": {"Enabled": false}, "Events": {"Enabled": false}, "Garrisons": {"Enabled": false}, "DynamicOperations": {"Enabled": false}, "Support": {"Enabled": false}, "Megaplane": {"BayPayload": "Fighters"}}}},
+  "ops": [
+    {"op": "seat", "id": "carrier", "aircraft": "KY-44 Groza", "near": [10000, -35000], "altitude": 4000, "speed": 135, "heading": 90, "view": "orbit", "timeout": 60},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneBatteryProbe.Inspect", "args": {"id": "carrier", "fire": true}, "store": "noTarget"},
+    {"op": "spawn", "id": "target", "type": "SFB-81 Darkreach", "faction": "Primeva", "at": {"near": {"id": "carrier", "offset": [8000, 0, 0]}}, "altitude": 4000, "speed": 135, "heading": 90},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneBatteryProbe.Inspect", "args": {"id": "carrier", "idTarget": "target", "fire": true}, "store": "first"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneBatteryProbe.Inspect", "args": {"id": "carrier", "idTarget": "target", "fire": true}, "store": "blocked"},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneBatteryProbe.Inspect", "args": {"id": "carrier", "idTarget": "target", "fire": true}, "store": "second"},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneBatteryProbe.Inspect", "args": {"id": "carrier", "idTarget": "target", "fire": true}, "store": "third"},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneBatteryProbe.Inspect", "args": {"id": "carrier", "idTarget": "target", "emptyFirst": true, "fire": true}, "store": "fallback"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.View", "args": {"id": "carrier", "x": 110, "y": 54, "z": -47, "lx": 105, "ly": 4, "lz": -22, "fov": 54}},
+    {"op": "wait", "seconds": 1},
+    {"op": "capture", "name": "groza-wing-battery", "hide_ui": true},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "log_clean", "sources": ["Boscali Summer"]},
+    {"check": "result_equals", "path": "noTarget.wingPlacement", "value": true},
+    {"check": "result_equals", "path": "noTarget.after", "value": 320},
+    {"check": "result_equals", "path": "first.after", "value": 319},
+    {"check": "result_equals", "path": "first.left", "value": 159},
+    {"check": "result_equals", "path": "first.right", "value": 160},
+    {"check": "result_equals", "path": "blocked.after", "value": 319},
+    {"check": "result_equals", "path": "second.left", "value": 159},
+    {"check": "result_equals", "path": "second.right", "value": 159},
+    {"check": "result_equals", "path": "third.left", "value": 158},
+    {"check": "result_equals", "path": "third.right", "value": 159},
+    {"check": "result_equals", "path": "fallback.left", "value": 0},
+    {"check": "result_equals", "path": "fallback.right", "value": 158}
+  ]
+}

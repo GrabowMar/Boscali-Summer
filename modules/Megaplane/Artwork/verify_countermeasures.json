@@ -1,0 +1,34 @@
+{
+  "name": "ky44-countermeasures",
+  "description": "Exercise the native Groza flare switch, the four ejection outlets, IR decoys and the ammunition refill.",
+  "mission": "Free Flight",
+  "mods": ["boscalisummer"],
+  "environment": {"config": {"boscalisummer": {"Trenches": {"Enabled": false}, "TheaterOps": {"Enabled": false}, "Events": {"Enabled": false}, "Garrisons": {"Enabled": false}, "DynamicOperations": {"Enabled": false}, "Support": {"Enabled": false}, "Weather": {"Enabled": false}, "Megaplane": {"BayPayload": "Fighters"}}}},
+  "timeout_s": 120,
+  "ops": [
+    {"op": "atmosphere", "time_of_day": 19, "conditions": 0.02, "cloud_height": 5300},
+    {"op": "seat", "id": "carrier", "aircraft": "KY-44 Groza", "near": [10000, -35000], "altitude": 3000, "speed": 135, "heading": 90, "view": "orbit", "timeout": 60},
+    {"op": "record", "ids": ["carrier"], "hz": 2},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCountermeasureProbe.Observe", "args": {"id": "carrier"}, "store": "ready"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneAutomation.View", "args": {"id": "carrier", "x": -170, "y": -85, "z": -190, "lx": 0, "ly": -24, "lz": -25, "fov": 55}},
+    {"op": "wait", "seconds": 1},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCountermeasureProbe.Observe", "args": {"id": "carrier", "trigger": true}},
+    {"op": "wait", "seconds": 0.12},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCountermeasureProbe.Observe", "args": {"id": "carrier", "trigger": false}, "store": "released"},
+    {"op": "capture", "name": "groza-flare-salvo", "hide_ui": true},
+    {"op": "call", "method": "BoscaliSummer.Modules.Megaplane.MegaplaneCountermeasureProbe.Observe", "args": {"id": "carrier", "rearm": true}, "store": "rearmed"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "log_clean", "sources": ["Boscali Summer"]},
+    {"check": "alive", "ids": ["carrier"]},
+    {"check": "result_equals", "path": "ready.capacity", "value": 480},
+    {"check": "result_equals", "path": "ready.ammo", "value": 480},
+    {"check": "result_equals", "path": "ready.attached", "value": true},
+    {"check": "result_equals", "path": "released.ammo", "value": 476},
+    {"check": "result_equals", "path": "released.decoys", "value": 4},
+    {"check": "result_equals", "path": "rearmed.ammo", "value": 480}
+  ]
+}

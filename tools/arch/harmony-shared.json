@@ -127,9 +127,9 @@
       "reason": "One postfix (hit ledger) and one prefix (records blast power); different kinds."
     },
     "MapLoader.Load": {
-      "owners": ["Gamemodes", "Maps"],
+      "owners": ["Gamemodes", "Maps", "Megaplane"],
       "classification": "INDEPENDENT",
-      "reason": "Prefixes on disjoint loader state: Gamemodes clears the loaded-map keys for a Fuzzball reload, Maps lists the mod's maps."
+      "reason": "Gamemodes clears the loaded-map keys and Maps adds catalogue entries in separate prefixes. Megaplane's client-only postfix waits for its aircraft definition after native loading."
     },
     "MessageFeed.Enqueue": {
       "owners": ["Command", "Hud"],
@@ -230,9 +230,9 @@
       "reason": "Postfixes recording the damager into separate state."
     },
     "Unit.ReportKilled": {
-      "owners": ["Squad", "Support"],
+      "owners": ["Megaplane", "Squad", "Support"],
       "classification": "INDEPENDENT",
-      "reason": "Postfixes recording the kill into separate state."
+      "reason": "Squad and Support record kills in separate state in postfixes. Megaplane's opt-in development prefix only increments the Groza crew test witness count."
     },
     "UnitDefinition.IsAllowed": {
       "owners": ["Core", "Gamemodes"],
@@ -258,9 +258,10 @@
       "reason": "Spooktober's FallenAcePartDamagePatch rewrites the ref damage (ace lives, gunnery perk) and Ares' AresPartDamagePatch multiplies it for ONE-HIT KILLS. Gamemodes' and Kaiju's prefixes are pure skips."
     },
     "WeaponStation.LaunchMount": {
-      "owners": ["Support", "Vanguard"],
-      "classification": "INDEPENDENT",
-      "reason": "Support's CYBER gate is a pure skip; Vanguard's ALE-X/SKYWELL intercepts and AEGIS doors read nothing it writes."
+      "owners": ["Megaplane", "Support", "Vanguard"],
+      "classification": "ORDER-SENSITIVE",
+      "order": [["support", "megaplane"]],
+      "reason": "Megaplane's rotating silo dispatch respects Support's CYBER launch gate before firing. Vanguard handles different weapons."
     }
   }
 }

@@ -148,7 +148,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         {
             int n = w.Stations.Count;
             var c = Cat("weapons", "WEAPONS", 18f, "1", "LOADOUT" + D + MenuText.Plural(n, "STATION", "STATIONS"));
-            if (n == 0) return c;
+            if (n == 0)
+            {
+                if (w.HasFighterBay) c.Rows.Add(b.Reg(FighterBay(w)));
+                return c;
+            }
             int active = Math.Max(0, Math.Min(n - 1, w.ActiveStation));
             WorldStation now = w.Stations[active];
             if (n > 1)
@@ -187,10 +191,26 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(MenuRow.Toggle("weapons/bay", "bay-doors", w.BayDoorsOpen,
                     F("OPEN BAY DOORS", "BAY DOORS: AUTO", "HOLD THE WEAPON BAY OPEN", "BAY DOORS OPEN"),
                     F("CLOSE BAY DOORS", "BAY DOORS: HELD OPEN", "LET THE BAY CLOSE AND WORK ON ITS OWN", "BAY DOORS CLOSING", MenuTone.Active), checkbox: false)));
+            if (w.HasFighterBay) c.Rows.Add(b.Reg(FighterBay(w)));
 
             string tail = X + MenuText.Ammo(now.Ammo);
             Badge(c, StationTag(now, MenuModel.BadgeChars - 1 - tail.Length) + " " + tail, show: now.Ammo <= 0, alert: now.Ammo <= 0);
             return c;
+        }
+
+        private static MenuRow FighterBay(MenuWorld w)
+        {
+            var launch = MenuRow.Action("weapons/fighters/launch", "station-next", "LAUNCH NEXT FIGHTER", w.FighterBaySlots,
+                "LOWER THE NEXT SERVICED FIGHTER", "LAUNCH REQUESTED");
+            launch.Blocked = w.LaunchFighterBlocked;
+            var recall = MenuRow.Action("weapons/fighters/recall", "bay-doors", "RECALL FIGHTERS", w.FighterBaySlots,
+                "CALL RELEASED FIGHTERS TO THE APPROACH GATE", "RECOVERY REQUESTED");
+            recall.Blocked = w.RecallFightersBlocked;
+            var waveOff = MenuRow.Action("weapons/fighters/waveoff", "mark-clear", "WAVE OFF APPROACH", w.FighterBaySlots,
+                "CLEAR APPROACHING FIGHTERS FROM THE BAY", "WAVE OFF REQUESTED");
+            waveOff.Blocked = w.WaveOffBlocked;
+            return MenuRow.Submenu("weapons/fighters", "bay-doors", "FIGHTER BAY", w.FighterBaySlots,
+                "LAUNCH AND RECOVER THE CARRIED FIGHTERS", "FIGHTER BAY", "FIGHTERS", new List<MenuRow> { launch, recall, waveOff });
         }
 
         private static MenuRow Cargo(MenuWorld w)

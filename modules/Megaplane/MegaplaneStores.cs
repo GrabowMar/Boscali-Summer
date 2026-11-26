@@ -1,37 +1,32 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using HarmonyLib;
 using NuclearOption.SavedMission;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
-    /// <summary>The carrier's stores are native hardpoint sets, so the loadout screen, firing, ammo, multiplayer replay and the
-    /// VANGUARD drone C-menu all work as on any aircraft. The Darkreach donor's sets are replaced by:
-    /// two wing sets (stores beams under four pylons, three racks each: REMORA / MANTA / KESTREL / HAMILCAR or the donor's
-    /// weapons), three cargo-hold lanes (the game's own vehicle and supply airdrops, HALO paratroopers) that roll aft out of the
-    /// ramp, and one SKYWELL tender kit at the ramp. The hold's door is a native BayDoor at the ramp's tip ("HoldExit"):
-    /// MountedCargo rolls its load aft until it passes it, and HALO sticks jump from it; <see cref="MegaplaneRamp"/> draws the
-    /// ramp and petal doors from its opening.</summary>
+    /// <summary>Native hardpoint sets for strike stores, air cover, and three independently selectable hold loads.
+    /// The game's loadout screen, rearming, release and multiplayer replay all use these sets.</summary>
     internal static class MegaplaneStores
     {
-        internal static readonly string[] DroneMounts = { "VG_Remora_ARM1_single", "VG_Manta_Wing", "VG_Kestrel_Sled", "VG_Hamilcar_AGM_heavy_single" };
         internal const string HaloMount = "AB_Paratroopers_x16", TenderMount = "VG_Skywell_Kit";
+        private const string Remora = "VG_Remora_ARM1_single", Manta = "VG_Manta_Wing", Scythe = "AAM2_double";
+        private const int Outboard = 1;
         internal static string Summary { get; private set; } = "not built";
         private const float DoorSeconds = 8f, DoorHold = 25f;
 
-        // Suffix = which of the art's empties become hardpoints. The art has four racks per wing beam and three slots per hold
-        // lane (26 in all, too many to manage); the carrier uses the middle two racks of each beam and one slot per lane.
-        private struct SetSpec { public string Name; public string Prefix; public string[] Suffix; public bool Hold; }
-        private static readonly SetSpec[] Sets =
+        private static readonly string[] StrikeMounts =
         {
-            new SetSpec { Name = "WING INBOARD", Prefix = "Hardpoint_I_", Suffix = new[] { "_1", "_2" } },
-            new SetSpec { Name = "WING OUTBOARD", Prefix = "Hardpoint_O_", Suffix = new[] { "_1", "_2" } },
-            new SetSpec { Name = "CARGO HOLD", Prefix = "Hardpoint_Hold_", Suffix = new[] { "_0" }, Hold = true },
-            new SetSpec { Name = "SKYWELL TENDER", Prefix = "Hardpoint_Tender", Hold = true },
-            new SetSpec { Name = "PARATROOP STICK", Prefix = "Hardpoint_Hold_C_1", Hold = true },
+            Remora, "VG_Hamilcar_AGM_heavy_single", "AGM_heavy_single", "AGM1_double", "ARM1_double", "ARM2_single",
+            "bomb_250_glide_double", "bomb_500_glide_single", "bomb_penetrator1_mount", "AAM4_single",
+        };
+        private static readonly string[] EscortMounts =
+        {
+            Manta, Remora, "VG_Kestrel_Sled", Scythe, "AAM1_double", "AAM3_double", "AAM4_double",
+            "RocketPod1_single", "AGM1_single",
         };
 
         private static WeaponMount Mount(Encyclopedia e, string key) => e.weaponMounts.FirstOrDefault(m => m != null && (m.jsonKey == key || m.name == key));
@@ -40,12 +35,10 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             WeaponManager manager = aircraft.GetComponentInChildren<WeaponManager>(true);
             if (manager == null || !nodes.ContainsKey("HoldExit")) { Summary = "no weapon manager or no hold art"; return; }
-            List<WeaponMount> donor = manager.hardpointSets.SelectMany(s => s.weaponOptions).Where(m => m != null && !m.Cargo && !m.Troops).Distinct().ToList();
-            List<WeaponMount> drones = DroneMounts.Select(k => Mount(e, k)).Where(m => m != null).ToList();
-            // Cargo the game can airdrop by itself: every mount whose MountedCargo carries a unit (vehicles, supply containers).
-            List<WeaponMount> cargo = e.weaponMounts.Where(m => m != null && m.prefab != null && m.prefab.GetComponentInChildren<MountedCargo>(true) is MountedCargo c && c.cargo != null).ToList();
-            WeaponMount halo = Mount(e, HaloMount), tender = Mount(e, TenderMount);
-            if (halo != null) cargo.Insert(0, halo);
+            WeaponMount tender = Mount(e, TenderMount);
+            // Cargo lanes carry vehicles or supplies. The tender and troop stick each have a dedicated release station.
+            List<WeaponMount> cargo = e.weaponMounts.Where(m => m != null && m != tender && !m.Troops && m.prefab != null &&
+                m.prefab.GetComponentInChildren<MountedCargo>(true) is MountedCargo c && c.cargo != null).ToList();
 
             // The hold door: invisible native BayDoor at the ramp tip. Cargo spawns once it has rolled past it, outside the hull.
             Transform exit = nodes["HoldExit"];
@@ -58,63 +51,82 @@ namespace BoscaliSummer.Modules.Megaplane
             MegaplaneGuns.Set(door, "closeSpeed", 1f / DoorSeconds);
             MegaplaneGuns.Set(door, "hingeAngle", 0f);
 
-            Type pylonType = AccessTools.Field(typeof(Hardpoint), "pylonOptions").FieldType;
-            var sets = new List<HardpointSet>();
-            var counts = new List<string>();
-            foreach (SetSpec spec in Sets)
+            List<WeaponMount> Options(params string[] keys) => keys.Select(k => Mount(e, k)).Where(m => m != null && m.prefab != null).ToList();
+            // Use the forward and aft racks of each wing beam, leaving 18 m between stores along the beam.
+            // Keep the serialized set indices stable even when optional stores are missing.
+            manager.hardpointSets = new[]
             {
-                if (spec.Name == "PARATROOP STICK" && halo == null) continue;
-                List<Transform> points = nodes.Where(n => n.Key.StartsWith(spec.Prefix) && (spec.Suffix == null || spec.Suffix.Any(s => n.Key.EndsWith(s)))).OrderBy(n => n.Key).Select(n => n.Value).ToList();
-                if (points.Count == 0) continue;
-                var set = new HardpointSet
-                {
-                    name = spec.Name, hardpoints = new List<Hardpoint>(), precludingHardpointSets = new List<byte>(),
-                    weaponOptions = spec.Prefix == "Hardpoint_Tender" ? (tender != null ? new List<WeaponMount> { tender } : new List<WeaponMount>())
-                        : spec.Name == "PARATROOP STICK" ? new List<WeaponMount> { halo }
-                        : spec.Hold ? new List<WeaponMount>(cargo) : drones.Concat(donor).ToList(),
-                };
-                foreach (Transform t in points)
-                {
-                    var hp = new Hardpoint
-                    {
-                        transform = t, part = t.GetComponentInParent<UnitPart>(true), bayDoors = spec.Hold ? new[] { door } : new BayDoor[0],
-                        doorOpenDuration = DoorHold, BuiltInWeapons = new Weapon[0], BuiltInTurrets = new Turret[0],
-                    };
-                    AccessTools.Field(typeof(Hardpoint), "pylonOptions").SetValue(hp, Array.CreateInstance(pylonType.GetElementType(), 0));
-                    set.hardpoints.Add(hp);
-                }
-                sets.Add(set);
-                counts.Add(spec.Name + " x" + points.Count + " (" + set.weaponOptions.Count + " options)");
-            }
-            manager.hardpointSets = sets.ToArray();
+                Set(nodes, "INBOARD STRIKE", "Hardpoint_I_", Options(StrikeMounts), null, "_0", "_3"),
+                Set(nodes, "OUTBOARD ESCORT", "Hardpoint_O_", Options(EscortMounts), null, "_0", "_3"),
+                Set(nodes, "CARGO HOLD", "Hardpoint_Hold_", cargo, door, "_0"),
+                Set(nodes, "SKYWELL TENDER", "Hardpoint_Tender", Options(TenderMount), door),
+                Set(nodes, "PARATROOP STICK", "Hardpoint_Hold_C_1", Options(HaloMount), door),
+            };
 
-            // Air-started carriers take loadouts[1]; the hangar shows the standard loadout.
-            WeaponMount First(List<WeaponMount> options, params string[] keys) => keys.Select(k => options.FirstOrDefault(m => m.jsonKey == k)).FirstOrDefault(m => m != null) ?? options.FirstOrDefault();
-            List<WeaponMount> vehicles = cargo.Where(m => m != halo).ToList();
-            var fit = new Loadout { weapons = sets.Select(s => s.name switch
+            // The native player hangar and air starts use loadouts[1]. AI can choose a standard fit for its role.
+            Loadout invasion = Fit(manager, new[] { Remora, "AGM_heavy_single" }, new[] { Manta, Scythe }, "6x6_1_AAx1", TenderMount, HaloMount);
+            parameters.loadouts = new List<Loadout> { new Loadout { weapons = new List<WeaponMount>(invasion.weapons) }, invasion };
+            parameters.StandardLoadouts = new[]
             {
-                "WING INBOARD" => First(s.weaponOptions, "VG_Remora_ARM1_single"),
-                "WING OUTBOARD" => First(s.weaponOptions, "VG_Manta_Wing", "VG_Remora_ARM1_single"),
-                "CARGO HOLD" => vehicles.FirstOrDefault() ?? halo,
-                _ => s.weaponOptions.FirstOrDefault(),
-            }).ToList() };
-            // two separate instances: one aliased object let the hangar and air-start loadouts rewrite each other
-            parameters.loadouts = new List<Loadout> { fit, new Loadout { weapons = new List<WeaponMount>(fit.weapons) } };
-            parameters.StandardLoadouts = new[] { new StandardLoadout { Name = "INVASION", loadout = fit, FuelRatio = 1f } };
+                new StandardLoadout { Name = "INVASION", loadout = new Loadout { weapons = new List<WeaponMount>(invasion.weapons) }, FuelRatio = 1f },
+                new StandardLoadout { Name = "AIR DEFENCE", loadout = Fit(manager, new[] { "AAM4_single" }, new[] { Scythe }), FuelRatio = 1f },
+                new StandardLoadout { Name = "STANDOFF STRIKE", loadout = Fit(manager, new[] { "AGM_heavy_single", "bomb_500_glide_single" }, new[] { "AAM3_double" }), FuelRatio = 1f },
+                new StandardLoadout { Name = "RADAR SUPPRESSION", loadout = Fit(manager, new[] { "ARM1_double", "ARM2_single" }, new[] { Scythe }), FuelRatio = 1f },
+            };
             aircraft.gameObject.AddComponent<MegaplaneRamp>();
-            Summary = string.Join(", ", counts) + "; fit " + string.Join(" / ", fit.weapons.Select(w => w != null ? w.jsonKey : "-"));
-            Debug.Log("[Megaplane] stores: " + Summary + "; cargo options " + string.Join(" ", cargo.Select(c => c.jsonKey)));
+            Summary = string.Join(", ", manager.hardpointSets.Select(s => $"{s.name} x{s.hardpoints.Count} ({s.weaponOptions.Count(m => m != null)} options)"));
+            Debug.Log("[Megaplane] stores: " + Summary + "; fit " + string.Join(" / ", invasion.weapons.Select(w => w != null ? w.jsonKey : "-")));
         }
 
-        // The Vanguard drone catalogue finishes after Blueprinter has registered our airframe.
-        // Fit its outboard escort to the two template presets when the mount becomes available.
-        internal static void CompletePreset(AircraftDefinition definition)
+        private static HardpointSet Set(Dictionary<string, Transform> nodes, string name, string prefix, List<WeaponMount> options, BayDoor door, params string[] suffixes)
         {
-            if (definition == null || Encyclopedia.WeaponLookup == null ||
-                !Encyclopedia.WeaponLookup.TryGetValue("VG_Manta_Wing", out WeaponMount manta) || manta == null) return;
-            foreach (Loadout preset in definition.aircraftParameters.loadouts)
-                if (preset.weapons.Count > 1 && preset.weapons[1] != null && preset.weapons[1].jsonKey == "VG_Remora_ARM1_single")
-                    preset.weapons[1] = manta;
+            options.Insert(0, null);  // SavedLoadout reserves the first option for an empty station.
+            var set = new HardpointSet { name = name, weaponOptions = options, precludingHardpointSets = new List<byte>() };
+            FieldInfo pylons = AccessTools.Field(typeof(Hardpoint), "pylonOptions");
+            BayDoor[] doors = door == null ? Array.Empty<BayDoor>() : new[] { door };
+            foreach (var node in nodes.OrderBy(n => n.Key, StringComparer.Ordinal))
+            {
+                if (!node.Key.StartsWith(prefix, StringComparison.Ordinal) ||
+                    (suffixes.Length > 0 && !suffixes.Any(s => node.Key.EndsWith(s, StringComparison.Ordinal)))) continue;
+                Transform position = node.Value;
+                var hardpoint = new Hardpoint
+                {
+                    transform = position, part = position.GetComponentInParent<UnitPart>(true), bayDoors = doors,
+                    doorOpenDuration = DoorHold, BuiltInWeapons = Array.Empty<Weapon>(), BuiltInTurrets = Array.Empty<Turret>(),
+                };
+                pylons.SetValue(hardpoint, Array.CreateInstance(pylons.FieldType.GetElementType(), 0));
+                set.hardpoints.Add(hardpoint);
+            }
+            if (set.hardpoints.Count == 0) set.weaponOptions.Clear();
+            return set;
+        }
+
+        private static WeaponMount Find(HardpointSet set, params string[] keys) =>
+            keys.Select(key => set.weaponOptions.Find(m => m != null && m.jsonKey == key)).FirstOrDefault(m => m != null);
+
+        private static Loadout Fit(WeaponManager manager, string[] strike, string[] escort, string cargo = null, string tender = null, string troops = null)
+        {
+            HardpointSet[] sets = manager.hardpointSets;
+            return new Loadout { weapons = new List<WeaponMount> { Find(sets[0], strike), Find(sets[Outboard], escort),
+                Find(sets[2], cargo), Find(sets[3], tender), Find(sets[4], troops) } };
+        }
+
+        // The Manta can register after the airframe. Add it to the hangar catalogue as well as the default fit.
+        internal static void CompletePreset(AircraftDefinition definition, WeaponManager live = null)
+        {
+            if (definition == null || definition.unitPrefab == null || Encyclopedia.WeaponLookup == null ||
+                !Encyclopedia.WeaponLookup.TryGetValue(Manta, out WeaponMount manta) || manta == null) return;
+            HardpointSet[] template = definition.unitPrefab.GetComponentInChildren<WeaponManager>(true).hardpointSets;
+            if (template.Length <= Outboard || template[Outboard].hardpoints.Count == 0) return;
+            List<WeaponMount> options = template[Outboard].weaponOptions;
+            if (!options.Contains(manta)) options.Insert(1, manta);
+            if (live != null && live.hardpointSets.Length > Outboard && !live.hardpointSets[Outboard].weaponOptions.Contains(manta))
+                live.hardpointSets[Outboard].weaponOptions.Insert(1, manta);
+
+            AircraftParameters parameters = definition.aircraftParameters;
+            if (parameters.loadouts[1].weapons[Outboard] == manta) return;
+            foreach (Loadout preset in parameters.loadouts) preset.weapons[Outboard] = manta;
+            parameters.StandardLoadouts[0].loadout.weapons[Outboard] = manta;
         }
 
         internal static Loadout UpgradeLoadout(Loadout loadout, int slots)
@@ -176,7 +188,7 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             Aircraft aircraft = MegaplaneCargoStation.AircraftRef(__instance);
             if (!MegaplaneModule.Is(aircraft)) return;
-            MegaplaneStores.CompletePreset(aircraft.definition);
+            MegaplaneStores.CompletePreset(aircraft.definition, __instance);
             Loadout fit = MegaplaneStores.UpgradeLoadout(aircraft.loadout, __instance.hardpointSets.Length);
             if (fit != aircraft.loadout) aircraft.Networkloadout = fit;
         }

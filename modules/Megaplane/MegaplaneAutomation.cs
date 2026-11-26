@@ -386,18 +386,29 @@ namespace BoscaliSummer.Modules.Megaplane
             int before = station.GetAmmoTotal();
             VolleySample sample = a.GetComponent<VolleySample>() ?? a.gameObject.AddComponent<VolleySample>();
             int previousVolleyRounds = sample.Station == station ? sample.Rounds : 0;
+            Unit target = args.TryGetValue("idTargetUnit", out object targetValue) ? targetValue as Unit : null;
+            bool aimOnly = args.ContainsKey("aimOnly");
             try
             {
                 a.SetActiveStation(station.Number);
-                if (station.Ready())
+                if (target != null && !MegaplaneSiloBattery.IsSilo(station))
+                    for (int index = 0; index < station.TurretCount(); index++) a.SetStationTurretTarget(station.Number, (byte)index, target.persistentID);
+                if (!aimOnly && station.Ready())
                 {
-                    station.Fire(a, null);
+                    if (MegaplaneSiloBattery.IsSilo(station))
+                    {
+                        if (target == null)
+                            target = UnitRegistry.allUnits.Where(t => t is Aircraft && t.NetworkHQ != null &&
+                                MegaplaneSiloBattery.CanLaunch(a, t, station, false)).OrderBy(t => (t.transform.position - a.transform.position).sqrMagnitude).FirstOrDefault();
+                        if (target != null) station.LaunchMount(a, target, target.GlobalPosition());
+                    }
+                    else station.Fire(a, target);
                     sample.StartCoroutine(sample.ReadNextPhysicsTick(station, before));
                 }
             }
             finally
             {
-                if (previous != null && previous != station) a.SetActiveStation(previous.Number);
+                if (!aimOnly && previous != null && previous != station) a.SetActiveStation(previous.Number);
             }
             int after = station.GetAmmoTotal();
             // A missile leaves immediately. A Gun consumes its queued rounds in the next FixedUpdate.

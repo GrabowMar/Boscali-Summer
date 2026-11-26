@@ -1,111 +1,283 @@
+using System;
 using System.Collections.Generic;
-using System.Linq;
+using HarmonyLib;
+using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Megaplane
 {
-    /// <summary>RG-240 TRIDENT belly railgun (art: details/detail_railgun.py), carried instead of the bay fighters when
-    /// Megaplane.BayPayload is Railgun. Stowed in the bay; when the pilot selects it, or its turret is given a target, the
-    /// bay doors open, the elevator lowers the mount below the belly and the native turret is unstowed. Back off: the
-    /// turret stows forward, the mount rises once the barrel is home, the doors close. The art yaw ring and cradle copy
-    /// the hidden native turret's traverse and elevation, so what fires is what you see.</summary>
+    internal enum RailgunPhase { Stowed, Opening, Lowering, Deployed, Homing, Raising, Closing }
+
+    /// <summary>The Trident's doors and elevator interlock before the gun can traverse. Stowing waits for the cradle and
+    /// recoil to return to their clearance positions. The native gun supplies the shot event on the owner and observers.</summary>
     internal sealed class MegaplaneRailgun : MonoBehaviour
     {
-        private const float DoorOpen = 100f, DoorRate = 35f, LowerSeconds = 6f, HomeSeconds = 4f, Drop = 10.8f;
-        [SerializeField] private Transform elevator, yaw, pitch, elevation;
-        [SerializeField] private Turret turret;
-        [SerializeField] private Vector3 restLocal, deployedLocal;
-        private Quaternion yawRest, pitchRest;
-        private float home;   // 0 following the native turret .. 1 art back at rest (stowing)
-        private bool remoteWant, lastWant;   // peers follow the host's mount state (selection and targets only resolve host-side)
-        private readonly List<(Transform t, Quaternion rest, float sign)> doors = new List<(Transform, Quaternion, float)>();
-        private Aircraft aircraft;
+        private const float DoorPercent = 100f, DoorSwing = 154f, DoorRate = 40f, ElevatorRate = 1f / 5f, HomeRate = 30f;
+        private const float Drop = 9.756f, RecoilTravel = .88f, RecoilIn = .09f, RecoilOut = .62f, FlashSeconds = .23f;
+        private const float SelectionRenewal = 1f, SelectionLease = 3f;
+        private static readonly int Emission = Shader.PropertyToID("_EmissionColor");
+        private static readonly AccessTools.FieldRef<Gun, float> RecoilSignal = AccessTools.FieldRefAccess<Gun, float>("recoilEnergy");
+        private static readonly Color ArcTint = new Color(.13f, .54f, 1f);
 
+        [SerializeField] private Transform elevator, yaw, pitch, artMuzzle, elevation, nativeMuzzle;
+        [SerializeField] private Turret turret;
+        [SerializeField] private Gun gun;
+        [SerializeField] private Vector3 restLocal, deployedLocal;
+
+        private Quaternion yawRest, pitchRest;
+        private Vector3 pitchOrigin, muzzleOrigin, nativeRest;
+        private bool remoteWant, lastWant;
+        private bool sentSelection;
+        private float nextSelection, selectionExpires;
+        private Player remotePilot;
+        private readonly List<(Transform Door, Quaternion BaseRotation, float Sign, bool Front)> doors = new();
+        private Aircraft aircraft;
+        private AeroPart carrierPart;
+        private MeshRenderer coil;
+        private MaterialPropertyBlock glow;
+        private Light dischargeLight;
+        private int glowSlot = -1;
+        private float glowStrength = -1f;
+        private float shotAt = float.NegativeInfinity;
+
+        internal RailgunPhase Phase { get; private set; }
         internal float Door { get; private set; }
-        internal float Lower { get; private set; }   // 0 stowed in the bay .. 1 down and firing
+        internal float Lower { get; private set; }
+        internal float Recoil { get; private set; }
+        internal int Shots { get; private set; }
+        internal float Charge => Mathf.Clamp01((Time.time - shotAt) / MegaplaneGuns.RailInterval);
+        internal float CycleProgress => Phase switch
+        {
+            RailgunPhase.Opening => Door / DoorPercent,
+            RailgunPhase.Lowering => Lower,
+            RailgunPhase.Homing => 1f - Mathf.Clamp01(HomeError / 150f),
+            RailgunPhase.Raising => 1f - Lower,
+            RailgunPhase.Closing => 1f - Door / DoorPercent,
+            _ => 1f,
+        };
 #if !PUBLIC_RELEASE
-        internal bool? Command;                       // sandbox override, null follows the native station
+        internal bool? Command;
 #endif
-        internal bool Live => turret != null && Lower >= 1f;
+        internal bool Live => Healthy && Phase == RailgunPhase.Deployed;
+        internal bool Selected => turret != null && aircraft.weaponManager != null && turret.GetWeaponStation() != null &&
+            aircraft.weaponManager.currentWeaponStation == turret.GetWeaponStation();
+        internal bool RemoteSelected => aircraft != null && remotePilot != null && remotePilot == aircraft.Player && remotePilot.Aircraft == aircraft &&
+            remotePilot.HQ != null && remotePilot.HQ == aircraft.NetworkHQ && aircraft.Owner != null &&
+            aircraft.Owner == remotePilot.Owner && aircraft.Owner.IsAuthenticated && Time.unscaledTime < selectionExpires;
         internal Turret Turret => turret;
-        internal Vector3 ArtAim => pitch != null ? transform.InverseTransformDirection(pitch.forward) : Vector3.zero;        // carrier frame
+        internal Vector3 ArtAim => pitch != null ? transform.InverseTransformDirection(pitch.forward) : Vector3.zero;
         internal Vector3 NativeAim => elevation != null ? transform.InverseTransformDirection(elevation.forward) : Vector3.zero;
         internal Vector3 MuzzleLocal => pitch != null ? transform.InverseTransformPoint(pitch.position) : Vector3.zero;
+        internal float MuzzleError => artMuzzle != null && nativeMuzzle != null ? Vector3.Distance(artMuzzle.position, nativeMuzzle.position) : -1f;
+        internal float MuzzleAngle => artMuzzle != null && nativeMuzzle != null ? Vector3.Angle(artMuzzle.forward, nativeMuzzle.forward) : -1f;
+        internal float Flash => dischargeLight != null ? dischargeLight.intensity : 0f;
+        private bool Healthy => aircraft != null && !aircraft.disabled && turret != null && carrierPart != null &&
+            carrierPart.hitPoints > 0f && !carrierPart.IsDetached();
+        private float HomeError => Mathf.Max(Quaternion.Angle(yaw.localRotation, yawRest), Quaternion.Angle(pitch.localRotation, pitchRest));
 
-        internal void Bind(Dictionary<string, Transform> nodes, Turret t, Transform elev)
+        internal void Bind(Dictionary<string, Transform> nodes, Turret t, Gun weapon, Transform elev, Transform muzzle)
         {
             turret = t;
+            gun = weapon;
             elevation = elev;
+            nativeMuzzle = muzzle;
             elevator = nodes["Railgun_Elevator"];
             yaw = nodes["Railgun_Yaw"];
             pitch = nodes["Railgun_Pitch"];
+            nodes.TryGetValue("Railgun_Muzzle", out artMuzzle);
             restLocal = elevator.localPosition;
-            // the art's Railgun_Deployed empty sits exactly one authored drop below the elevator rest, span/scale pass
-            // included; read it, so the mount always lands where the art says it should
-            Vector3 drop = nodes.TryGetValue("Railgun_Deployed", out Transform deployed) && deployed != null
-                ? elevator.parent.InverseTransformPoint(deployed.position) - elevator.parent.InverseTransformPoint(elevator.position)
-                : elevator.parent.InverseTransformDirection(GetComponent<Aircraft>().transform.up) * -Drop;
-            deployedLocal = restLocal + drop;
+            deployedLocal = nodes.TryGetValue("Railgun_Deployed", out Transform deployed) && deployed != null
+                ? elevator.parent.InverseTransformPoint(deployed.position)
+                : restLocal + elevator.parent.InverseTransformDirection(transform.up) * -Drop;
         }
-
-        private void OnDestroy() => MegaplaneNet.UnregisterRailgun(this);
 
         private void Awake()
         {
             aircraft = GetComponent<Aircraft>();
-            if (yaw != null) { yawRest = yaw.localRotation; pitchRest = pitch.localRotation; }
-            foreach (Transform t in GetComponentsInChildren<Transform>(true).Where(x => x.name.StartsWith("FighterDoor_")))
-                doors.Add((t, t.localRotation, t.name.EndsWith("_L") ? -1f : 1f));
-            MegaplaneNet.RegisterRailgun(this);   // per spawned carrier, not the dormant template copy
+            carrierPart = elevator.GetComponentInParent<AeroPart>(true);
+            yawRest = yaw.localRotation;
+            pitchRest = pitch.localRotation;
+            pitchOrigin = pitch.localPosition;
+            nativeRest = transform.InverseTransformDirection(elevation.forward);
+            if (nativeMuzzle != null) muzzleOrigin = nativeMuzzle.localPosition;
+            foreach (Transform node in GetComponentsInChildren<Transform>(true))
+            {
+                if (!node.name.StartsWith("FighterDoor_", StringComparison.Ordinal)) continue;
+                doors.Add((node, node.localRotation, node.name.EndsWith("_L", StringComparison.Ordinal) ? -1f : 1f,
+                    node.name.StartsWith("FighterDoor_F_", StringComparison.Ordinal)));
+            }
+            FitDischargeFeedback();
+            MegaplaneNet.RegisterRailgun(this);
         }
 
-        /// <summary>Peer: the host's mount state.</summary>
+        private void FitDischargeFeedback()
+        {
+            coil = pitch.GetComponent<MeshRenderer>();
+            if (coil != null)
+                glowSlot = Array.FindIndex(coil.sharedMaterials, material => material != null &&
+                    material.name.StartsWith("BS_Megaplane_RailgunArc_Emit", StringComparison.Ordinal));
+            if (glowSlot >= 0) glow = new MaterialPropertyBlock();
+            if (artMuzzle != null)
+            {
+                dischargeLight = artMuzzle.gameObject.AddComponent<Light>();
+                dischargeLight.color = ArcTint;
+                dischargeLight.range = 42f;
+                dischargeLight.shadows = LightShadows.None;
+                dischargeLight.enabled = false;
+            }
+            SetGlow(0f);
+        }
+
+        private void OnDestroy() => MegaplaneNet.UnregisterRailgun(this);
+
+        /// <summary>The host replicates the requested position. Each peer follows the same mechanical interlocks.</summary>
         internal void RemoteWant(bool value) { if (aircraft != null && !aircraft.IsServer) remoteWant = value; }
 
-        internal bool Wanted => lastWant;   // the net layer's late-joiner refresh
+        internal void SetRemoteSelection(Player pilot, bool selected)
+        {
+            remotePilot = selected ? pilot : null;
+            selectionExpires = Time.unscaledTime + SelectionLease;
+        }
+
+        private void ReportSelection()
+        {
+            Player pilot = aircraft.Player;
+            if (!aircraft.LocalSim || !aircraft.HasAuthority || !aircraft.persistentID.IsValid || pilot == null ||
+                !pilot.IsLocalPlayer || pilot.Aircraft != aircraft || pilot.HQ == null || pilot.HQ != aircraft.NetworkHQ)
+            {
+                sentSelection = false;
+                return;
+            }
+            bool selected = Healthy && Selected;
+            if (selected == sentSelection && (!selected || Time.unscaledTime < nextSelection)) return;
+            if (MegaplaneNet.Ask(aircraft, selected ? MegaplaneWire.SelectRailVerb : MegaplaneWire.DeselectRailVerb))
+            {
+                sentSelection = selected;
+                nextSelection = Time.unscaledTime + SelectionRenewal;
+            }
+        }
+
+        internal bool Wanted => aircraft != null && aircraft.IsServer ? lastWant : remoteWant;
         internal uint UnitId => aircraft != null ? aircraft.persistentID.Id : 0;
 
         private void Update()
         {
-            if (turret == null || aircraft == null) return;
-            WeaponStation station = turret.GetWeaponStation();
-            bool selected = station != null && aircraft.weaponManager != null && aircraft.weaponManager.currentWeaponStation == station;
-            bool want;
+            if (aircraft == null || elevator == null) return;
+            bool want = remoteWant;
             if (aircraft.IsServer)
             {
-                // host: the station selection and the turret's target only resolve here; tell every peer the verdict
-                bool deploy = selected || turret.GetTarget() != null;
+                WeaponStation station = turret != null ? turret.GetWeaponStation() : null;
+                Unit target = turret != null ? turret.GetTarget() : null;
+                // The native station RPC only updates client observers. Dedicated hosts receive the authenticated
+                // selection separately and retain the native local station as the pilot's own UI state.
+                bool remoteSelected = RemoteSelected;
+                if (!remoteSelected) remotePilot = null;
+                bool pilotSelected = remoteSelected || (aircraft.Player != null && aircraft.Player.IsLocalPlayer && Selected);
+                bool deploy = pilotSelected || (target != null && !target.disabled);
 #if !PUBLIC_RELEASE
                 deploy = Command ?? deploy;
 #endif
-                want = !aircraft.disabled && deploy && (station == null || station.Ammo > 0 || selected);
-                if (want != lastWant)
+                want = deploy && (station == null || station.Ammo > 0 || pilotSelected);
+            }
+            else ReportSelection();
+            want &= Healthy;
+            if (aircraft.IsServer && want != lastWant)
+            {
+                lastWant = want;
+                MegaplaneNet.Broadcast(UnitId, MegaplaneWire.RailgunIndex, (byte)(want ? 1 : 0));
+            }
+            float previousDoor = Door, previousLower = Lower;
+            Step(want, Time.deltaTime);
+            if (turret != null) turret.SetStowed(!Live);
+            if (previousLower != Lower)
+                elevator.localPosition = Vector3.Lerp(restLocal, deployedLocal, Mathf.SmoothStep(0f, 1f, Lower));
+            if (previousDoor == Door) return;
+            foreach ((Transform door, Quaternion rest, float sign, bool front) in doors)
+                if (door != null && door.IsChildOf(transform))
                 {
-                    lastWant = want;
-                    MegaplaneNet.Broadcast(aircraft.persistentID.Id, MegaplaneWire.RailgunIndex, (byte)(want ? 1 : 0));
+                    float t = front ? Mathf.InverseLerp(0f, 87f, Door) : Mathf.InverseLerp(13f, DoorPercent, Door);
+                    door.localRotation = rest * Quaternion.AngleAxis(sign * Mathf.SmoothStep(0f, DoorSwing, t), Vector3.forward);
+                }
+        }
+
+        private void Step(bool want, float dt)
+        {
+            if (want)
+            {
+                if (Door < DoorPercent)
+                {
+                    Phase = RailgunPhase.Opening;
+                    Door = Mathf.MoveTowards(Door, DoorPercent, DoorRate * dt);
+                }
+                else if (Lower < 1f)
+                {
+                    Phase = RailgunPhase.Lowering;
+                    Lower = Mathf.MoveTowards(Lower, 1f, ElevatorRate * dt);
+                }
+                else Phase = RailgunPhase.Deployed;
+                return;
+            }
+            if (Lower > 0f)
+            {
+                if (HomeError > .35f || Recoil > .015f || (turret != null && Vector3.Angle(NativeAim, nativeRest) > 1.5f))
+                    Phase = RailgunPhase.Homing;
+                else
+                {
+                    Phase = RailgunPhase.Raising;
+                    Lower = Mathf.MoveTowards(Lower, 0f, ElevatorRate * dt);
                 }
             }
-            else want = remoteWant;
-            float dt = Time.deltaTime;
-            // Stowing: the art swings the barrel home over HomeSeconds (the native turret is already stowed), then the mount rises.
-            home = Mathf.MoveTowards(home, want ? 0f : 1f, dt / HomeSeconds);
-            if (want) Lower = Door >= DoorOpen - .5f ? Mathf.MoveTowards(Lower, 1f, dt / LowerSeconds) : Lower;
-            else if (home >= 1f) Lower = Mathf.MoveTowards(Lower, 0f, dt / LowerSeconds);
-            turret.SetStowed(!(want && Lower >= 1f));
-            Door = Mathf.MoveTowards(Door, want || Lower > 0f ? DoorOpen : 0f, DoorRate * dt);
-            foreach ((Transform t, Quaternion rest, float sign) in doors) if (t != null) t.localRotation = rest * Quaternion.AngleAxis(sign * Door, Vector3.forward);
-            elevator.localPosition = Vector3.Lerp(restLocal, deployedLocal, Mathf.SmoothStep(0f, 1f, Lower));
+            else if (Door > 0f)
+            {
+                Phase = RailgunPhase.Closing;
+                Door = Mathf.MoveTowards(Door, 0f, DoorRate * dt);
+            }
+            else Phase = RailgunPhase.Stowed;
         }
 
         private void LateUpdate()
         {
-            if (turret == null) return;
-            // The art takes the native barrel's direction, not its rotation (the donor's transforms carry their own roll).
-            Vector3 aim = transform.InverseTransformDirection(elevation.forward);
-            float k = 1f - Mathf.SmoothStep(0f, 1f, home);
-            float bearing = Mathf.Atan2(aim.x, aim.z) * Mathf.Rad2Deg * k, depression = -Mathf.Asin(Mathf.Clamp(aim.y, -1f, 1f)) * Mathf.Rad2Deg * k;
-            yaw.localRotation = yawRest * Quaternion.AngleAxis(bearing, Vector3.up);
-            pitch.localRotation = pitchRest * Quaternion.AngleAxis(depression, Vector3.right);
+            if (gun != null && RecoilSignal(gun) > 0f)
+            {
+                RecoilSignal(gun) = 0f;
+                shotAt = Time.time;
+                Shots++;
+            }
+            float shotAge = Time.time - shotAt;
+            float stroke = shotAge < RecoilIn ? Mathf.InverseLerp(0f, RecoilIn, shotAge) : 1f - Mathf.InverseLerp(RecoilIn, RecoilOut, shotAge);
+            Recoil = Mathf.SmoothStep(0f, RecoilTravel, stroke);
+            if (Live)
+            {
+                Vector3 aim = NativeAim;
+                float bearing = Mathf.Atan2(aim.x, aim.z) * Mathf.Rad2Deg;
+                float depression = -Mathf.Asin(Mathf.Clamp(aim.y, -1f, 1f)) * Mathf.Rad2Deg;
+                yaw.localRotation = yawRest * Quaternion.AngleAxis(bearing, Vector3.up);
+                pitch.localRotation = pitchRest * Quaternion.AngleAxis(depression, Vector3.right);
+            }
+            else
+            {
+                float step = HomeRate * Time.deltaTime;
+                yaw.localRotation = Quaternion.RotateTowards(yaw.localRotation, yawRest, step);
+                pitch.localRotation = Quaternion.RotateTowards(pitch.localRotation, pitchRest, step);
+            }
+            pitch.localPosition = pitchOrigin + pitch.localRotation * (Vector3.back * Recoil);
+            if (nativeMuzzle != null) nativeMuzzle.localPosition = muzzleOrigin + Vector3.back * Recoil;
+
+            float flash = 1f - Mathf.InverseLerp(0f, FlashSeconds, shotAge);
+            SetGlow(Healthy ? (Live ? .15f + 1.7f * Charge : .14f * Lower) + 7.5f * flash : 0f);
+            if (dischargeLight != null)
+            {
+                dischargeLight.enabled = Healthy && flash > 0f;
+                dischargeLight.intensity = 12f * flash;
+            }
+        }
+
+        private void SetGlow(float strength)
+        {
+            if (coil == null || glowSlot < 0 || Mathf.Approximately(glowStrength, strength)) return;
+            glowStrength = strength;
+            glow.SetColor(Emission, ArcTint * strength);
+            coil.SetPropertyBlock(glow, glowSlot);
         }
     }
 }
