@@ -12,12 +12,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     internal static class SpaceProbable
     {
         /// <param name="salt">A host-only per-mission secret: without it a client could predict the noise from ids it can see.</param>
-        public static ProbableClass Of(ContactClass truth, int id, int generation, ulong salt, out byte percent)
+        public static ProbableClass Of(ContactClass truth, int id, int generation, ulong salt, out byte percent, bool booked = false)
         {
             uint h = Deterministic.Hash(id, generation, unchecked((int)salt), unchecked((int)(salt >> 32)));
             int roll = (int)(h % 100u);
             percent = (byte)(55 + (int)((h >> 8) % 36u)); // 55..90
             bool hostile = truth == ContactClass.EnemyGround || truth == ContactClass.Decoy;
+            if (booked) return hostile ? ProbableClass.Hostile : truth == ContactClass.Friendly ? ProbableClass.Friendly : ProbableClass.Neutral;
             if (hostile) return roll < 62 ? ProbableClass.Hostile : roll < 86 ? ProbableClass.Unknown : ProbableClass.Neutral;
             if (truth == ContactClass.Friendly) return roll < 55 ? ProbableClass.Friendly : roll < 85 ? ProbableClass.Unknown : ProbableClass.Neutral;
             return roll < 55 ? ProbableClass.Neutral : roll < 85 ? ProbableClass.Unknown : ProbableClass.Hostile;

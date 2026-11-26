@@ -75,8 +75,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public readonly GeoBird[] Geo = new GeoBird[OpsWire.GeoCount];
         public readonly int[] EnemyTrackIds = new int[SpaceRules.BirdCount];
         public int IncomingBird = -1;
-        public bool IncomingLaunched;
-        public float IncomingDeadline, IncomingAimU, IncomingAimV;
+        public bool IncomingLaunched, IncomingClear;
+        public float IncomingDeadline, IncomingConjunctionAt;
+        public int OutgoingTrackId;
+        public bool OutgoingLaunched;
+        public float OutgoingDeadline;
+        public readonly OrbitCollection[] Collections = new OrbitCollection[OrbitCollection.SensorCount];
         public readonly List<OpsRow> Rows = new List<OpsRow>();
         public readonly List<OpsPingRow> Pings = new List<OpsPingRow>();
         public readonly List<OpsEventRow> Events = new List<OpsEventRow>();
@@ -93,7 +97,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             Array.Copy(Geo, c.Geo, Geo.Length);
             Array.Copy(EnemyTrackIds, c.EnemyTrackIds, EnemyTrackIds.Length);
             c.IncomingBird = IncomingBird; c.IncomingLaunched = IncomingLaunched; c.IncomingDeadline = IncomingDeadline;
-            c.IncomingAimU = IncomingAimU; c.IncomingAimV = IncomingAimV;
+            c.IncomingClear = IncomingClear; c.IncomingConjunctionAt = IncomingConjunctionAt;
+            c.OutgoingTrackId = OutgoingTrackId; c.OutgoingLaunched = OutgoingLaunched; c.OutgoingDeadline = OutgoingDeadline;
+            Array.Copy(Collections, c.Collections, Collections.Length);
             c.Rows.AddRange(Rows); c.Pings.AddRange(Pings); c.Events.AddRange(Events); c.Flights.AddRange(Flights); c.Sites.AddRange(Sites); c.Log.AddRange(Log);
             return c;
         }
@@ -109,8 +115,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 if (!OpsWire.SameGeo(Geo[i], o.Geo[i]) || EnemyTrackIds[i] != o.EnemyTrackIds[i]) return false;
                 if (EnemyTrackIds[i] != 0 && !OpsWire.SameSector(Geo[SpaceRules.BirdCount + i], o.Geo[SpaceRules.BirdCount + i])) return false;
             }
-            if (IncomingBird != o.IncomingBird || IncomingLaunched != o.IncomingLaunched || !SpaceMirror.SameExpiry(IncomingDeadline, o.IncomingDeadline) ||
-                (IncomingLaunched && (!OpsWire.SameCell(IncomingAimU, o.IncomingAimU) || !OpsWire.SameCell(IncomingAimV, o.IncomingAimV)))) return false;
+            if (IncomingBird != o.IncomingBird || IncomingLaunched != o.IncomingLaunched || IncomingClear != o.IncomingClear ||
+                !SpaceMirror.SameExpiry(IncomingDeadline, o.IncomingDeadline) || !SpaceMirror.SameExpiry(IncomingConjunctionAt, o.IncomingConjunctionAt) ||
+                OutgoingTrackId != o.OutgoingTrackId || OutgoingLaunched != o.OutgoingLaunched || !SpaceMirror.SameExpiry(OutgoingDeadline, o.OutgoingDeadline)) return false;
+            for (int i = 0; i < Collections.Length; i++)
+            {
+                OrbitCollection a = Collections[i], b = o.Collections[i];
+                if (a.Status != b.Status || (a.Status != 0 && (!OpsWire.SameCell(a.U, b.U) || !OpsWire.SameCell(a.V, b.V) || a.At != b.At))) return false;
+            }
             for (int i = 0; i < Rows.Count; i++)
             {
                 OpsRow a = Rows[i], b = o.Rows[i];
@@ -138,7 +150,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         private const int MinRowBytes = 10, MinPingBytes = 5, MinEventBytes = 2, MinFlightBytes = 8, MinSiteBytes = 7, MinLogBytes = 4;
         private const byte FlagActive = 1, FlagCyber = 2, FlagSof = 4;
         public const int GeoCount = SpaceRules.BirdCount * 2;
-        private const int GeoBytes = 12;
+        private const int MinGeoBytes = 31;
 
         private static int Cell(float x) => (int)Math.Round(Math.Clamp(x, 0f, 1f) * 65535f);
         private static void Put16(ISpaceWriter w, int v) { w.WriteByte((byte)v); w.WriteByte((byte)(v >> 8)); }
@@ -155,26 +167,32 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public static bool SameSector(in GeoBird a, in GeoBird b) =>
             AsatRules.TrackSector(a.ToU) == AsatRules.TrackSector(b.ToU) && AsatRules.TrackSector(a.ToV) == AsatRules.TrackSector(b.ToV);
 
-        /// <summary>The same wire image: positions to 1/65535, the burn start to the second, the fuel to a percent.</summary>
+        /// <summary>Coordinates quantize to grid cells. Orbit clocks and reserve retain their source precision.</summary>
         public static bool SameGeo(in GeoBird a, in GeoBird b) =>
-            Cell(a.FromU) == Cell(b.FromU) && Cell(a.FromV) == Cell(b.FromV) && Cell(a.ToU) == Cell(b.ToU) && Cell(a.ToV) == Cell(b.ToV) &&
-            Math.Round(a.Fuel) == Math.Round(b.Fuel) && a.Bus == b.Bus && (a.Length <= 0f || SpaceMirror.SameExpiry(a.DepartAt, b.DepartAt));
+            SameCell(a.FromU, b.FromU) && SameCell(a.FromV, b.FromV) && SameCell(a.ToU, b.ToU) && SameCell(a.ToV, b.ToV) &&
+            a.Fuel == b.Fuel && a.Bus == b.Bus && a.Payload == b.Payload && a.OrbitRevision == b.OrbitRevision &&
+            a.DepartAt == b.DepartAt && a.FromEpochAt == b.FromEpochAt && a.EpochAt == b.EpochAt && a.ArrivalAt == b.ArrivalAt;
 
-        private static void WriteGeo(ISpaceWriter w, in GeoBird g, float now)
+        private static void WriteGeo(ISpaceWriter w, in GeoBird g)
         {
             Put16(w, Cell(g.FromU)); Put16(w, Cell(g.FromV)); Put16(w, Cell(g.ToU)); Put16(w, Cell(g.ToV));
-            Put16(w, g.Length > 0f ? (int)Math.Clamp(Math.Round(now - g.DepartAt), 0d, ushort.MaxValue) : 0); // seconds since the burn began
-            w.WriteByte((byte)Math.Clamp((int)Math.Round(g.Fuel), 0, 100));
-            w.WriteByte((byte)g.Bus);
+            SpaceWire.WriteFloat(w, g.DepartAt);
+            SpaceWire.WriteFloat(w, g.Fuel);
+            w.WriteByte((byte)g.Bus); w.WriteByte((byte)g.Payload);
+            SpaceWire.WriteFloat(w, g.FromEpochAt); SpaceWire.WriteFloat(w, g.EpochAt); SpaceWire.WriteFloat(w, g.ArrivalAt);
+            SpaceWire.WriteVar(w, (uint)Math.Max(0, g.OrbitRevision));
         }
 
-        private static bool ReadGeo(ISpaceReader r, float now, out GeoBird g)
+        private static bool ReadGeo(ISpaceReader r, out GeoBird g)
         {
             g = default;
-            var v = new int[5];
-            for (int i = 0; i < 5; i++) { if (!r.TryReadByte(out byte lo) || !r.TryReadByte(out byte hi)) return false; v[i] = lo | (hi << 8); }
-            if (!r.TryReadByte(out byte fuel) || fuel > 100 || !r.TryReadByte(out byte bus) || bus > (byte)SatelliteBus.Wideband) return false;
-            g = new GeoBird(v[0] / 65535f, v[1] / 65535f, v[2] / 65535f, v[3] / 65535f, now - v[4], fuel, (SatelliteBus)bus);
+            if (!ReadCell(r, out float fromU) || !ReadCell(r, out float fromV) || !ReadCell(r, out float toU) || !ReadCell(r, out float toV) ||
+                !SpaceWire.ReadFloat(r, out float departAt) || !float.IsFinite(departAt) || !SpaceWire.ReadFloat(r, out float fuel) || !float.IsFinite(fuel) || fuel < 0f || fuel > 100f ||
+                !r.TryReadByte(out byte bus) || bus > (byte)SatelliteBus.Wideband || !r.TryReadByte(out byte payload) || payload >= SpaceRules.BirdCount ||
+                !SpaceWire.ReadFloat(r, out float fromEpochAt) || !float.IsFinite(fromEpochAt) ||
+                !SpaceWire.ReadFloat(r, out float epochAt) || !float.IsFinite(epochAt) || !SpaceWire.ReadFloat(r, out float arrivalAt) || !float.IsFinite(arrivalAt) ||
+                !SpaceWire.ReadInt(r, out int revision)) return false;
+            g = new GeoBird(fromU, fromV, toU, toV, departAt, fuel, (SatelliteBus)bus, (BirdKind)payload, fromEpochAt, epochAt, arrivalAt, revision);
             return true;
         }
 
@@ -187,7 +205,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             w.WriteByte((byte)((s.BirdsDown & 7) | ((s.EnemyBirdsDown & 7) << 3)));
             w.WriteByte(s.BirdsLaunched);
             for (int i = 0; i < s.BirdPercent.Length; i++) w.WriteByte(s.BirdPercent[i]);
-            for (int i = 0; i < SpaceRules.BirdCount; i++) WriteGeo(w, s.Geo[i], s.Now);
+            for (int i = 0; i < SpaceRules.BirdCount; i++) WriteGeo(w, s.Geo[i]);
             for (int i = 0; i < SpaceRules.BirdCount; i++)
             {
                 int id = s.EnemyTrackIds[i];
@@ -197,11 +215,24 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 Put16(w, Cell(AsatRules.TrackSector(track.ToU))); Put16(w, Cell(AsatRules.TrackSector(track.ToV)));
             }
             bool incoming = s.IncomingBird >= 0 && s.IncomingBird < SpaceRules.BirdCount;
-            w.WriteByte(incoming ? (byte)((s.IncomingBird + 1) | (s.IncomingLaunched ? 4 : 0)) : (byte)0);
+            w.WriteByte(incoming ? (byte)((s.IncomingBird + 1) | (s.IncomingLaunched ? 4 : 0) | (s.IncomingClear ? 8 : 0)) : (byte)0);
             if (incoming)
             {
-                SpaceWire.WriteExpiry(w, s.IncomingDeadline, s.Now);
-                if (s.IncomingLaunched) { Put16(w, Cell(s.IncomingAimU)); Put16(w, Cell(s.IncomingAimV)); }
+                SpaceWire.WriteFloat(w, s.IncomingDeadline);
+                if (!s.IncomingLaunched) SpaceWire.WriteFloat(w, s.IncomingConjunctionAt);
+            }
+            SpaceWire.WriteVar(w, (uint)Math.Max(0, s.OutgoingTrackId));
+            if (s.OutgoingTrackId > 0)
+            {
+                w.WriteByte(s.OutgoingLaunched ? (byte)1 : (byte)0);
+                SpaceWire.WriteFloat(w, s.OutgoingDeadline);
+            }
+            for (int i = 0; i < s.Collections.Length; i++)
+            {
+                OrbitCollection row = s.Collections[i];
+                w.WriteByte(row.Status);
+                if (row.Status == 0) continue;
+                Put16(w, Cell(row.U)); Put16(w, Cell(row.V)); SpaceWire.WriteFloat(w, row.At);
             }
             int n = Math.Min(s.Rows.Count, MaxRows);
             w.WriteByte((byte)n);
@@ -293,8 +324,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             s.BirdsDown = (byte)(birds & 7); s.EnemyBirdsDown = (byte)(birds >> 3);
             if (!r.TryReadByte(out s.BirdsLaunched) || (s.BirdsLaunched & ~7) != 0) return Bad();
             for (int i = 0; i < s.BirdPercent.Length; i++) if (!r.TryReadByte(out s.BirdPercent[i]) || s.BirdPercent[i] > 100) return Bad();
-            if (r.Remaining < SpaceRules.BirdCount * (GeoBytes + 1) + 1) return Bad();
-            for (int i = 0; i < SpaceRules.BirdCount; i++) if (!ReadGeo(r, now, out s.Geo[i])) return Bad();
+            if (r.Remaining < SpaceRules.BirdCount * (MinGeoBytes + 1) + 2 + OrbitCollection.SensorCount) return Bad();
+            for (int i = 0; i < SpaceRules.BirdCount; i++) if (!ReadGeo(r, out s.Geo[i])) return Bad();
             for (int i = 0; i < SpaceRules.BirdCount; i++)
             {
                 if (!SpaceWire.ReadInt(r, out s.EnemyTrackIds[i])) return Bad();
@@ -302,13 +333,30 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 if (!ReadCell(r, out float u) || !ReadCell(r, out float v)) return Bad();
                 s.Geo[SpaceRules.BirdCount + i] = new GeoBird(u, v, 0f);
             }
-            if (!r.TryReadByte(out byte incoming) || incoming > 7 || incoming == 4) return Bad();
+            if (!r.TryReadByte(out byte incoming) || incoming > 15 || (incoming != 0 && (incoming & 3) == 0)) return Bad();
             if (incoming > 0)
             {
                 s.IncomingBird = (incoming & 3) - 1;
                 s.IncomingLaunched = (incoming & 4) != 0;
-                if (!SpaceWire.ReadExpiry(r, now, out s.IncomingDeadline) ||
-                    (s.IncomingLaunched && (!ReadCell(r, out s.IncomingAimU) || !ReadCell(r, out s.IncomingAimV)))) return Bad();
+                s.IncomingClear = (incoming & 8) != 0;
+                if (!SpaceWire.ReadFloat(r, out s.IncomingDeadline) || !SpaceRules.MissionTime(s.IncomingDeadline)) return Bad();
+                if (s.IncomingLaunched) s.IncomingConjunctionAt = s.IncomingDeadline;
+                else if (!SpaceWire.ReadFloat(r, out s.IncomingConjunctionAt) || !SpaceRules.MissionTime(s.IncomingConjunctionAt) ||
+                    s.IncomingConjunctionAt < s.IncomingDeadline) return Bad();
+            }
+            if (!SpaceWire.ReadInt(r, out s.OutgoingTrackId)) return Bad();
+            if (s.OutgoingTrackId > 0)
+            {
+                if (!r.TryReadByte(out byte launched) || launched > 1 || !SpaceWire.ReadFloat(r, out s.OutgoingDeadline) ||
+                    !SpaceRules.MissionTime(s.OutgoingDeadline)) return Bad();
+                s.OutgoingLaunched = launched != 0;
+            }
+            for (int i = 0; i < s.Collections.Length; i++)
+            {
+                if (!r.TryReadByte(out byte status) || status > OrbitCollection.Missed) return Bad();
+                if (status == 0) continue;
+                if (!ReadCell(r, out float u) || !ReadCell(r, out float v) || !SpaceWire.ReadFloat(r, out float at) || !SpaceRules.MissionTime(at)) return Bad();
+                s.Collections[i] = new OrbitCollection { Status = status, U = u, V = v, At = at };
             }
             if (!r.TryReadByte(out byte n) || n > MaxRows || r.Remaining < n * MinRowBytes) return Bad();
             for (int i = 0; i < n; i++)
@@ -370,8 +418,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             for (int i = 0; i < copy.Rows.Count; i++) { OpsRow r = copy.Rows[i]; if (r.EndsAt > 0f) r.EndsAt += offset; copy.Rows[i] = r; }
             for (int i = 0; i < copy.Pings.Count; i++) { OpsPingRow p = copy.Pings[i]; if (p.Until > 0f) p.Until += offset; copy.Pings[i] = p; }
             for (int i = 0; i < copy.Flights.Count; i++) { OpsFlightRow f = copy.Flights[i]; if (f.EndsAt > 0f) f.EndsAt += offset; copy.Flights[i] = f; }
-            if (copy.IncomingBird >= 0) copy.IncomingDeadline += offset;
-            for (int i = 0; i < SpaceRules.BirdCount; i++) { GeoBird g = copy.Geo[i]; copy.Geo[i] = new GeoBird(g.FromU, g.FromV, g.ToU, g.ToV, g.DepartAt + offset, g.Fuel, g.Bus); }
+            if (copy.IncomingBird >= 0) { copy.IncomingDeadline += offset; copy.IncomingConjunctionAt += offset; }
+            if (copy.OutgoingTrackId > 0) copy.OutgoingDeadline += offset;
+            for (int i = 0; i < copy.Collections.Length; i++) if (copy.Collections[i].Status != 0) copy.Collections[i].At += offset;
+            for (int i = 0; i < SpaceRules.BirdCount; i++)
+            {
+                GeoBird g = copy.Geo[i];
+                copy.Geo[i] = new GeoBird(g.FromU, g.FromV, g.ToU, g.ToV, g.DepartAt + offset, g.Fuel, g.Bus,
+                    g.Payload, g.FromEpochAt + offset, g.EpochAt + offset, g.ArrivalAt + offset, g.OrbitRevision);
+            }
             return copy;
         }
 

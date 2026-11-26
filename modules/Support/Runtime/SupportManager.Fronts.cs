@@ -60,5 +60,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Burn one of the faction's satellites to a map point (u,v in 0..1); the host judges fuel and burn state.</summary>
         internal int RelocateBird(int bird, float u, float v) =>
             bird < 0 || bird >= SpaceRules.BirdCount ? 0 : SendSpace(SpaceCommandKind.RelocateBird, 0, new[] { bird, GeoSpace.Pack(u, v) });
+
+        internal int FrontRephaseBird(int bird, bool advance) => bird < 0 || bird >= SpaceRules.BirdCount ? 0
+            : SendSpace(SpaceCommandKind.RephaseBird, 0, new[] { bird, advance ? 1 : 0 });
+
+        internal int FrontBookPass(int bird, float u, float v) => bird < 0 || bird >= OrbitCollection.SensorCount ? 0
+            : SendSpace(SpaceCommandKind.BookPass, 0, new[] { bird, GeoSpace.Pack(u, v) });
+
+        internal int FrontCancelPass(int bird) => bird < 0 || bird >= OrbitCollection.SensorCount ? 0
+            : SendSpace(SpaceCommandKind.CancelPass, bird, null);
     }
 }

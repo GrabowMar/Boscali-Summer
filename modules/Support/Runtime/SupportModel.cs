@@ -70,7 +70,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         Overwatch = 44,
         Starfall = 45,
         Siphon = 46,
-        DirectAction = 47
+        DirectAction = 47,
+        /// <summary>Verified orbital collection report (TASKED only, no claim).</summary>
+        OrbitalIntel = 48
     }
 
     internal enum SupportResult : byte

@@ -75,6 +75,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             baselinePrice = 0; charge = !BypassRequirements; detail = 0;
             // Master switch, re-judged here because a queued claim is arbitrated after the request was admitted.
             if (settings == null || !settings.Enabled.Value) return TaskedOutcome.Unavailable;
+            if (action == SupportActionId.OrbitalIntel)
+            {
+                if (claiming || !GameAccess.IsServer() || FindPlayer(owner, playerId) == null || !TryGetSpaceState(owner, out SpaceState intel))
+                    return TaskedOutcome.Unavailable;
+                return intel.LiveUplinkCount > 0 ? TaskedOutcome.None : TaskedOutcome.UplinkDown;
+            }
             if (SofPosts.IsPost(action)) return AuthorizeSofTasked(owner, playerId, action, claiming, out baselinePrice, out charge, out detail);
             if (TaskedKinds.DomainOf(action) == TaskedDomain.Cyber && CyberPackages.TryOfAction(action, out _))
                 return AuthorizeCyberTasked(owner, playerId, action, claiming, out baselinePrice, out charge, out detail);

@@ -138,8 +138,10 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// One SpaceCommand kind, TruckMove = 29 (a truck slot and a packed point). The OpsStateMessage adds BirdsLaunched (bit per own bird launched this scene), and a CYBER anchor's
         /// health field reads 3 for a truck packing up.
         /// </summary>
-        // Protocol 45 carries satellite buses, selected ASAT tracks and faction warning data.
-        internal const byte ProtocolVersion = 45;
+        // Protocol 46 carries orbital clocks, pass bookings, retiming orders and faction conjunction warnings.
+        // Protocol 47 adds the booked provenance bit and extends one-byte contact lifetimes in fifths of a second.
+        // Protocol 48 adds a dedicated handoff for booked orbital contacts.
+        internal const byte ProtocolVersion = 48;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;

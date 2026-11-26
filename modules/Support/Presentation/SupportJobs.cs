@@ -37,6 +37,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 FeedPost post = posts[i];
                 PostStatus status = SpaceFeedRules.PostStatusOf(post, now);
                 if (status == PostStatus.Stale) continue;
+                bool intel = post.Action == SupportActionId.OrbitalIntel;
                 bool armed = post.CallId != 0 && calls.TaskedArmedId == post.CallId, launching = status == PostStatus.Launching;
                 int targets = post.Points != null ? Mathf.Max(1, post.Points.Length) : 1;
                 bool site = post.Points != null && post.Points.Length > 0;
@@ -45,10 +46,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 {
                     Kind = JobKind.StrikePackage, Id = post.CallId, Title = TaskedKinds.Label(post.Action),
                     Detail = TaskedKinds.Slab(post.Domain) + " · " + targets + " TGT" + (site ? " · " + OpsKit.Grid(post.Points[0].X, post.Points[0].Z) : "") + " · FROM " + origin,
-                    State = (launching ? (string.IsNullOrEmpty(post.Claimant) ? "ANOTHER PILOT" : post.Claimant) + " LAUNCHING"
+                    State = (intel ? "CONFIRMED FIX" : launching ? (string.IsNullOrEmpty(post.Claimant) ? "ANOTHER PILOT" : post.Claimant) + " LAUNCHING"
                         : armed ? calls.TaskedClaimPending ? "CLAIM SENT" : "ARMED" : "OPEN") + " · " + FrontRules.Clock(Mathf.Max(0f, post.Expires - now)) + " LEFT",
-                    Act = launching ? "" : armed ? "FIRE" : "ACCEPT", ActLive = !launching && !calls.TaskedClaimPending,
-                    Mine = armed, Pay = -post.Price, Currency = "ALLOCATION",
+                    Act = intel || launching ? "" : armed ? "FIRE" : "ACCEPT", ActLive = !intel && !launching && !calls.TaskedClaimPending,
+                    Mine = armed, Pay = -post.Price, Currency = intel ? "" : "ALLOCATION",
                     HasSite = site, X = site ? post.Points[0].X : 0f, Z = site ? post.Points[0].Z : 0f,
                 });
             }
@@ -57,6 +58,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public void Act(int id)
         {
             if (calls == null) return;
+            foreach (FeedPost post in manager.SpaceMirror.State.Posts)
+                if (post.CallId == id && post.Action == SupportActionId.OrbitalIntel) return;
             if (calls.TaskedArmedId == id) calls.FireTasked(id);
             else calls.ArmTasked(id);
         }

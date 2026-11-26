@@ -12,58 +12,84 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal sealed partial class OrbitRoom
     {
         private const float ConsoleInset = 12f;
-        private const float ManifestY = 64f, ManifestH = 339f, PadsY = 415f, PadsH = 222f;
+        private const float ClearanceY = 66f, ReadinessY = 149f, PadsY = 542f, StandingY = 781f;
         private FrontBox launch;
-        private TMP_Text launchFunds, launchAllocation, padHint, padHead, payloadReadback, busReadback, stationReadback, launchReceipt;
+        private TMP_Text launchFunds, launchAllocation, launchDecision, launchVehicle, padHint, padHead, payloadReadback, busReadback, stationReadback, launchReceipt, insertionReadback, postureLock;
         private readonly AvControl[] payloadButtons = new AvControl[FrontRules.BirdCap];
         private readonly TMP_Text[] payloadStates = new TMP_Text[FrontRules.BirdCap];
+        private readonly TMP_Text[] clearanceValues = new TMP_Text[4];
         private readonly AvControl[] busButtons = new AvControl[3];
         private readonly PadCard[] padCards = new PadCard[FrontRules.PadCap];
         private AvControl buildPad, queueSatellite, chipSatellite, stationPick, autoStation;
+        private readonly AvControl[] directives = new AvControl[3];
         private FrontBar launchProgress;
+        private FrontVector clearanceFrame;
         private string padWhy = "";
 
-        private static readonly string[] PayloadJob = { "SAT CAMERA · OPTICAL", "OVERWATCH · RADAR", "ORBITAL ROD · KINETIC" };
+        private static readonly string[] PayloadRole = { "OPTICAL IMAGING", "RADAR OVERWATCH", "KINETIC SUPPORT" };
         private static readonly string[] KindTag = { "OPT", "RDR", "KIN" };
         private static readonly string[] BusNames = { "BALANCED", "AGILE", "WIDEBAND" };
-        private static readonly string[] BusTradeoffs = { "STANDARD THRUST AND COVERAGE", "FASTER TRANSFERS · NARROWER FOOTPRINT", "WIDER FOOTPRINT · SLOWER TRANSFERS" };
+        private static readonly string[] BusTradeoffs = { "Standard swath and transfer reserve.", "Higher reserve and faster transfers with a narrower swath.", "Wider sensor swath with lower reserve and longer transfers." };
+        private static readonly FrontDirective[] Postures = { FrontDirective.Recon, FrontDirective.Strike, FrontDirective.Defend };
 
         private void BuildLaunch(RectTransform column, float w, float h)
         {
-            launch = new FrontBox(column, skin, "Launch", 0f, 0f, w, h, "LAUNCH CONTROL", AvIcon.Satellite, FrontLook.Console).Tagged("LCO");
+            launch = new FrontBox(column, skin, "Launch", 0f, 0f, w, h, "FLIGHT READINESS", AvIcon.Satellite, FrontLook.Console);
             RectTransform root = launch.Rect;
-            AvionicsSections(root, w, h, (ManifestY, ManifestH, Own), (PadsY, PadsH, RoomInk.Telemetry));
             float x = ConsoleInset + 10f, width = w - 2f * x, cell = (width - 12f) / 3f;
+            clearanceFrame = FrontVector.Add(root, "ClearanceRail");
+            AvLay.Place(clearanceFrame.rectTransform, 0f, 0f, w, h);
             launchFunds = ConsoleReadout(root, "Funds", x, 31f, width * 0.65f, true);
             launchAllocation = ConsoleReadout(root, "Allocation", x + width * 0.65f, 31f, width * 0.35f, false, TextAlignmentOptions.MidlineRight);
-            ConsoleHeading(root, "Manifest", x, ManifestY + 8f, width, "FLIGHT MANIFEST", Own);
-            ConsoleHeading(root, "Payload", x, ManifestY + 39f, width, "PAYLOAD", Mc.Steel);
-            ConsoleHeading(root, "Bus", x, ManifestY + 122f, width, "BUS", Mc.Steel);
+            launchDecision = FrontKit.Cond(root, "LaunchDecision", x + 3f, ClearanceY + 4f, 160f, 70f, 47f, TextAlignmentOptions.MidlineLeft, AvTextRole.Display);
+            ConsoleHeading(root, "Clearance", x + 175f, ClearanceY + 8f, width - 175f, "INSERTION CLEARANCE", Mc.Steel);
+            launchVehicle = FrontKit.Cond(root, "Spacecraft", x + 175f, ClearanceY + 30f, width - 175f, 44f, 29f, TextAlignmentOptions.MidlineLeft, AvTextRole.Display);
+            string[] checks = { "PAYLOAD", "PAD", "FUNDS", "WATCH GRID" };
+            float quarter = (width - 6f) / 4f;
+            for (int i = 0; i < checks.Length; i++)
+            {
+                float left = x + 5f + i * quarter;
+                ConsoleHeading(root, "CheckLabel" + i, left, ReadinessY, quarter - 13f, checks[i], Mc.Steel);
+                clearanceValues[i] = ConsoleReadout(root, "CheckValue" + i, left, ReadinessY + 22f, quarter - 13f, true);
+            }
+
+            ConsoleHeading(root, "Payload", x, 220f, width, "PAYLOAD / ORBIT FAMILY", Own);
+            ConsoleHeading(root, "Bus", x, 323f, width, "SPACECRAFT BUS", Own);
             for (int k = 0; k < payloadButtons.Length; k++)
             {
                 int slot = k;
                 float columnX = x + k * (cell + 6f);
-                payloadButtons[k] = Small(root, FrontViews.BirdCallsign(k), columnX, ManifestY + 61f, cell, () => PickPayload(slot), PayloadJob[k]);
-                payloadStates[k] = ConsoleReadout(root, "PayloadState" + k, columnX, ManifestY + 87f, cell, false, TextAlignmentOptions.Midline);
-                busButtons[k] = Small(root, BusNames[k], columnX, ManifestY + 144f, cell, () => PickBus(slot), BusTradeoffs[k]);
+                payloadButtons[k] = Small(root, FrontViews.BirdCallsign(k), columnX, 247f, cell, () => PickPayload(slot), PayloadRole[k], PayloadInk[k]);
+                payloadStates[k] = ConsoleReadout(root, "PayloadState" + k, columnX, 271f, cell, false, TextAlignmentOptions.Midline);
+                busButtons[k] = Small(root, BusNames[k], columnX, 348f, cell, () => PickBus(slot), BusTradeoffs[k]);
             }
-            payloadReadback = ConsoleReadout(root, "PayloadReadback", x, ManifestY + 180f, width, true);
-            busReadback = ConsoleReadout(root, "BusReadback", x, ManifestY + 205f, width);
-            stationReadback = ConsoleReadout(root, "StationReadback", x, ManifestY + 232f, width - 227f);
-            autoStation = Small(root, "AUTO", x + width - 215f, ManifestY + 230f, 63f, UseHomeStation,
-                "Clear the picked station and use the payload's automatic station.");
-            stationPick = Small(root, "PICK STATION", x + width - 144f, ManifestY + 230f, 144f, ArmLaunchStation, "Pick this bird's initial station on the coverage map. Esc cancels.");
-            launchReceipt = ConsoleReadout(root, "LaunchReceipt", x, ManifestY + 260f, width, true);
-            launchProgress = new FrontBar(root, skin, x, ManifestY + 285f, width, 6f);
-            queueSatellite = Small(root, "QUEUE LAUNCH", x, ManifestY + 302f, width, QueueLaunch, "Send this manifest to the SPACE programme queue.");
-            queueSatellite.SetStyle(AvButtonStyle.Primary);
-            chipSatellite = Small(root, "CHIP IN", x, ManifestY + 302f, width, ChipLaunch, "Donate pilot allocation to this manifest.");
+            payloadReadback = ConsoleReadout(root, "PayloadReadback", x, 292f, width, true);
+            busReadback = ConsoleReadout(root, "BusReadback", x, 375f, width);
+            stationReadback = ConsoleReadout(root, "StationReadback", x, 407f, width - 227f, true);
+            autoStation = Small(root, "AUTO", x + width - 215f, 405f, 63f, UseHomeStation, "Use the faction's automatic track crossing.");
+            stationPick = Small(root, "PICK CROSSING", x + width - 144f, 405f, 144f, ArmLaunchStation,
+                "Choose where the payload's recurring ground track crosses the theatre.");
+            insertionReadback = ConsoleReadout(root, "InsertionForecast", x, 433f, width, true);
+            launchReceipt = ConsoleReadout(root, "LaunchReceipt", x, 456f, width);
+            launchProgress = new FrontBar(root, skin, x, 520f, width, 4f);
+            queueSatellite = Prominent(root, "QUEUE INSERTION", x, 480f, width, 44f, QueueLaunch,
+                "Commit this payload, bus and crossing to the faction insertion programme.", RoomInk.Telemetry);
+            chipSatellite = Prominent(root, "CHIP IN", x, 480f, width, 34f, ChipLaunch, "Donate pilot allocation to the insertion order.", RoomInk.Telemetry);
 
             padHead = ConsoleReadout(root, "PadHead", x, PadsY + 8f, width - 152f, true);
             buildPad = Small(root, "BUILD PAD", x + width - 144f, PadsY + 6f, 144f, ArmPadPick,
                 "Pick a construction site within the ring around a held airbase. Press again or Esc to cancel.");
             for (int i = 0; i < padCards.Length; i++) padCards[i] = new PadCard(this, root, x, PadsY + 44f + 71f * i, width, i);
             padHint = ConsoleReadout(root, "PadReadback", x, PadsY + 188f, width);
+
+            ConsoleHeading(root, "StandingOrders", x, StandingY + 8f, width * 0.5f, "STANDING ORDERS", Own);
+            postureLock = ConsoleReadout(root, "StandingOrderOwner", x + width * 0.5f, StandingY + 8f, width * 0.5f, false, TextAlignmentOptions.MidlineRight);
+            for (int i = 0; i < directives.Length; i++)
+            {
+                FrontDirective posture = Postures[i];
+                directives[i] = Small(root, FrontRules.Name(posture), x + (cell + 6f) * i, StandingY + 49f, cell,
+                    () => { actions.Touch(); actions.SetDirective(Front.Space, posture); }, Describe(Front.Space, posture));
+            }
         }
 
         private void PickPayload(int slot)
@@ -109,6 +135,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (last != null && LaunchRow(last, (int)launchPreviewKind, out FrontQueueView q)) Donate(q.Row);
         }
 
+        private bool LaunchDraft(FrontRoomView view) => !Fleet(view, (int)launchPreviewKind).Up && !LaunchRow(view, (int)launchPreviewKind, out _);
+
         private void PaintLaunch(FrontRoomView v)
         {
             int kind = (int)launchPreviewKind;
@@ -136,29 +164,40 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
 
             FrontOfferView offer = selected.Launch;
-            Readout(payloadReadback, selected.Callsign + " / " + PayloadJob[kind], Own);
+            Readout(payloadReadback, PayloadRole[kind] + "  /  " + GeoOrbit.AltitudeKm(launchPreviewKind) + " KM  /  "
+                + GeoOrbit.InclinationDeg(launchPreviewKind) + "°  /  " + FrontKit.Clock(GeoOrbit.PeriodSeconds(launchPreviewKind)) + " PERIOD", PayloadInk[kind]);
             float footprint = GeoSpace.Footprint(launchPreviewKind, manifestBus) * v.TheatreKm;
-            float transferSpeed = GeoBird.SpeedFor(manifestBus) * v.TheatreKm;
-            string performance = v.TheatreKm > 0f ? " · " + Mathf.RoundToInt(footprint) + " KM RADIUS · " + FrontKit.Clock(10f / transferSpeed) + " PER 10 KM" : "";
-            Readout(busReadback, BusNames[(int)manifestBus] + performance, Mc.Steel);
+            string performance = v.TheatreKm > 0f ? Mathf.RoundToInt(footprint * 2f) + " KM SWATH  /  " : "";
+            Readout(busReadback, performance + Mathf.RoundToInt(GeoOrbit.DeltaVCapacity(manifestBus)) + " M/S RESERVE", Mc.Steel);
 
-            string station = "INITIAL STATION · AUTO";
-            if (selected.Up) station = "CURRENT FOOTPRINT SHOWN IN OPERATE";
+            string station = "CROSSING · AUTO";
+            if (selected.Up) station = "TRACK ACTIVE";
             else if (queued)
             {
                 foreach (FrontQueueRow programme in v.Row.Queue)
                     if (programme.Row == row.Row && programme.HasPoint)
                     {
-                        station = "QUEUED STATION · GRID " + OpsKit.Grid(programme.X, programme.Z);
+                        station = "CROSSING · GRID " + OpsKit.Grid(programme.X, programme.Z);
                         break;
                     }
             }
             else if (launchStation.HasValue)
             {
                 MapFrame map = FrontController.Frame();
-                station = "INITIAL STATION · GRID " + OpsKit.Grid(map.X(launchStation.Value.x), map.Z(launchStation.Value.y));
+                station = "CROSSING · GRID " + OpsKit.Grid(map.X(launchStation.Value.x), map.Z(launchStation.Value.y));
             }
-            Readout(stationReadback, launchStationPick ? "PICK INITIAL STATION ON MAP" : station, launchStationPick ? RoomInk.Telemetry : Mc.Steel);
+            Readout(stationReadback, launchStationPick ? "SELECT A TRACK CROSSING" : station, launchStationPick ? RoomInk.Telemetry : Mc.Steel);
+            string insertion = "";
+            bool? window = null;
+            if (launchStation.HasValue && LaunchDraft(v))
+            {
+                GeoBird preview = GeoOrbit.Launch(launchPreviewKind, launchPreviewBus, launchStation.Value.x, launchStation.Value.y, v.Now);
+                window = preview.NextPass(v.Now, aim.x, aim.y, GeoSpace.Footprint(launchPreviewKind, launchPreviewBus), out OrbitPass first);
+                insertion = window.Value
+                    ? "FIRST ACCESS TO WATCH GRID  /  " + FrontKit.Clock(first.StartAt - v.Now) + " AFTER INSERTION"
+                    : "PLANNED TRACK CANNOT REACH WATCH GRID";
+            }
+            Readout(insertionReadback, insertion, RoomInk.Telemetry);
             stationPick.Latched = launchStationPick;
             OpsKit.Enable(autoStation, !selected.Up && !queued && (launchStationPick || launchStation.HasValue));
             OpsKit.Enable(stationPick, launchStationPick || !selected.Up && !queued);
@@ -172,13 +211,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 receiptInk = RoomInk.Telemetry;
                 launchProgress.Set(row.Progress, receiptInk);
             }
-            else if (selected.Up) receipt = "ON STATION · SELECT OPERATE TO CONTROL " + selected.Callsign;
+            else if (selected.Up) receipt = "IN ORBIT · SELECT OPERATE TO CONTROL " + selected.Callsign;
             else if (!canQueue)
             {
                 receipt = offer.Refusal ?? "WAITING FOR HOST";
                 receiptInk = FrontKit.Tone(AvState.Caution);
             }
             else receipt = Mathf.RoundToInt(offer.Cost) + " FRONT FUNDS · " + FrontKit.Clock(offer.BuildSeconds) + " BUILD · LIVE PAD REQUIRED";
+            PaintClearance(v, selected, queued, row, manifestBus, waiting, canQueue, window);
             Readout(launchReceipt, receipt, receiptInk);
             launchProgress.Show(queued);
             Visible(queueSatellite.Rect, !queued);
@@ -199,6 +239,41 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             string padText = padPick ? (padMiss ? "OUTSIDE THE RING · PICK NEAR A HELD AIRBASE" : "PICK NEAR A HELD AIRBASE · ESC CANCELS")
                 : padWhy.Length > 0 ? padWhy : Mathf.RoundToInt(pad.Cost) + " FRONT FUNDS · " + FrontKit.Clock(pad.BuildSeconds) + " BUILD · " + FrontRules.BirdsPerPad + " BIRDS PER PAD";
             Readout(padHint, padText, padPick || padWhy.Length > 0 ? RoomInk.Telemetry : Mc.Steel);
+            float left = v.Row.DirectiveLockUntil - v.Now;
+            bool locked = !waiting && left > 0f, mine = SameName(v.Row.DirectiveBy, v.Callsign);
+            Readout(postureLock, waiting ? "AWAITING HOST" : locked ? LockWord(mine, v.Row.DirectiveBy, left) : FrontRules.Name(v.Row.Directive) + " ACTIVE", locked ? RoomInk.Telemetry : Mc.Steel);
+            for (int i = 0; i < directives.Length; i++)
+            {
+                directives[i].Latched = !waiting && v.Row.Directive == Postures[i];
+                OpsKit.Enable(directives[i], !waiting && (!locked || mine));
+            }
+        }
+
+        private void PaintClearance(FrontRoomView view, in FleetCardView bird, bool queued, in FrontQueueView row,
+            SatelliteBus bus, bool waiting, bool canQueue, bool? window)
+        {
+            bool funded = view.Row.Budget >= bird.Launch.Cost;
+            bool go = canQueue && view.PadsUp > 0 && funded;
+            Color decisionInk = bird.Up || go ? Mc.Go : canQueue || queued ? RoomInk.Telemetry : Mc.Steel;
+            string decision = bird.Up ? "ORBIT" : queued ? row.Building ? "T−" + FrontKit.Clock(row.BuildLeft) : "WAIT"
+                : waiting ? "SYNC" : go ? "GO" : "HOLD";
+            Readout(launchDecision, decision, decisionInk);
+            Readout(launchVehicle, bird.Callsign + " · " + BusNames[(int)bus], PayloadInk[bird.Kind]);
+            Readout(clearanceValues[0], bird.Up ? "COMMISSIONED" : queued ? "COMMITTED" : waiting ? "SYNC" : "SELECTED", bird.Up ? Mc.Go : Own);
+            Readout(clearanceValues[1], view.PadsUp > 0 ? view.PadsUp + " CLEAR" : "WAIT FOR PAD", view.PadsUp > 0 ? Mc.Go : RoomInk.Telemetry);
+            Readout(clearanceValues[2], bird.Up ? "SETTLED" : queued ? "IN PROGRAMME" : funded && !waiting ? "COVERED" : "FUNDING",
+                funded || bird.Up ? Mc.Go : RoomInk.Telemetry);
+            Readout(clearanceValues[3], bird.Up ? "IN OPERATE" : queued ? "COMMITTED" : !window.HasValue ? "AUTO" : window.Value ? "PASS FOUND" : "NO ACCESS",
+                window == false ? RoomInk.Telemetry : Mc.Steel);
+
+            float width = launch.Rect.sizeDelta.x - ConsoleInset * 2f;
+            clearanceFrame.Clear();
+            clearanceFrame.Rect(ConsoleInset, ClearanceY, width, 128f, RoomInk.ConsoleBody);
+            clearanceFrame.Rect(ConsoleInset, ClearanceY, 5f, 128f, decisionInk);
+            clearanceFrame.Line(new Vector2(ConsoleInset + 12f, ReadinessY - 3f), new Vector2(ConsoleInset + width - 12f, ReadinessY - 3f), 1f, RoomInk.Bezel.WithAlpha(0.55f));
+            clearanceFrame.Line(new Vector2(ConsoleInset, PadsY - 6f), new Vector2(ConsoleInset + width, PadsY - 6f), 1f, RoomInk.Bezel.WithAlpha(0.65f));
+            clearanceFrame.Line(new Vector2(ConsoleInset, StandingY - 5f), new Vector2(ConsoleInset + width, StandingY - 5f), 1f, RoomInk.Bezel.WithAlpha(0.65f));
+            clearanceFrame.Flush();
         }
 
         private static FleetCardView Fleet(FrontRoomView v, int kind) =>

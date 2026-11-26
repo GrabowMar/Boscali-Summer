@@ -228,15 +228,19 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             // OVERLORD's identity is reserved: a human request can never post as WATCH OFFICER.
             if (player == SpaceContacts.WatchOfficerId) return new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
-            return SendGuarded(player, requestId, markIds, false);
+            return SendGuarded(player, requestId, markIds, false, SupportActionId.Artillery);
         }
+
+        public TaskedResult SendOrbitalIntel(ulong player, int requestId, int contactId) =>
+            player == SpaceContacts.WatchOfficerId ? new TaskedResult(TaskedOutcome.Unavailable, 0, requestId) :
+                SendGuarded(player, requestId, new[] { contactId }, false, SupportActionId.OrbitalIntel);
 
         /// <summary>
         /// WATCH OFFICER OVERLORD's SEND: the same builder a human uses, but the post is labelled WATCH OFFICER, carries no effort
         /// tokens. It earns nothing.
         /// </summary>
         public TaskedResult SendWatchOfficer(int requestId, int[] markIds) =>
-            SendGuarded(SpaceContacts.WatchOfficerId, requestId, markIds, true);
+            SendGuarded(SpaceContacts.WatchOfficerId, requestId, markIds, true, SupportActionId.Artillery);
 
         /// <summary>The post capacity for the current human census (the board's own rule), for callers that must leave room.</summary>
         public int Capacity
@@ -248,9 +252,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
         }
 
-        private TaskedResult SendGuarded(ulong player, int requestId, int[] markIds, bool watchOfficer)
+        private TaskedResult SendGuarded(ulong player, int requestId, int[] markIds, bool watchOfficer, SupportActionId action)
         {
-            try { return SendCore(player, requestId, markIds, watchOfficer); }
+            try { return SendCore(player, requestId, markIds, watchOfficer, action); }
             catch (Exception e)
             {
                 Warn("Send threw: " + e.Message);
@@ -258,7 +262,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
         }
 
-        private TaskedResult SendCore(ulong player, int requestId, int[] markIds, bool watchOfficer)
+        private TaskedResult SendCore(ulong player, int requestId, int[] markIds, bool watchOfficer, SupportActionId action)
         {
             if (player == 0 || requestId <= 0) return new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
             var key = new Key(player, requestId, Kind.Send);
@@ -267,15 +271,19 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             Advance();
             float now = ports.Now;
             if (!SpaceRules.MissionTime(now)) return new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
-            TaskedOutcome refusal = ports.Authorize(player, SupportActionId.Artillery, false, out _, out _, out int detail);
+            TaskedOutcome refusal = ports.Authorize(player, action, false, out _, out _, out int detail);
             if (refusal != TaskedOutcome.None) return Remember(key, refusal, 0, 0, detail);
             SpaceContacts contacts = ports.Contacts;
             if (contacts == null) return Remember(key, TaskedOutcome.Unavailable, 0, 0, 0);
+            if (action == SupportActionId.OrbitalIntel &&
+                (!contacts.TryReveal(markIds[0], now, out SpaceContact contact) || !contact.IsBooked(now) ||
+                 !contacts.TryProvenance(contact.Id, now, out SpaceMarkProvenance mark) || mark.ObservationGeneration != contact.ObservationGeneration))
+                return Remember(key, TaskedOutcome.NotPosted, 0, 0, 0);
             if (profile == null) profile = new TaskedHumanProfile(ports.Humans, now);
             int humans = profile.Observe(ports.Humans, now);
             int id = nextCallId + 1;
             if (!MakeRoom()) return new TaskedResult(TaskedOutcome.Busy, 0, requestId);
-            if (id <= 0 || !board.TryPostVerified(id, SupportActionId.Artillery, player, watchOfficer, humans, markIds, contacts, now, out _))
+            if (id <= 0 || !board.TryPostVerified(id, action, player, watchOfficer, humans, markIds, contacts, now, out _))
                 return Remember(key, TaskedOutcome.NotPosted, 0, 0, 0);
             nextCallId = id;
             return Remember(key, TaskedOutcome.Posted, id, 0, 0);
@@ -391,6 +399,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             float now = ports.Now;
             if (!SpaceRules.MissionTime(now)) return new TaskedResult(TaskedOutcome.Unavailable, callId, requestId);
             if (!board.TryGet(callId, out TaskedCall call)) return Remember(key, TaskedOutcome.NoCall, callId, 0, 0);
+            if (call.Action == SupportActionId.OrbitalIntel) return Remember(key, TaskedOutcome.Unavailable, callId, 0, 0);
             TaskedOutcome refusal = Judge(player, call, out int detail);
             if (refusal != TaskedOutcome.None) return Remember(key, refusal, callId, 0, detail);
             Waiting queue = FindWaiting(callId);

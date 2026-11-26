@@ -40,7 +40,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 v.Fleet.Add(new FleetCardView
                 {
                     Kind = k, Bus = b.Bus, Callsign = Names[k], State = state, Tone = tone, Up = up, Fuel = up ? b.Fuel : 0f, Covers = up ? Covers(v, b) : "", Perk = PerkLine(v, k),
-                    CanRelocate = up && !b.Relocating && b.Fuel >= GeoBird.Cost(0.005f), // OrbitRoom.CanRelocate's rule
+                    CanRelocate = up && !b.Relocating && b.Geo.DeltaV >= GeoOrbit.NodeDeltaV(b.Kind, GeoOrbit.MinimumNodeChange),
                     Launch = Offer(Front.Space, ProgrammeId.LaunchSatellite, (byte)k, v.Row, queued, c),
                 });
             }
@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 v.Ghosts.Add(new MapGhostView
                 {
                     U = c.Frame.U(q.X), V = c.Frame.V(q.Z), Radius = GeoSpace.Footprint(kind, bus),
-                    Label = "INSERTION · " + Names[(int)kind]
+                    Label = "FIRST CROSSING · " + Names[(int)kind]
                 });
             }
             v.BirdCap = Math.Min(FrontRules.BirdCap, FrontRules.BirdsPerPad * v.PadsUp);
@@ -142,7 +142,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (up)
             {
                 tone = b.Relocating ? AvState.Caution : AvState.Ready;
-                return b.Relocating ? "BURNING " + FrontRules.Clock(b.EtaSeconds) : "ON STATION";
+                return b.Relocating ? "TRANSFERRING " + FrontRules.Clock(b.EtaSeconds) : "IN ORBIT";
             }
             for (int i = 0; i < v.Queue.Count; i++)
             {

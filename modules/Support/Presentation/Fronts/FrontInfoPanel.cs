@@ -282,7 +282,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 FrontKit.Set(name, FrontKit.Fit(name, v.Name, 11f), ready ? ink.Text : ink.Dim);
                 if (wait) FrontKit.Set(state, "—", ink.Dim);
                 else if (ready) FrontKit.Set(state, "READY · " + v.Price + " AP", FrontKit.Tone(AvState.Ready));
-                else FrontKit.Set(state, (gated ? "RELOCATE · " : !v.Unlocked ? "LOCKED · " : "") + v.Price + " AP", gated || !v.Unlocked ? FrontKit.Tone(AvState.Caution) : ink.Dim);
+                else FrontKit.Set(state, (gated ? "CHECK PASS · " : !v.Unlocked ? "LOCKED · " : "") + v.Price + " AP", gated || !v.Unlocked ? FrontKit.Tone(AvState.Caution) : ink.Dim);
                 FrontKit.Set(line, FrontKit.Fit(line, blocked ? v.Reason : gated ? v.Gate : v.Effect.ToUpperInvariant(), 10f), blocked || gated ? FrontKit.Tone(AvState.Caution) : ink.Dim);
             }
         }

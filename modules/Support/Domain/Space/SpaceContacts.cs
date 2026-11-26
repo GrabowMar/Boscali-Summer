@@ -25,17 +25,20 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public readonly int Id, TypeId, ObservationGeneration;
         public readonly ContactClass Classification;
-        public readonly float X, Z, ObservedAt, ExpiresAt;
+        public readonly float X, Z, ObservedAt, ExpiresAt, BookedUntil;
         public readonly bool Moving;
         public readonly BirdKind Source;
 
         internal SpaceContact(int id, ContactClass classification, int typeId, float x, float z,
-            bool moving, float observedAt, BirdKind source, int generation)
+            bool moving, float observedAt, BirdKind source, int generation, float bookedUntil = 0f)
         {
             Id = id; Classification = classification; TypeId = typeId; X = x; Z = z;
-            Moving = moving; ObservedAt = observedAt; ExpiresAt = observedAt + SpaceContacts.RevealSeconds;
+            Moving = moving; ObservedAt = observedAt; BookedUntil = bookedUntil;
+            ExpiresAt = Math.Max(observedAt + SpaceContacts.RevealSeconds, bookedUntil);
             Source = source; ObservationGeneration = generation;
         }
+
+        public bool IsBooked(float now) => now < BookedUntil;
     }
 
     internal readonly struct SpaceMarkProvenance
@@ -58,7 +61,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// (a Steam id, or bit 63 plus a 32-bit index), so no human can post or claim as OVERLORD.
         /// </summary>
         public const ulong WatchOfficerId = ulong.MaxValue; // keep equal to Core PlayerIdentity.Reserved, which refuses it for every player
-        public const float RevealSeconds = 20f, MovingMarkSeconds = 180f, StaticMarkSeconds = 480f, AttemptWindowSeconds = 60f;
+        public const float RevealSeconds = 20f, BookedRevealSeconds = 45f, MovingMarkSeconds = 180f, StaticMarkSeconds = 480f, AttemptWindowSeconds = 60f;
 
         private readonly struct MarkRecord
         {
@@ -112,17 +115,20 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public int MarkCount => marks.Count;
 
         public bool Reveal(int id, ContactClass classification, int typeId, float x, float z, bool moving,
-            float now, BirdKind source = BirdKind.Optical)
+            float now, BirdKind source = BirdKind.Optical, bool booked = false)
         {
+            float lifetime = booked && !moving ? BookedRevealSeconds : RevealSeconds;
             if (retired || id <= 0 || typeId < 0 || (byte)classification >= (byte)ContactClass.PlayerAircraft ||
                 !SpaceRules.Coordinate(x) || !SpaceRules.Coordinate(z) || !SpaceRules.MissionTime(now) ||
-                !Deadline(now, RevealSeconds, out _) || (source != BirdKind.Optical && source != BirdKind.Radar)) return false;
+                !Deadline(now, lifetime, out float expiresAt) || (source != BirdKind.Optical && source != BirdKind.Radar)) return false;
             Prune(now);
             int generation;
+            float bookedUntil = booked ? expiresAt : 0f;
             if (reveals.TryGetValue(id, out SpaceContact existing))
             {
                 if (now < existing.ObservedAt) return false;
                 generation = existing.ObservationGeneration;
+                if (moving == existing.Moving && existing.IsBooked(now)) bookedUntil = Math.Max(bookedUntil, existing.BookedUntil);
             }
             else
             {
@@ -130,7 +136,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 generation = ++nextGeneration;
                 confirmed.Remove(id);
             }
-            reveals[id] = new SpaceContact(id, classification, typeId, x, z, moving, now, source, generation);
+            reveals[id] = new SpaceContact(id, classification, typeId, x, z, moving, now, source, generation, bookedUntil);
             if (classification != ContactClass.EnemyGround) marks.Remove(id);
             return true;
         }

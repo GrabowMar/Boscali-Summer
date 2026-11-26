@@ -6,8 +6,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// <summary>Host verdict to words. Lives in Runtime so the Calls domain never depends on <see cref="SupportResult"/>.</summary>
     internal static class SupportWords
     {
-        /// <summary>The geostationary-footprint refusal: the aim lies outside the footprint of the bird the perk needs.</summary>
-        public static string OutsideFootprint(string bird) => "TARGET OUTSIDE " + bird + " FOOTPRINT · RELOCATE";
+        /// <summary>The aim lies outside the current swath of the required satellite.</summary>
+        public static string OutsideFootprint(string bird) => "TARGET OUTSIDE " + bird + " SWATH · CHECK ORBIT FORECAST";
 
         public static string Refusal(SupportResult result)
         {

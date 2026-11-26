@@ -52,11 +52,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     {
         public BirdKind Kind;
         public SatelliteBus Bus;
+        public GeoBird Geo;
         public int TrackId;
         public bool Own, Alive;
-        /// <summary>Where the bird is now, map u,v (0..1, v down): its parked point, or a point on the transfer while it relocates.</summary>
+        /// <summary>Current projected position. A satellite outside the theatre may be beyond 0..1.</summary>
         public float U, V;
-        /// <summary>The transfer under way: from where it left to the new parked point (equal to U,V while parked).</summary>
+        /// <summary>The ground-track nodes before and after a transfer.</summary>
         public float FromU, FromV, TargetU, TargetV;
         public bool Relocating;
         /// <summary>Seconds left on the transfer, and the fuel percent it cost.</summary>
@@ -70,10 +71,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Callsign, State;
         public AvState Tone;
         public string Orbit;
-        /// <summary>Slot longitude ("41.03E") and catalogue number ("CAT 41732") of the parked point: flavour derived from the faction and the point, never a reading of its own. Empty in a hand-built fixture.</summary>
-        public string Slot, Catalog;
         /// <summary>Footprint radius in kilometres.</summary>
         public float FootprintKm;
+        public bool Booked;
+        public byte CollectionStatus;
+        public float BookedU, BookedV, BookedAt;
     }
 
     /// <summary>A ground marker on the situation view (an uplink site).</summary>
@@ -137,6 +139,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Word;
     }
 
+    internal struct CollectionReportView
+    {
+        public int ContactId;
+        public bool CanSend;
+        public float FreshUntil;
+        public string Title, Grid, Summary, SendRefusal;
+    }
+
     /// <summary>A queued build with a map point: a ghost on the plate with its label ("PAD-2 · OPAL · 1:12"); Kind says what it builds where a room has more than one (CYBER: the AnchorKind).</summary>
     internal struct MapGhostView
     {
@@ -198,9 +208,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         // ORBIT payload.
         public SpaceFeedView Feed = new SpaceFeedView();
+        public CollectionReportView CollectionReport;
         public int IncomingBird = -1;
-        public float IncomingSeconds, IncomingAimU, IncomingAimV;
-        public bool IncomingLaunched;
+        public float IncomingSeconds, IncomingPassSeconds;
+        public bool IncomingLaunched, IncomingClear;
+        public int OutgoingTrackId;
+        public float OutgoingSeconds;
+        public bool OutgoingLaunched;
+        public bool HasAim;
+        public float AimU, AimV;
+        public string AimGrid = "";
         public readonly List<OrbitTrackView> Birds = new List<OrbitTrackView>(6);
         public readonly List<OrbitSiteView> Sites = new List<OrbitSiteView>(6);
         public string Theatre = "";

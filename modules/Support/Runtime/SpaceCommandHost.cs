@@ -104,6 +104,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)verdict);
                 case SpaceCommandKind.SendTasked:
                     return ForTasked(c.Kind, c.RequestId, ports.Send(player, c.RequestId, c.Ids));
+                case SpaceCommandKind.SendOrbitalIntel:
+                    return ForTasked(c.Kind, c.RequestId, ports.OrbitalIntel(player, c.RequestId, c.Target));
                 case SpaceCommandKind.CyberHop:
                 case SpaceCommandKind.CyberBurn:
                 case SpaceCommandKind.CyberDrop:
@@ -131,7 +133,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SpaceCommandKind.FrontQueue:
                 case SpaceCommandKind.FrontDonate:
                 case SpaceCommandKind.RelocateBird:
-                case SpaceCommandKind.TruckMove: // FrontService hands it to CYBER (MoveTruck) and replies the FrontOutcome
+                case SpaceCommandKind.TruckMove:
+                case SpaceCommandKind.RephaseBird:
+                case SpaceCommandKind.BookPass:
+                case SpaceCommandKind.CancelPass:
                     // The faction comes from the transport, never from the message; a lock names who holds it in the claimant slot.
                     FrontResult fronted = ports.Front(player, c);
                     return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)fronted.Outcome, 0, fronted.Charged, fronted.Detail, false, SpaceWire.Clean(fronted.By, SpaceReply.MaxClaimant));

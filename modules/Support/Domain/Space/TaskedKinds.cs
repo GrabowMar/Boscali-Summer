@@ -26,6 +26,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public static bool TryGet(SupportActionId action, out TaskedKind kind)
         {
+            if (action == SupportActionId.OrbitalIntel)
+            {
+                kind = new TaskedKind(action, TaskedDomain.Space, "ORBITAL INTEL");
+                return true;
+            }
             if (CyberPackages.TryOfAction(action, out PackageDef def))
             {
                 kind = new TaskedKind(action, TaskedDomain.Cyber, def.Label);

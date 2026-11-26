@@ -156,14 +156,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return FrontLadder.Check(Front.Space, ProgrammeId.LaunchSatellite, (byte)kind, live, default);
         }
 
-        /// <summary>LAUNCH SATELLITE finished: commission the selected bus at the picked station or its home point.</summary>
+        /// <summary>LAUNCH SATELLITE finished: commission the bus into an orbit across the picked or default node.</summary>
         internal bool TryLaunchBird(FactionHQ owner, BirdKind kind, SatelliteBus bus = SatelliteBus.Balanced, bool hasPoint = false, float x = 0f, float z = 0f)
         {
             if (CheckLaunch(owner, kind) != FrontOutcome.None) return false;
             Vector2 span = TheaterFrame.Resolve();
-            if (!factions[owner].State.Launch(kind, bus, hasPoint, GeoSpace.U(x, span.x), GeoSpace.V(z, span.y))) return false;
-            if (hasPoint) watch.HoldStation(owner, kind, SupportManager.MissionNow());
-            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + kind + " bird launched and on station (" + bus + " bus).");
+            float now = SupportManager.MissionNow();
+            if (!factions[owner].State.Launch(kind, bus, hasPoint, GeoSpace.U(x, span.x), GeoSpace.V(z, span.y), now)) return false;
+            if (hasPoint) watch.HoldStation(owner, kind, now);
+            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + kind + " bird launched into orbit (" + bus + " bus).");
             return true;
         }
 
@@ -441,13 +442,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>OVERLORD's resumable twin of <see cref="OpenWindow"/> / <see cref="OpenOptical"/>: null where those return -1, else the unit walk to step.</summary>
-        internal SpaceObservations.OpenWalk BeginScan(FactionHQ owner, GlobalPosition point, float radius, bool radar)
+        internal SpaceObservations.OpenWalk BeginScan(FactionHQ owner, GlobalPosition point, float radius, bool radar, Func<bool> authorize = null, bool booked = false)
         {
             SpaceObservations observations = ObservationsFor(owner);
             if (observations == null) return null;
-            if (radar) return observations.BeginOpen(point, radius, BirdKind.Radar, 0f, ReconAction.StationaryThreshold);
+            if (radar) return observations.BeginOpen(point, radius, BirdKind.Radar, 0f,
+                booked ? SpaceRevealWindow.AnySpeed : ReconAction.StationaryThreshold, authorize, booked);
             return OpticalRadius(owner, point, radius, out float optical, out _)
-                ? observations.BeginOpen(point, optical, BirdKind.Optical, 0f, float.MaxValue) : null;
+                ? observations.BeginOpen(point, optical, BirdKind.Optical, 0f, float.MaxValue, authorize, booked) : null;
         }
 
         // ---- TASKED calls (host authority; Task 6 network handlers call these) ---------------------
@@ -464,6 +466,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Posts the player's confirmed MARKs as one TASKED call. Replays by (player, request id).</summary>
         internal TaskedResult SendTasked(Player player, int[] markIds, int requestId) =>
             TryDesk(player, out TaskedDesk desk) ? desk.Send(PlayerIdentity.Of(player), requestId, markIds)
+                : new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
+
+        internal TaskedResult SendOrbitalIntel(Player player, int requestId, int contactId) =>
+            TryDesk(player, out TaskedDesk desk) ? desk.SendOrbitalIntel(PlayerIdentity.Of(player), requestId, contactId)
                 : new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
 
         /// <summary>
@@ -555,9 +561,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 // One row the wire cannot carry is dropped here, not allowed to make the whole message unreadable.
                 if (!SpaceWire.Codable(c.X) || !SpaceWire.Codable(c.Z)) continue;
                 // The verdict (truth) stays on the host: the client is told a deterministic, noisy probable class.
-                ProbableClass probable = SpaceProbable.Of(c.Classification, c.Id, c.ObservationGeneration, salt, out byte percent);
-                into.Contacts.Add(new FeedContact { Id = c.Id, UnitId = faction.Observations.UnitIdOf(c.Id), X = c.X, Z = c.Z,
-                    Class = probable, Percent = percent, Moving = c.Moving, Source = c.Source, Expires = c.ExpiresAt });
+                ProbableClass probable = SpaceProbable.Of(c.Classification, c.Id, c.ObservationGeneration, salt, out byte percent, booked: c.IsBooked(now));
+                into.Contacts.Add(new FeedContact { Id = c.Id, UnitId = faction.Observations.UnitIdOf(c, now), X = c.X, Z = c.Z,
+                    Class = probable, Percent = percent, Moving = c.Moving, Booked = c.IsBooked(now), Source = c.Source, Expires = c.ExpiresAt });
             }
             contacts.CopyMarks(now, marks);
             for (int i = 0; i < marks.Count && into.Marks.Count < SpaceWire.MaxMarks; i++)
@@ -722,7 +728,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             state.SetHomes(hu, hv);
         }
 
-        /// <summary>Host: one faction's bird burns to a map point (the SPACE director and the RELOCATE command both come here).</summary>
+        /// <summary>Host: one faction's bird transfers to a new ground-track node.</summary>
         internal GeoSpace.Refusal TryRelocate(FactionHQ owner, int bird, float u, float v, float now, out GeoBird after, bool holdStation = false)
         {
             after = default;
@@ -732,8 +738,19 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (why == GeoSpace.Refusal.None)
             {
                 if (holdStation) watch.HoldStation(owner, (BirdKind)bird, now + after.Duration);
-                Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + GeoSpace.Names[bird] + " bird burns to " + after.ToU.ToString("0.00") + "," + after.ToV.ToString("0.00") + " (fuel " + Mathf.RoundToInt(after.Fuel) + " %).");
+                Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + GeoSpace.Names[bird] + " bird transfers to node " + after.ToU.ToString("0.00") + "," + after.ToV.ToString("0.00") + " (reserve " + Mathf.RoundToInt(after.DeltaV) + " m/s).");
             }
+            return why;
+        }
+
+        internal GeoSpace.Refusal TryRephase(FactionHQ owner, int bird, float shiftSeconds, float now, out GeoBird after, bool holdStation = false)
+        {
+            after = default;
+            if (owner == null || bird < 0 || bird >= SpaceRules.BirdCount || !factions.TryGetValue(owner, out FactionSpace faction)) return GeoSpace.Refusal.Dead;
+            var kind = (BirdKind)bird;
+            GeoSpace.Refusal why = faction.State.Rephase(kind, now, shiftSeconds);
+            after = faction.State.Geo(kind);
+            if (why == GeoSpace.Refusal.None && holdStation) watch.HoldStation(owner, kind, after.ArrivalAt);
             return why;
         }
 

@@ -1,4 +1,5 @@
 using BoscaliSummer.Modules.Support.Runtime;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -17,23 +18,23 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private const float ApparentSize = 0.0022f;
         private const float MinimumSpan = 40f;
 
-        // Geostationary: each bird hangs at a fixed point high in the southern sky (about 50-60 deg up), spread in bearing so the three never overlap.
+        // Directions for the art preview and until the peer has received orbital elements.
         private static readonly Vector3[] Directions = { new Vector3(0.55f, 1.15f, -0.75f).normalized,
             new Vector3(-0.15f, 1.35f, -0.6f).normalized, new Vector3(-0.7f, 1.1f, -0.85f).normalized };
-        /// <summary>The direction from the ground up to a bird: the feed's line of sight for that bird's sensor.</summary>
-        internal static Vector3 LineOfSight(BirdKind bird) => Track((int)bird, SupportManager.MissionNow());
+        /// <summary>Looks up from the ground scene to the satellite at acquisition time.</summary>
+        internal static Vector3 LineOfSight(BirdKind bird, GlobalPosition origin, float missionSeconds) =>
+            Track((int)bird, missionSeconds, origin);
 
-        /// <summary>
-        /// A bird's place in the sky. Geostationary, so a constant direction; the host's GeoBird position (mirrored on a client) places it and a burn slides it, so the sky and
-        /// the feed's line of sight follow the same slot.
-        /// </summary>
-        internal static Vector3 Track(int bird, float missionSeconds)
+        internal static Vector3 Track(int bird, float missionSeconds) => Track(bird, missionSeconds, default);
+
+        private static Vector3 Track(int bird, float missionSeconds, GlobalPosition origin)
         {
             int k = Mathf.Clamp(bird, 0, Directions.Length - 1);
-            if (!hasGeo[k]) return Directions[k];
-            // Toward the bird's map point (u east, v south), still high in the sky and slightly spread by its default slot so two birds over one point never overlap; a burn slides it.
+            if (!hasGeo[k] || !latest[k].Orbital) return Directions[k];
             GeoBird g = latest[k];
-            return new Vector3((g.U(missionSeconds) - 0.5f) * 1.4f + Directions[k].x * 0.25f, 1.15f, (0.5f - g.V(missionSeconds)) * 1.4f + Directions[k].z * 0.25f).normalized;
+            Vector2 span = TheaterFrame.Resolve();
+            g.Project(missionSeconds, out float u, out float v);
+            return new Vector3((u - 0.5f) * span.x - origin.x, 1000f * g.AltitudeKm - origin.y, (0.5f - v) * span.y - origin.z).normalized;
         }
 
         private static readonly GeoBird[] latest = new GeoBird[SpaceRules.BirdCount];
@@ -150,6 +151,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             }
             if (GameManager.GetLocalPlayer<Player>(out Player me) && me != null)
                 for (int i = 0; i < hasGeo.Length; i++) hasGeo[i] = support.TryOwnGeo(me.HQ, i, out latest[i]);
+            else System.Array.Clear(hasGeo, 0, hasGeo.Length);
             if (!present) { Hide(); return; }
             if (!built) Build();
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
@@ -158,6 +160,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             float apparent = Mathf.Max(MinimumSpan, DisplayRange * ApparentSize);
             var csm = SceneSingleton<CameraStateManager>.i;
             Camera cam = csm != null ? csm.mainCamera : Camera.main;
+            GlobalPosition eye = cam != null ? cam.transform.position.ToGlobalPosition() : default;
             float now = SupportManager.MissionNow();
             // Dusk and night: the bird still in sunlight shows as a glint that flares as the panels catch the sun; by day the lit hull is enough.
             float dusk = Mathf.Clamp01(night * 1.6f);
@@ -165,18 +168,22 @@ namespace BoscaliSummer.Modules.Support.Visuals
             for (int i = 0; i < birds.Length; i++)
             {
                 float size = apparent / spans[i];
-                skyDirections[i] = Track(i, now);
+                skyDirections[i] = Track(i, now, eye);
                 birds[i].position = (cam != null ? cam.transform.position : Vector3.zero) + skyDirections[i] * DisplayRange;
                 birds[i].localScale = new Vector3(size, size, size);
-                if (birds[i].gameObject.activeSelf != has[i]) birds[i].gameObject.SetActive(has[i]);
-                if (has[i])
+                bool visible = has[i] && hasGeo[i] && latest[i].NextTheatrePass(now, out OrbitPass pass) && pass.Contains(now);
+#if !PUBLIC_RELEASE
+                visible |= DemoAll;
+#endif
+                if (birds[i].gameObject.activeSelf != visible) birds[i].gameObject.SetActive(visible);
+                if (visible)
                 {
                     // The wings turn about their boom (local X) until the cells face the sun.
                     Vector3 s = birds[i].InverseTransformDirection(toSun);
                     wings[i].localRotation = Quaternion.AngleAxis(Mathf.Atan2(s.z, s.y) * Mathf.Rad2Deg, Vector3.right);
                 }
                 Transform glint = glints[i];
-                if (glint == null || !has[i] || cam == null) { if (glint != null && glint.gameObject.activeSelf) glint.gameObject.SetActive(false); continue; }
+                if (glint == null || !visible || cam == null) { if (glint != null && glint.gameObject.activeSelf) glint.gameObject.SetActive(false); continue; }
                 float flare = 0.3f + 0.7f * Mathf.Pow(Mathf.Max(0f, Mathf.Sin(now * 0.7f + i * 2.4f)), 10f);
                 bool glinting = dusk > 0.02f;
                 if (glint.gameObject.activeSelf != glinting) glint.gameObject.SetActive(glinting);
