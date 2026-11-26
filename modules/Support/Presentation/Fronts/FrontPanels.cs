@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
+using BoscaliSummer.Modules.Support.Domain.Space;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Presentation.Fronts
@@ -31,7 +32,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public static bool LaunchRow(FrontRoomView v, int kind, out FrontQueueView q)
         {
             for (int i = 0; i < v.Queue.Count && i < v.Row.Queue.Count; i++)
-                if (v.Row.Queue[i].Id == ProgrammeId.LaunchSatellite && v.Row.Queue[i].Kind == kind) { q = v.Queue[i]; return true; }
+                if (v.Row.Queue[i].Id == ProgrammeId.LaunchSatellite && GeoSpace.TryUnpackLaunch(v.Row.Queue[i].Kind, out BirdKind queuedKind, out _) && (int)queuedKind == kind) { q = v.Queue[i]; return true; }
             q = default;
             return false;
         }

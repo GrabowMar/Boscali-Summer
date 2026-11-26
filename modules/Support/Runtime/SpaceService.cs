@@ -156,11 +156,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return FrontLadder.Check(Front.Space, ProgrammeId.LaunchSatellite, (byte)kind, live, default);
         }
 
-        /// <summary>LAUNCH SATELLITE finished: that kind is on station at its home point with a full tank. False (nothing changed) when <see cref="CheckLaunch"/> refuses.</summary>
-        internal bool TryLaunchBird(FactionHQ owner, BirdKind kind)
+        /// <summary>LAUNCH SATELLITE finished: commission the selected bus at the picked station or its home point.</summary>
+        internal bool TryLaunchBird(FactionHQ owner, BirdKind kind, SatelliteBus bus = SatelliteBus.Balanced, bool hasPoint = false, float x = 0f, float z = 0f)
         {
-            if (CheckLaunch(owner, kind) != FrontOutcome.None || !factions[owner].State.Launch(kind)) return false;
-            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + kind + " bird launched and on station.");
+            if (CheckLaunch(owner, kind) != FrontOutcome.None) return false;
+            Vector2 span = TheaterFrame.Resolve();
+            if (!factions[owner].State.Launch(kind, bus, hasPoint, GeoSpace.U(x, span.x), GeoSpace.V(z, span.y))) return false;
+            if (hasPoint) watch.HoldStation(owner, kind, SupportManager.MissionNow());
+            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + kind + " bird launched and on station (" + bus + " bus).");
             return true;
         }
 
@@ -720,13 +723,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>Host: one faction's bird burns to a map point (the SPACE director and the RELOCATE command both come here).</summary>
-        internal GeoSpace.Refusal TryRelocate(FactionHQ owner, int bird, float u, float v, float now, out GeoBird after)
+        internal GeoSpace.Refusal TryRelocate(FactionHQ owner, int bird, float u, float v, float now, out GeoBird after, bool holdStation = false)
         {
             after = default;
             if (owner == null || bird < 0 || bird >= SpaceRules.BirdCount || !factions.TryGetValue(owner, out FactionSpace faction)) return GeoSpace.Refusal.Dead;
             GeoSpace.Refusal why = faction.State.Relocate((BirdKind)bird, now, u, v);
             after = faction.State.Geo((BirdKind)bird);
-            if (why == GeoSpace.Refusal.None) Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + GeoSpace.Names[bird] + " bird burns to " + after.ToU.ToString("0.00") + "," + after.ToV.ToString("0.00") + " (fuel " + Mathf.RoundToInt(after.Fuel) + " %).");
+            if (why == GeoSpace.Refusal.None)
+            {
+                if (holdStation) watch.HoldStation(owner, (BirdKind)bird, now + after.Duration);
+                Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + GeoSpace.Names[bird] + " bird burns to " + after.ToU.ToString("0.00") + "," + after.ToV.ToString("0.00") + " (fuel " + Mathf.RoundToInt(after.Fuel) + " %).");
+            }
             return why;
         }
 

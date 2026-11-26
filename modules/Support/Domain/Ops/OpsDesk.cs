@@ -379,7 +379,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             pings.Add(new OpPing(kind, phase, until, ports.NextPingSeq(), detail, victim));
         }
 
-        private void RemovePing(OpKind kind, OpPingPhase phase)
+        internal void RemovePing(OpKind kind, OpPingPhase phase)
         {
             for (int i = pings.Count - 1; i >= 0; i--) if (pings[i].Kind == kind && pings[i].Phase == phase) pings.RemoveAt(i);
         }

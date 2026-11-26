@@ -12,6 +12,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public ushort BuildLeft;
         public ushort Row;
         public byte Kind, Owner;
+        public int TargetTrack;
         public bool HasPoint, Waiting;
         public float X, Z;
     }
@@ -61,7 +62,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             for (int i = 0; i < Queue.Count; i++)
             {
                 FrontQueueRow a = Queue[i], b = o.Queue[i];
-                if (a.Id != b.Id || a.Percent != b.Percent || a.Row != b.Row || a.Waiting != b.Waiting || a.Kind != b.Kind || a.Owner != b.Owner || a.HasPoint != b.HasPoint ||
+                if (a.Id != b.Id || a.Percent != b.Percent || a.Row != b.Row || a.Waiting != b.Waiting || a.Kind != b.Kind || a.Owner != b.Owner || a.HasPoint != b.HasPoint || a.TargetTrack != b.TargetTrack ||
                     (a.HasPoint && (!SpaceMirror.SamePoint(a.X, b.X) || !SpaceMirror.SamePoint(a.Z, b.Z)))) return false;
             }
             for (int i = 0; i < Log.Count; i++) if (Log[i].Code != o.Log[i].Code || Log[i].A != o.Log[i].A || Log[i].B != o.Log[i].B) return false;
@@ -95,7 +96,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
     internal static class FrontWire
     {
         public const int MaxQueue = FrontRules.MaxQueue, MaxLog = FrontRules.LogCapacity, MaxName = 16;
-        private const int MinQueueBytes = 7, MaxKind = 2, MaxOwner = 8, MinLogBytes = 7;
+        private const int MinQueueBytes = 7, MaxOwner = 8, MinLogBytes = 7;
         private const byte FlagFocus = 1, FlagLock = 2;
 
         public static void WriteState(ISpaceWriter w, FrontStateData s)
@@ -121,6 +122,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                     w.WriteByte((byte)r.Id); w.WriteByte(r.Percent); w.WriteByte((byte)r.BuildLeft); w.WriteByte((byte)(r.BuildLeft >> 8));
                     w.WriteByte((byte)r.Row); w.WriteByte((byte)(r.Row >> 8));
                     w.WriteByte((byte)((r.HasPoint ? 1 : 0) | (r.Waiting ? 2 : 0) | ((r.Kind & 3) << 2) | ((r.Owner & 15) << 4)));
+                    if (r.Id == ProgrammeId.LaunchSatellite) w.WriteByte((byte)(r.Kind >> 2));
+                    if (r.Id == ProgrammeId.Asat) SpaceWire.WriteVar(w, (uint)Math.Max(0, r.TargetTrack));
                     if (r.HasPoint) { SpaceWire.WriteCoordinate(w, r.X); SpaceWire.WriteCoordinate(w, r.Z); }
                 }
                 n = Math.Min(f.Log.Count, MaxLog);
@@ -174,12 +177,20 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 {
                     if (!r.TryReadByte(out byte id) || !FrontRules.BelongsTo(front, (ProgrammeId)id) || !r.TryReadByte(out byte pct) || pct > 100 ||
                         !r.TryReadByte(out byte lo) || !r.TryReadByte(out byte hi) || !r.TryReadByte(out byte r0) || !r.TryReadByte(out byte r1) ||
-                        !r.TryReadByte(out byte qf) || ((qf >> 2) & 3) > MaxKind || (qf >> 4) > MaxOwner) return Bad();
+                        !r.TryReadByte(out byte qf) || (qf >> 4) > MaxOwner) return Bad();
                     var row = new FrontQueueRow
                     {
                         Id = (ProgrammeId)id, Percent = pct, BuildLeft = (ushort)(lo | (hi << 8)), Row = (ushort)(r0 | (r1 << 8)),
                         HasPoint = (qf & 1) != 0, Waiting = (qf & 2) != 0, Kind = (byte)((qf >> 2) & 3), Owner = (byte)(qf >> 4)
                     };
+                    if (row.Id == ProgrammeId.LaunchSatellite)
+                    {
+                        if (!r.TryReadByte(out byte bus) || bus > (byte)SatelliteBus.Wideband) return Bad();
+                        row.Kind |= (byte)(bus << 2);
+                        if (!GeoSpace.TryUnpackLaunch(row.Kind, out _, out _)) return Bad();
+                    }
+                    else if (row.Kind != 0) return Bad();
+                    if (row.Id == ProgrammeId.Asat && !SpaceWire.ReadInt(r, out row.TargetTrack)) return Bad();
                     if (row.HasPoint && (!SpaceWire.ReadCoordinate(r, out row.X) || !SpaceWire.ReadCoordinate(r, out row.Z))) return Bad();
                     f.Queue.Add(row);
                 }

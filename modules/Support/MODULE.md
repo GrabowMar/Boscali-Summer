@@ -5,7 +5,8 @@
 ## Player-facing behaviour
 
 - **OPS** bezel page ([CallsPanel](Presentation/CallsPanel.cs), MFD slot `MfdSlots.Ops`) with tabs FRONTS (three front cards + OPEN) and PERKS (call cards: press arms, second press / map right-click fires).
-- Three near-full-screen front windows ([OpsFrontWindow](Presentation/Fronts/OpsFrontWindow.cs)): **ORBIT** (SPACE: pads, satellites, DOWNLINK sensor feed), **NETWORK** (CYBER: data centers, EW trucks, node hop/hold/burn/drop), **SHADOW** (SOF: camps, teams, targets, lift).
+- Three near-full-screen front windows ([OpsFrontWindow](Presentation/Fronts/OpsFrontWindow.cs)): **ORBIT** (SPACE: LAUNCH manifests and pads, OPERATE tracking and DOWNLINK), **NETWORK** (CYBER: data centers, EW trucks, node hop/hold/burn/drop), **SHADOW** (SOF: camps, teams, targets, lift).
+- Satellite manifests combine an optical, radar or kinetic payload with a Balanced, Agile or Wideband bus. The bus changes coverage radius and burn speed. Operators can pick the initial station on the map. ASAT queues bind to the selected track and open a launcher countdown. An evasive burn must cross the intercept zone before impact.
 - Perks paid in vanilla `Player.Allocation`, gated by the pilot's skill grade (Progression) and, for bird perks, by a satellite footprint over the aim: RECON PASS, SAT CAMERA, OVERWATCH, ORBITAL ROD, STARFALL, PRSM, CRUISE SALVO (steerable legs), EMP SHOCK, DECOY BARRAGE, ELINT, RADAR BLIND, SAM NET DOWN, SIPHON, RECON TEAM, SABOTAGE STRIKE, DIRECT ACTION, JTAC MARK/UNLASE, ZONE FORTIFICATION.
 - Posted strike packages appear as MIS JOBS (Command reads `ISupportJobs`); OPS perks appear in the C-key menu (Autopilot reads `IOpsPerks`); the TAC BOARD STRIKE page and PERK/MARK gauges come from [StrikeScopeFeed](Runtime/StrikeScopeFeed.cs).
 - Cockpit line for armed/pending/refused calls, new TASKED posts and ENEMY INTENT ([SupportHudLine](Presentation/SupportHudLine.cs)); command-net chatter on replies.
@@ -60,7 +61,7 @@
 | AI OVERLORD behaviour | [WatchOfficerPolicy](Domain/Space/WatchOfficerPolicy.cs), [SpaceWatchOfficer](Runtime/SpaceWatchOfficer.cs), [OverlordService](Runtime/OverlordService.cs) |
 | OPS page layout | [CallsPanel](Presentation/CallsPanel.cs), [OpsPageParts](Presentation/OpsPageParts.cs) |
 | A room's map or tab | `Presentation/Fronts/<Room>.cs` and its `*Panel.cs`; view model in `FrontViews*.cs` |
-| Where a room's data comes from (e.g. ORBIT) | `Inputs`/`Build` in [FrontController](Presentation/Fronts/FrontController.cs) fill a `FrontRoomView` through `FrontViews.Orbit/Network/Shadow` ([FrontViews.cs](Presentation/Fronts/FrontViews.cs) and its `FrontViews.*.cs` partials); [OrbitRoom](Presentation/Fronts/OrbitRoom.cs) only draws it. ORBIT bird positions are `OpsStateData.Geo` (own 0-2, enemy 3-5) from `SupportManager.OpsMirror`; link, family and radar timing from `SupportManager.SpaceMirror`; DOWNLINK from [SpaceFeedController](Presentation/SpaceFeedController.cs) `View`. Host side: `OpsService.FillState` ([OpsService.Effects.cs](Runtime/OpsService.Effects.cs)) copies each faction's `SpaceState.Geo` from [SpaceService](Runtime/SpaceService.cs) into that snapshot, sent as `OpsStateMessage` by `SupportNet`. |
+| Where a room's data comes from (e.g. ORBIT) | `Inputs`/`Build` in [FrontController](Presentation/Fronts/FrontController.cs) fill a `FrontRoomView` through `FrontViews.Orbit/Network/Shadow` ([FrontViews.cs](Presentation/Fronts/FrontViews.cs) and its `FrontViews.*.cs` partials); [OrbitRoom](Presentation/Fronts/OrbitRoom.cs) only draws it. ORBIT uses exact friendly ephemerides and coarse hostile sectors from `SupportManager.OpsMirror`; link, family and radar timing from `SupportManager.SpaceMirror`; DOWNLINK from [SpaceFeedController](Presentation/SpaceFeedController.cs) `View`. Host side: `OpsService.FillState` ([OpsService.Effects.cs](Runtime/OpsService.Effects.cs)) projects [SpaceService](Runtime/SpaceService.cs) state and incoming ASAT deadlines into that snapshot, sent as `OpsStateMessage` by `SupportNet`. |
 | Satellite / rod / EMP visuals | `Visuals/` (mostly one file per effect; `FieldFx.cs` holds several small ones such as `StagedBlastFx`, `LaseFx`); a new static cache needs a `Reset()` call in `SupportManager.ResetForScene` |
 | Perk effect radius (map overlay, requests) | `GetEffectRadius` in [SupportManager.cs](Runtime/SupportManager.cs) |
 | Perk cooldown length | `CallSheet.Cooldown` (rung table) in [CallSheet.cs](Domain/Calls/CallSheet.cs), `CooldownFor` in [SupportManager.cs](Runtime/SupportManager.cs), POWER in [PerkPower](Domain/Fronts/PerkPower.cs) |
@@ -76,7 +77,7 @@
 ## Settings, network, patches
 
 - Everything that decides outcomes is host-authoritative; the SET SERVER table writes `Support.*` entries on the host. Only the subset listed in `Core/Config/HostAuthority.cs` (`Entries`: perk switches, radii, `MaximumRange`, `PerkPriceScale`, …) is replicated to clients for prediction; `Support.Enabled` is only compared at the handshake (`HostAuthority.Switches`). `Support.Enabled` is also the master switch checked first in `Evaluate` (SPACE/TASKED check it in their own services).
-- `SupportNet.ProtocolVersion` = 44. Its XML doc is the protocol changelog: bump it and append a line for any message/command/enum-on-the-wire change. Many Domain enums say "Wire values; never renumber" / "append only": treat them as protocol.
+- `SupportNet.ProtocolVersion` = 45. Its XML doc is the protocol changelog: bump it and append a line for any message/command/enum-on-the-wire change. Many Domain enums say "Wire values; never renumber" / "append only": treat them as protocol.
 - Faction state messages carry a stable faction id (`FactionIdentity`, FNV-1a of the name, in [FactionState.cs](Domain/Space/FactionState.cs)) and the host scene epoch (`SupportManager.SceneEpoch`); mirrors drop other factions/scenes.
 - Fragile patches: `SupportMissileDetonatePatch` targets the weaver-hashed `Missile.UserCode_RpcDetonate_897349600` (`Prepare` skips it silently if the hash changes; also patched by FireAndDestruction and Vanguard; it runs `[HarmonyAfter]` fire-and-destruction, whose prefix therefore still sees rods, EMPs and flares as `armed`, see [harmony-shared.json](../../tools/arch/harmony-shared.json)). Shared targets: `TargetDetector.DetectTarget` (with CombatAdjust, Pmc, Vanguard), `FactionHQ.RpcUpdateTrackingInfo` (with CombatAdjust, Pmc), `Unit.ReportKilled` (Squad), `Missile.Detonate`/`WeaponStation.LaunchMount` (Vanguard).
 - Rod/EMP/flare parameters ride the replicated missile `UniqueName` (prefixes `BoscaliSummer:Support:Rod:`, `…:Emp:`, `…:Flare:`; built by `SupportEffectPolicy.RodName`/`EmpName`/`FlareName`, read back by `RodScales` and [SupportMissileVisualPatch.cs](Patches/SupportMissileVisualPatch.cs)) so every peer reads host values; the shared `"BoscaliSummer:Support:"` prefix is `SupportNaming.Prefix` in [SupportAction.cs](Runtime/SupportAction.cs). Change the format only together with those readers and Command's `MfdTerrainRelief`.
@@ -102,7 +103,7 @@
 _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archmap.py --write_
 
 - Module [SupportModule](SupportModule.cs), id `support`, "Support operations"; depends on `progression`; roster: Support.Enabled; mission profile: battlefield.
-- 228 .cs files, 48207 lines.
+- 230 .cs files, 48414 lines.
 
 ### Folders
 
@@ -110,11 +111,11 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 |---|---|---|
 | (root) | 1 | 89 |
 | Configuration/ | 2 | 261 |
-| Domain/ | 72 | 12790 |
-| Networking/ | 1 | 675 |
+| Domain/ | 73 | 12936 |
+| Networking/ | 1 | 676 |
 | Patches/ | 2 | 243 |
-| Presentation/ | 40 | 14722 |
-| Runtime/ | 90 | 14403 |
+| Presentation/ | 41 | 14610 |
+| Runtime/ | 90 | 14575 |
 | Visuals/ | 20 | 5024 |
 
 ### Largest files
@@ -123,9 +124,9 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 |---|---|
 | [Runtime/SupportManager.cs](Runtime/SupportManager.cs) | 1206 |
 | [Presentation/Fronts/ShadowRoom.cs](Presentation/Fronts/ShadowRoom.cs) | 1128 |
-| [Presentation/Fronts/DownlinkPane.cs](Presentation/Fronts/DownlinkPane.cs) | 1073 |
-| [Presentation/Fronts/OrbitRoom.cs](Presentation/Fronts/OrbitRoom.cs) | 1019 |
+| [Presentation/Fronts/DownlinkPane.cs](Presentation/Fronts/DownlinkPane.cs) | 1116 |
 | [Domain/Sof/SofDesk.cs](Domain/Sof/SofDesk.cs) | 901 |
+| [Presentation/Fronts/NetworkNodesPanel.cs](Presentation/Fronts/NetworkNodesPanel.cs) | 869 |
 
 ### Harmony patches (8)
 
@@ -152,7 +153,7 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 
 ### Network
 
-- Protocol constants: `SupportNet.ProtocolVersion` = 44
+- Protocol constants: `SupportNet.ProtocolVersion` = 45
 - Messages (11): `CruiseLegsMessage`, `CruiseWaypointMessage`, `CyberStateMessage`, `FrontStateMessage`, `OpsStateMessage`, `SofStateMessage`, `SpaceCommandMessage`, `SpaceReplyMessage`, `SpaceStateMessage`, `SupportRequestMessage`, `SupportResultMessage`
 
 ### Sim hooks (never rename)
@@ -161,6 +162,6 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 
 ### Pinned by nomodkit
 
-78 files compiled by path, 23 types referenced by name: see [PINNED.md](../../docs/generated/PINNED.md).
+79 files compiled by path, 23 types referenced by name: see [PINNED.md](../../docs/generated/PINNED.md).
 
 <!-- archmap:end -->

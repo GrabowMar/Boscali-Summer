@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         // The footer's resting line: how to use the room on screen, in the order the clicks happen (the latest answer replaces it for a few seconds).
         private static readonly string[] Resting =
         {
-            "BUILD PAD > click a held airbase. LAUNCH a satellite on its card. FEED › or a click on a bird opens its DOWNLINK: click a box, then SEND TO JOBS. Esc closes.",
+            "LAUNCH configures satellites and builds pads. OPERATE plans burns and intercepts. Select a friendly track for DOWNLINK and SEND TO JOBS. Esc backs out.",
             "BUILD DATA CENTER > click a held airbase. DEPLOY TRUCK > click near it. On NODES: a node in reach > HOP, then hold it or BURN it. Esc closes.",
             "BUILD CAMP > click ground you hold. TRAIN a team. Pick a target on TARGETS (or click open ground for RECON): the nearest ready team is picked, SEND sends it. SWEEP hunts intruders. Esc closes.",
         };
@@ -139,7 +139,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             feed?.SetVisible(false);
         }
 
-        /// <summary>The SPACE feed holds its lease and renders only while the room shows DOWNLINK (enlarged counts); SATELLITES, FRONT and other rooms let it go.</summary>
+        /// <summary>The SPACE feed holds its lease and renders only while the room shows DOWNLINK (enlarged counts); Returning to flight controls, FRONT and other rooms releases the lease.</summary>
         private void ShowFeed() => feed?.SetVisible(open && window != null && window.DownlinkShown);
 
         /// <summary>Picks belong to one faction and one scene: either changing drops them all (a vanished id is cleared by the views, nothing else).</summary>
@@ -196,7 +196,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void WantFeeds(bool on)
         {
             if (manager == null) return;
-            manager.OpsFeed.Want(on);
             manager.CyberFeed.Want(on && (current == Front.Cyber || current == Front.Sof));
             manager.SofFeed.Want(on && (current == Front.Sof || current == Front.Cyber));
         }
@@ -218,6 +217,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             switch (current)
             {
                 case Front.Space:
+                    OpsStateData ops = manager.OpsMirror.Known ? manager.OpsMirror.State : null;
+                    view.IncomingBird = ops != null && ops.Active ? ops.IncomingBird : -1;
+                    view.IncomingSeconds = view.IncomingBird < 0 ? 0f : Math.Max(0f, ops.IncomingDeadline - now);
+                    view.IncomingLaunched = view.IncomingBird >= 0 && ops.IncomingLaunched;
+                    view.IncomingAimU = view.IncomingLaunched ? ops.IncomingAimU : 0f;
+                    view.IncomingAimV = view.IncomingLaunched ? ops.IncomingAimV : 0f;
                     FrontViews.Orbit(view, c);
                     if (feed != null) view.Feed = feed.View;
                     break;
@@ -256,7 +261,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Allocation = (int)manager.LocalAllocation, Grades = manager.LocalGrades(), Now = now, CostScale = manager.Settings != null ? manager.Settings.ProgrammeCostScale.Value : 1f,
                 Utc = DateTime.UtcNow, Frame = Frame(), HasBird = hasBird,
                 BirdsDown = manager.OpsMirror.Known ? ops.BirdsDown : (byte)0, BirdsLaunched = manager.OpsMirror.Known ? ops.BirdsLaunched : (byte)0,
-                EnemyBirdsDown = manager.OpsMirror.Known ? ops.EnemyBirdsDown : (byte)0, EnemyKnown = manager.OpsMirror.Known && ops.Active,
+                EnemyTrackIds = manager.OpsMirror.Known && ops.Active ? ops.EnemyTrackIds : null,
                 SpaceLinked = space.Known && space.State.Active, Family = space.State.Family,
                 RadarSeconds = SpaceFeedRules.RadarReadySeconds(space.State.RadarReadyAt, now), RadarUnavailable = space.State.RadarReadyAt == SpaceWire.RadarUnavailable,
                 Price = id => manager.Quote(id).Cost, Faction = "", Callsign = ""
@@ -264,7 +269,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             c.WorldKnown = FrontViews.World(current, manager.OpsMirror.Known && ops.Active ? ops : null, manager.CyberMirror.Known ? manager.CyberMirror.State : null,
                 manager.SofMirror.Known ? manager.SofMirror.State : null, now, out c.World);
             if (c.World.FobUp) foreach (OpsRow r in ops.Rows) if (r.Domain == OpDomain.Sof && r.Kind == OpKind.Fob && r.State == OpState.Done && r.EndsAt > c.FobUntil) c.FobUntil = r.EndsAt;
-            if (c.EnemyKnown)
+            if (manager.OpsMirror.Known && ops.Active)
             {
                 for (int k = 0; k < 3; k++) { geoOwn[k] = ops.Geo[k]; geoFoe[k] = ops.Geo[3 + k]; }
                 c.Geo = geoOwn; c.EnemyGeo = geoFoe;
@@ -396,6 +401,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             MapFrame frame = Frame(); // the map uv the room picked, in world metres
             return Sent(front, manager.FrontQueue(front, id, kind, hasPoint, frame.X(u), frame.Z(v)), "NOT A " + FrontRules.Name(front) + " PROGRAMME", SpaceCommandKind.None, "QUEUE " + FrontWords.Programme(id, kind));
         }
+
+        public bool QueueAsat(int trackId) =>
+            trackId > 0 && Gate() && Sent(Front.Space, manager.FrontQueueAsat(trackId), "NO HOST LINK", SpaceCommandKind.None, "QUEUE ASAT");
 
         public void Donate(Front front, ushort row, int amount)
         {

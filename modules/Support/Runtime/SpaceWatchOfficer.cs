@@ -29,6 +29,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             manager = support;
         }
 
+        public void HoldStation(FactionHQ owner, BirdKind bird, float now)
+        {
+            FactionRun run = RunFor(owner);
+            if (run != null) run.RestUntil[(int)bird] = now + GeoSpace.DirectorGap;
+        }
+
         /// <summary>One host frame. Cheap while nothing is due: each faction's policy throttles itself to one think per two mission seconds.</summary>
         public void Tick(float missionNow)
         {
