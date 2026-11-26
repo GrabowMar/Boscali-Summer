@@ -99,10 +99,10 @@ def tree(obj, axis, degrees, offset=None):
 
 
 def cockpit_clearance(nodes, nose_max_y, check):
-    # A ray through each furniture vertex must first meet exterior skin, glazing
-    # or a windscreen frame. Explicitly reject vertices outside all three outlines.
+    # The forward pressure hull has open cutouts backed by its four removable skins.
     walls = [tree(nodes[name],'X',0) for name in
-             ('Fuselage_Cockpit','Glass_Canopy','Detail_WindscreenFrames')]
+             ('Fuselage_Cockpit','Glass_Canopy','Detail_WindscreenFrames',
+              'ForeCheek_L','ForeCheek_R','BridgeCrown','NoseChin') if name in nodes]
     furnishings = [obj for obj in nodes.values() if obj.type == 'MESH' and
                    (obj.name.startswith('FlightDeck_') or obj.name == 'Int_AvionicsBezels')]
     check('Int_AvionicsBezels' in {obj.name for obj in furnishings}, 'Missing cockpit display bezels')

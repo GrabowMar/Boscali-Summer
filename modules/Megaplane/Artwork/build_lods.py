@@ -159,9 +159,10 @@ def encode_mesh(owner, mesh):
     return stream.getvalue(), len(faces)
 
 
-def write_lods(nodes, output_path):
+def write_lods(nodes, output_path, include=None):
     root = nodes["BS_Megaplane"]
-    owners = [o for o in (root, *root.children_recursive) if o.type == "MESH"]
+    owners = [o for o in (root, *root.children_recursive)
+              if o.type == "MESH" and (include is None or o.name in include)]
     proxy = bpy.data.objects.new("Groza LOD work mesh", bpy.data.meshes.new("LOD work"))
     initial = proxy.data
     root.users_collection[0].objects.link(proxy)

@@ -1,6 +1,65 @@
 """Machined screen surrounds and operator controls for the cockpit display atlas."""
+import bmesh
 from mathutils import Vector
 from forebody import Surface, child_mesh
+
+
+def seat_lower_displays(nodes):
+    """Fit the seven upright MFDs in front of the lower fascia and behind the yokes."""
+    from bridge_instruments import AFT, DARK, SKIN, join_rings, rectangle
+
+    panel=nodes["FlightDeck_Panel"]
+    dark=panel.data.materials.find("BS_Megaplane_Dark")
+    editable=bmesh.new()
+    editable.from_mesh(panel.data)
+    # These are the old rectangular mounting rails. Their upper edges cross the compass
+    # cues and extend through the new faceplates. The sloping centre pedestal is separate.
+    rails=[face for face in editable.faces if face.material_index==dark and
+           all(101.51 < (panel.matrix_world@v.co).y < 101.58 for v in face.verts)]
+    assert rails, "The original lower screen rails are missing"
+    bmesh.ops.delete(editable,geom=rails,context="FACES")
+    editable.to_mesh(panel.data)
+    editable.free()
+
+    # The side windows narrow at the windscreen. Bring the outboard cassettes
+    # inboard of the coaming cheek, and give the centre map its own bay left of the pedestal.
+    glass=nodes["FlightDeck_Displays"]
+    centres=set()
+    for polygon in glass.data.polygons:
+        if not glass.data.materials[polygon.material_index].name.endswith("Display_Emit"):
+            continue
+        points=[glass.matrix_world@glass.data.vertices[i].co for i in polygon.vertices]
+        if min(p.y for p in points)<101.50:
+            continue
+        centres.update(round(p.x,4) for p in points)
+    edges=sorted(centres)
+    assert len(edges)==14, "Expected seven independent lower screen apertures"
+    old_x=[(left+right)/2 for left,right in zip(edges[::2],edges[1::2])]
+    new_x=(-2.095,-1.639,-1.15,-.52,.92,1.409,1.865)
+    depth_shift=101.295-101.525
+    for obj in (glass,nodes["Int_AvionicsBezels"]):
+        inverse=obj.matrix_world.inverted()
+        for vertex in obj.data.vertices:
+            p=obj.matrix_world@vertex.co
+            if p.y<101.50:
+                continue
+            i=min(range(len(old_x)),key=lambda k:abs(old_x[k]-p.x))
+            vertex.co=inverse@(p+Vector((new_x[i]-old_x[i],depth_shift,.070)))
+        obj.data.update()
+
+    cases=Surface()
+    for x in new_x:
+        centre=Vector((x,101.412,4.737))
+        lip=rectangle(x,101.301,4.737,.441,.436,.015)
+        side=rectangle(x,101.323,4.737,.453,.446,.018)
+        back=rectangle(x,101.584,4.717,.420,.412,.018)
+        cases.face(lip,DARK,AFT)
+        join_rings(cases,lip,side,SKIN,centre)
+        join_rings(cases,side,back,SKIN,centre)
+        cases.face(back,DARK,(0,1,0))
+    obj=child_mesh("FlightDeck_LowerDisplayCases",nodes["Fuselage_Cockpit"])
+    cases.install(obj)
+    nodes[obj.name]=obj
 
 
 def frame_displays(nodes):
@@ -44,4 +103,6 @@ def frame_displays(nodes):
                         trim.face([plane(x+dx,y+dy,.017) for dx,dy in
                                   ((-.004,-.001),(.004,-.001),(.004,.001),(-.004,.001))],"Edge",normal)
     if trim.faces:
-        trim.install(child_mesh("Int_AvionicsBezels",nodes["Fuselage_Cockpit"]))
+        bezel=child_mesh("Int_AvionicsBezels",nodes["Fuselage_Cockpit"])
+        trim.install(bezel)
+        nodes[bezel.name]=bezel

@@ -76,6 +76,37 @@ def inspect():
                     if found:
                         assert (o.matrix_world @ hit - eye).length >= limit, f"{o.name} obscures {name} at {i},{j}"
                 n += 1
+    # The lower seven instrument faces sit forward of the apron in machined cassettes.
+    # Check the working image and, in particular, the compass line just below the PFD title.
+    # Each bank is read from its own pilot chair, with the centre map read by the captain.
+    glass = nodes["FlightDeck_Displays"]
+    bounds = {}
+    for face in glass.data.polygons:
+        if not glass.data.materials[face.material_index].name.endswith("Display_Emit"):
+            continue
+        points = [glass.matrix_world @ glass.data.vertices[i].co for i in face.vertices]
+        if max(p.y for p in points) - min(p.y for p in points) > .001 or max(p.z for p in points) < 4.8:
+            continue
+        pair = (round(min(p.x for p in points), 4), round(max(p.x for p in points), 4))
+        bounds.setdefault(pair, []).extend(points)
+    assert len(bounds) == 7, "Missing upright lower display cassette"
+    for points in bounds.values():
+        xs, zs = [p.x for p in points], [p.z for p in points]
+        seat = eye.copy()
+        if min(xs) > 0:
+            seat.x = nodes["FlightDeck_SeatMount_Copilot"].matrix_world.translation.x
+        for u in (.16, .5, .84):
+            for v in (.22, .5, .80, .88):
+                target = Vector((min(xs) + u*(max(xs)-min(xs)), points[0].y, min(zs) + v*(max(zs)-min(zs))))
+                ray = target - seat
+                for obj in blockers:
+                    if obj.name == "FlightDeck_Yokes":
+                        continue
+                    ok, point, _, _ = obj.ray_cast(obj.matrix_world.inverted() @ seat, ray.normalized())
+                    if ok:
+                        distance = (obj.matrix_world @ point - seat).length
+                        assert distance >= ray.length - .0005, f"{obj.name} crosses a lower instrument at {target}"
+                n += 1
     print(f"Bridge: {triangle_count} triangles, outer-skin clearance {clearance:.3f} m, {n} pilot sight rays clear.")
     print(f"Windshield: all {len(printed_corners)} physical surround corners seated on the 12 mm backing, no stranded seam vertices.")
     print("Coaming front normals and removal of both obsolete warning blocks verified.")

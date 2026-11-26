@@ -17,7 +17,12 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             var carrier = (Aircraft)args["idUnit"];
             var lamps = carrier.GetComponentsInChildren<Light>(true).Where(l => l.name == "Cabin downlight").ToArray();
-            return new { installed = lamps.Length, illuminated = lamps.Count(l => l.isActiveAndEnabled) };
+            var liner = carrier.GetComponentsInChildren<MeshRenderer>(true).FirstOrDefault(r => r.name == "FlightDeck_CabinLiner");
+            var glow = new MaterialPropertyBlock();
+            int slot = liner == null ? -1 : System.Array.FindIndex(liner.sharedMaterials, m => m.name == "BS_Megaplane_CrewDome_Emit");
+            if (slot >= 0) liner.GetPropertyBlock(glow, slot);
+            return new { installed = lamps.Length, illuminated = lamps.Count(l => l.isActiveAndEnabled),
+                lensesGlowing = glow.GetColor("_EmissionColor").maxColorComponent > .01f };
         }
 
         public static object Read(Dictionary<string, object> args)
