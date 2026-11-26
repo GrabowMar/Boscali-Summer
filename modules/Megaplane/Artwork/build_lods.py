@@ -10,6 +10,8 @@ import bpy
 import numpy as np
 from mathutils.bvhtree import BVHTree
 
+from pose import neutral_pose
+
 
 # Doors and control surfaces retain their own animation pivot. Recesses retain their
 # lining and closure geometry so looking into an open bay still shows the hull.
@@ -161,6 +163,11 @@ def encode_mesh(owner, mesh):
 
 def write_lods(nodes, output_path):
     root = nodes["BS_Megaplane"]
+    with neutral_pose(root):
+        return _write_lods(root, output_path)
+
+
+def _write_lods(root, output_path):
     owners = [o for o in (root, *root.children_recursive) if o.type == "MESH"]
     proxy = bpy.data.objects.new("Groza LOD work mesh", bpy.data.meshes.new("LOD work"))
     initial = proxy.data

@@ -65,32 +65,28 @@ namespace BoscaliSummer.Modules.Megaplane
             return true;
         }
 
-        /// <summary>Render-only copy (top level of detail, gear hidden) hung with its top-centre on the hook point.</summary>
+        /// <summary>Render-only copy of the donor's visible airframe, hung with its top-centre on the hook point.</summary>
         private static void Visual(GameObject prefab, Transform slot, string key)
         {
-            var lower = new HashSet<Renderer>();
-            foreach (LODGroup g in prefab.GetComponentsInChildren<LODGroup>(true))
-            {
-                LOD[] lods = g.GetLODs();
-                for (int i = 1; i < lods.Length; i++) foreach (Renderer r in lods[i].renderers) if (r != null) lower.Add(r);
-            }
+            var groups = prefab.GetComponentsInChildren<LODGroup>(true).Select(g => (Source: g, Levels: g.GetLODs()))
+                .Where(g => g.Levels.Length > 0).ToArray();
+            var top = new HashSet<Renderer>(groups.SelectMany(g => g.Levels[0].renderers));
+            var lower = new HashSet<Renderer>(groups.SelectMany(g => g.Levels.Skip(1).SelectMany(l => l.renderers)));
             var root = new GameObject("BayFighter_" + key).transform;
             root.SetParent(slot, false);
             Matrix4x4 toRoot = prefab.transform.worldToLocalMatrix;
             var bounds = new Bounds();
             bool any = false;
+            var meshes = new Dictionary<Renderer, Mesh>();
+            var copies = new Dictionary<Renderer, MeshRenderer>();
             foreach (MeshRenderer r in prefab.GetComponentsInChildren<MeshRenderer>(true))
             {
                 MeshFilter mf = r.GetComponent<MeshFilter>();
-                if (lower.Contains(r) || !r.enabled || mf == null || mf.sharedMesh == null || !Shown(r.transform, prefab.transform)) continue;
+                if (!r.enabled || mf == null || mf.sharedMesh == null || !Shown(r.transform, prefab.transform)) continue;
+                meshes.Add(r, mf.sharedMesh);
+                if (lower.Contains(r) && !top.Contains(r)) continue;
                 Matrix4x4 m = toRoot * r.transform.localToWorldMatrix;
-                var go = new GameObject(r.name);
-                go.transform.SetParent(root, false);
-                go.transform.localPosition = m.GetColumn(3);
-                go.transform.localRotation = m.rotation;
-                go.transform.localScale = m.lossyScale;
-                go.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;
-                go.AddComponent<MeshRenderer>().sharedMaterials = r.sharedMaterials;
+                copies.Add(r, CopyRenderer(r, mf.sharedMesh, root, m));
                 Bounds b = mf.sharedMesh.bounds;
                 for (int c = 0; c < 8; c++)
                 {
@@ -99,6 +95,62 @@ namespace BoscaliSummer.Modules.Megaplane
                 }
             }
             root.localPosition = -new Vector3(bounds.center.x, bounds.max.y, bounds.center.z);
+            CopyLods(prefab.transform, root, toRoot, groups, meshes, copies);
+        }
+
+        private static MeshRenderer CopyRenderer(Renderer source, Mesh mesh, Transform parent, Matrix4x4 pose)
+        {
+            var go = new GameObject(source.name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = pose.GetColumn(3);
+            go.transform.localRotation = pose.rotation;
+            go.transform.localScale = pose.lossyScale;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterials = source.sharedMaterials;
+            return renderer;
+        }
+
+        private static void CopyLods(Transform prefab, Transform visual, Matrix4x4 toRoot,
+            (LODGroup Source, LOD[] Levels)[] groups, Dictionary<Renderer, Mesh> meshes, Dictionary<Renderer, MeshRenderer> copies)
+        {
+            // A renderer can repeat within one group. Two separate groups cannot govern the same copy.
+            var shared = new HashSet<Renderer>(groups.SelectMany(g => g.Levels.SelectMany(l => l.renderers).Distinct())
+                .GroupBy(r => r).Where(g => g.Count() > 1).Select(g => g.Key));
+            foreach (var (source, levels) in groups)
+            {
+                if (!source.enabled || levels.Length < 2 || !Shown(source.transform, prefab)) continue;
+                Renderer[][] keep = levels.Select(l => l.renderers
+                    .Where(r => r != null && r is MeshRenderer && r.enabled && Shown(r.transform, prefab)).Distinct().ToArray()).ToArray();
+                if (keep.Any(level => level.Length == 0 || level.Any(r => !meshes.ContainsKey(r) || shared.Contains(r)))) continue;
+
+                Matrix4x4 frame = toRoot * source.transform.localToWorldMatrix;
+                float size = source.size * Mathf.Max(frame.GetColumn(0).magnitude,
+                    Mathf.Max(frame.GetColumn(1).magnitude, frame.GetColumn(2).magnitude));
+                if (!(size > 0f) || float.IsInfinity(size)) continue;
+
+                var holder = new GameObject("BayFighterLOD_" + source.name).transform;
+                holder.SetParent(visual, false);
+                var lods = new LOD[levels.Length];
+                for (int i = 0; i < levels.Length; i++)
+                {
+                    var renderers = new Renderer[keep[i].Length];
+                    for (int j = 0; j < renderers.Length; j++)
+                    {
+                        Renderer r = keep[i][j];
+                        if (copies.TryGetValue(r, out MeshRenderer copy)) copy.transform.SetParent(holder, false);
+                        else copies.Add(r, copy = CopyRenderer(r, meshes[r], holder, toRoot * r.transform.localToWorldMatrix));
+                        renderers[j] = copy;
+                    }
+                    lods[i] = new LOD(levels[i].screenRelativeTransitionHeight, renderers) { fadeTransitionWidth = levels[i].fadeTransitionWidth };
+                }
+                var group = holder.gameObject.AddComponent<LODGroup>();
+                group.fadeMode = source.fadeMode;
+                group.animateCrossFading = source.animateCrossFading;
+                group.SetLODs(lods);
+                group.localReferencePoint = frame.MultiplyPoint3x4(source.localReferencePoint);
+                group.size = size;
+            }
         }
     }
 

@@ -305,7 +305,8 @@ def sculpt_bridge(nodes):
             nodes[name]=locator(name,(x,102.18,z),owner)
     # Instrument lighting and engraved maker's plate flank the pilot. On the other
     # station the windscreen reveals the environmental and bus-distribution selectors.
-    punched_panel(hardware,tiles,smooth_faces,-1.932,102.055,5.109,.268,.176,1,(-.29,.29))
+    # Keep the port lighting legend below the sloping cowl from the pilot eye.
+    punched_panel(hardware,tiles,smooth_faces,-1.892,102.055,5.074,.268,.176,1,(-.29,.29))
     punched_panel(hardware,tiles,smooth_faces,-.116,102.163,5.073,.45,.166,0,())
     punched_panel(hardware,tiles,smooth_faces,.53,102.16,5.074,.54,.212,4,(-.34,0,.34))
     punched_panel(hardware,tiles,smooth_faces,1.17,102.16,5.074,.56,.212,5,(-.34,0,.34))

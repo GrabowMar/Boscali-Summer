@@ -555,14 +555,60 @@ namespace BoscaliSummer.Modules.Megaplane
             if (!(args.TryGetValue("idUnit", out object value) && value is Aircraft a) || !(a.GetComponent<MegaplaneBay>() is MegaplaneBay bay)) return new { ok = false };
             bool started = args.TryGetValue("slot", out object slot) && bay.Drop(System.Convert.ToInt32(slot));
             int recalled = args.TryGetValue("recall", out object r) && System.Convert.ToBoolean(r) ? bay.Recall() : 0;
+            bool inspectLod = args.TryGetValue("lod", out object lod) && System.Convert.ToBoolean(lod);
+            Transform[] visuals = a.GetComponentsInChildren<Transform>(true).Where(t => t.name.StartsWith("BayFighter_")).ToArray();
             return new
             {
                 ok = true, started, recalled, door = bay.Door, stowed = bay.State.Count(x => x == 0),
                 capturePhase = bay.Released.Select(f => f != null && f.GetComponent<MegaplaneCapture>() is MegaplaneCapture cap ? cap.Phase : -1).ToArray(),
                 releasedAlive = bay.Released.Count(r => r != null && !r.disabled), releasedFriendly = bay.Released.Count(r => r != null && r.NetworkHQ == a.NetworkHQ), arm = bay.Arm.ToArray(), state = bay.State.ToArray(), fighter = bay.FighterKey,
-                visuals = a.GetComponentsInChildren<Transform>(true).Count(t => t.name.StartsWith("BayFighter_") && t.gameObject.activeSelf),
+                visuals = visuals.Count(t => t.gameObject.activeSelf),
+                lod = inspectLod ? visuals.Select(BayLod).ToArray() : null,
                 released = bay.Released.Select((r, i) => r == null ? null : new { r.unitName, alive = !r.disabled, speed = r.rb != null ? r.rb.velocity.magnitude : 0f,
                     below = a.transform.InverseTransformPoint(r.transform.position).y, hookRange = Vector3.Distance(r.transform.position, bay.HookPoint(i)), sameSide = r.NetworkHQ == a.NetworkHQ }).ToArray(),
+            };
+        }
+
+        private static object BayLod(Transform visual)
+        {
+            Camera camera = Camera.main;
+            bool Visible(Renderer renderer) => renderer != null && renderer.enabled &&
+                renderer.gameObject.activeInHierarchy && renderer.isVisible;
+            int Triangles(Renderer renderer)
+            {
+                if (!renderer.TryGetComponent(out MeshFilter filter) || filter.sharedMesh == null) return 0;
+                Mesh mesh = filter.sharedMesh;
+                int count = 0;
+                for (int sub = 0; sub < mesh.subMeshCount; sub++)
+                    if (mesh.GetTopology(sub) == MeshTopology.Triangles) count += (int)mesh.GetIndexCount(sub) / 3;
+                return count;
+            }
+
+            LODGroup[] groups = visual.GetComponentsInChildren<LODGroup>(true);
+            Renderer[] renderers = visual.GetComponentsInChildren<Renderer>(true);
+            var grouped = new HashSet<Renderer>(groups.SelectMany(g => g.GetLODs().SelectMany(l => l.renderers)));
+            return new
+            {
+                visual.name, active = visual.gameObject.activeInHierarchy, lodBias = QualitySettings.lodBias,
+                groupCount = groups.Length, visibleTriangles = renderers.Where(Visible).Sum(Triangles),
+                standaloneTriangles = renderers.Where(r => !grouped.Contains(r)).Sum(Triangles),
+                groups = groups.Select(g =>
+                {
+                    LOD[] levels = g.GetLODs();
+                    var membership = levels.SelectMany(l => l.renderers.Distinct()).ToLookup(r => r);
+                    Vector3 reference = g.transform.TransformPoint(g.localReferencePoint);
+                    float distance = camera == null ? -1f : Vector3.Distance(camera.transform.position, reference);
+                    return new
+                    {
+                        g.name, distance, g.size,
+                        levels = levels.Select((l, i) => new
+                        {
+                            level = i, threshold = l.screenRelativeTransitionHeight,
+                            renderers = l.renderers.Count(r => r != null), triangles = l.renderers.Where(r => r != null).Sum(Triangles),
+                            visibleRenderers = l.renderers.Count(Visible), exclusiveVisible = l.renderers.Count(r => Visible(r) && membership[r].Count() == 1),
+                        }).ToArray(),
+                    };
+                }).ToArray(),
             };
         }
 

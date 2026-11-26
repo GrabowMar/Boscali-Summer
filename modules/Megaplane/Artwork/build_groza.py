@@ -11,7 +11,7 @@ The second command requires Pillow and derives the cockpit damage diagram from
 the final exported mesh. Use the workspace nomodkit venv for that command.
 The first command opens a fresh scene and writes the packed, metre-scale master
 to assets/KY44Groza. Its root object has sliders for flaps, hold, gear, fans
-and the four intake lids on the two nose-lift fans.
+the fighter bay and the four intake lids on the two nose-lift fans.
 Panel textures live alongside the embedded mesh. To regenerate the textures,
 run build_panels.py in Blender before rebuilding the model.
 
@@ -49,6 +49,7 @@ from flightdeck import fit_pilot_fascia, frame_displays
 from bridge_instruments import fit_bridge
 from crew_room import fit_crew_room
 from hold_interior import outfit_hold
+from fighter_bay import outfit_fighter_bay
 from planform import rebuild_planform
 from wing_structure import fit_wing_splices
 from reactor import fit_reactor
@@ -129,6 +130,7 @@ def build():
     frame_displays(nodes)
     detail_structure(nodes)
     outfit_hold(nodes)
+    outfit_fighter_bay(nodes)
     finish_surface(nodes)
     rebuild_planform(nodes)
     add_nose_assist(nodes)
