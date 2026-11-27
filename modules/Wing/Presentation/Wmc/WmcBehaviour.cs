@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private readonly List<Row> rows = new List<Row>(12);
         private readonly ConfirmGate gate = new ConfirmGate();
-        private AvFlow flow;
+        private AvFlow flow, tuning;
         private WmcScopeBar scope;
         private AvSection nowSection, tuneSection, overrideSection;
         private WmcLines says;
@@ -57,7 +57,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly string[] ovName = new string[MaxOverrides], ovSub = new string[MaxOverrides];
         private readonly uint[] ovMember = new uint[MaxOverrides];
 
-        public string Hint => "Tap a profile to fly it. TUNE changes fly at once; SAVE NEW keeps them as a profile.";
+        public string Hint => last != null && last.CanOrder
+            ? "Tuning takes effect immediately. Save a profile to reuse it."
+            : "The host manages wing profiles and rules.";
 
         public string Alert => null;
 
@@ -69,27 +71,30 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             scope = flow.Add(new WmcScopeBar(flow.Content, "APPLY TO"));
 
             // ---- what the scope does right now, in words
-            nowSection = flow.Section(AvIcon.Activity, "NOW FLYING", "");
+            nowSection = flow.Section(AvIcon.Activity, "WING PROFILE", "");
             says = flow.Add(new WmcLines(flow.Content, 1));
 
-            // ---- the presets
-            flow.Section(AvIcon.ListDetails, "PROFILES", "TAP TO FLY · WING KEY + 1-6");
-            plates = flow.Add(new WmcStanceSlots(flow.Content, PickPreset, null, StanceBook.MaxStances, true));
-            AvControl[] bar = flow.Buttons(
+            var sections = WmcSubPages.AddTabbed(flow, new[] { "PROFILES", "TUNING & RULES" },
+                new[] { AvIcon.ListDetails, AvIcon.AdjustmentsHorizontal });
+            AvFlow profiles = sections.Flow(0);
+            tuning = sections.Flow(1);
+            profiles.Section(AvIcon.Bookmark, "SAVED PROFILES", "WING KEY + 1–6");
+            plates = profiles.Add(new WmcStanceSlots(profiles.Content, PickPreset, null, StanceBook.MaxStances, true));
+            AvControl[] bar = profiles.Buttons(
                 new AvControl.Spec("SAVE NEW", SaveNew, AvButtonStyle.Default, AvIcon.Bookmark),
                 new AvControl.Spec("UPDATE", Update, AvButtonStyle.Default, AvIcon.Refresh),
                 new AvControl.Spec("DELETE", Delete, AvButtonStyle.Danger, AvIcon.X)).Controls;
             saveButton = bar[0];
             updateButton = bar[1];
             deleteButton = bar[2];
-            nameField = new WmcNameField(flow.Content, "NAME", MaxNameChars, CommitName, "The profile's name: Enter keeps it (16 characters at most).");
-            nameGate = flow.Add(new WmcCollapsible(nameField));
+            nameField = new WmcNameField(profiles.Content, "NAME", MaxNameChars, CommitName, "The profile's name: Enter keeps it (16 characters at most).");
+            nameGate = profiles.Add(new WmcCollapsible(nameField));
             var keys = new[] { "W+1", "W+2", "W+3", "W+4", "W+5", "W+6" };
-            keyRow = flow.Add(new WmcTuneRow(flow.Content, "WING KEY", keys, PickKey));
+            keyRow = profiles.Add(new WmcTuneRow(profiles.Content, "WING KEY", keys, PickKey));
             for (int i = 0; i < keys.Length; i++) keyRow.Options[i].Help = "Wing key + " + (i + 1) + " flies the lit profile.";
 
             // ---- live tuning of the scope's AI
-            tuneSection = flow.Section(AvIcon.AdjustmentsHorizontal, "TUNE", "");
+            tuneSection = tuning.Section(AvIcon.AdjustmentsHorizontal, "TUNE", "");
             Add("SHOOT AT", new[] { "HOLD", "AIR", "GROUND", "BOTH", "COVER" },
                 new[]
                 {
@@ -118,7 +123,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 }, Kind.Missiles, DoctrineAxis.Guard);
 
             // ---- the whole wing's rules
-            flow.Section(AvIcon.Radio, "WING RULES", "WHOLE WING · AT ONCE");
+            tuning.Section(AvIcon.Radio, "WING RULES", "WHOLE WING");
             Add("FALL BACK", new[] { "NEVER", "1.5 : 1", "2 : 1", "3 : 1" },
                 new[]
                 {
@@ -138,8 +143,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 Kind.Radio, DoctrineAxis.Guard);
 
             // ---- aircraft flying settings of their own
-            overrideSection = flow.Section(AvIcon.Target, "OVERRIDES", "");
-            overrides = flow.Add(new OverrideView(flow.Content, ticker, MaxOverrides, BindOverride));
+            overrideSection = tuning.Section(AvIcon.Target, "OVERRIDES", "");
+            overrides = tuning.Add(new OverrideView(tuning.Content, ticker, MaxOverrides, BindOverride));
             overrides.Prime(MaxOverrides);
             overrideSection.SetShown(false);
         }
@@ -147,7 +152,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void Add(string key, string[] labels, string[] tips, Kind kind, DoctrineAxis axis)
         {
             var row = new Row { Tips = tips, Kind = kind, Axis = axis };
-            row.Seg = flow.Add(new WmcTuneRow(flow.Content, key, labels, i => Pick(row, i)));
+            row.Seg = tuning.Add(new WmcTuneRow(tuning.Content, key, labels, i => Pick(row, i)));
             for (int i = 0; i < labels.Length; i++) row.Seg.Options[i].Help = tips[i];
             rows.Add(row);
         }
@@ -164,6 +169,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             last = c;
             scope.Refresh(c);
+            scope.SetShown(c.Count > 0);
             bool host = c.CanOrder, changed = false;
             WingDoctrine d = default;
             live = host && c.ScopeDoctrine(out d) ? StanceDoctrine.Axes(d) : null;
@@ -172,7 +178,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             nearest = lit ?? (live != null ? StanceWords.Closest(Book.All, live, out nearMask) : null);
 
             WingConfig cfg = WingSettings.Instance;
-            string now = !host ? (c.Client ? "The host tunes the wing." : "Wing Command is not ready.")
+            string now = c.Count == 0 ? "No aircraft assigned to the wing."
+                : !host ? (c.Client ? "The host tunes the wing." : "Wing Command is not ready.")
                 : live == null ? "The aircraft in scope fly different settings: tap a profile or a TUNE setting to line them up."
                 : StanceWords.Says(live, FallBackIndex(cfg), cfg != null ? (int)cfg.AfterWinchester.Value : -1, cfg != null ? (int)cfg.AfterBingo.Value : -1);
             if (now != saysShown)
@@ -182,11 +189,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 changed = true;
             }
             int diff = StanceDiff.Count(nearMask);
-            nowSection.SetCaption(!host ? "" : live == null ? c.ScopeLabel + " · MIXED"
+            nowSection.SetCaption(c.Count == 0 ? "UNASSIGNED" : !host ? "" : live == null ? c.ScopeLabel + " · MIXED"
                 : lit != null ? c.ScopeLabel + " · " + lit.Name
                 : nearest != null ? c.ScopeLabel + " · " + nearest.Name + " +" + diff + (diff == 1 ? " CHANGE" : " CHANGES")
                 : c.ScopeLabel + " · CUSTOM");
-            tuneSection.SetCaption(host ? c.ScopeLabel + " · CHANGES FLY AT ONCE" : "");
+            tuneSection.SetCaption(host && c.Count > 0 ? c.ScopeLabel + " · CHANGES FLY AT ONCE" : "");
 
             RefreshPresets(c, ref changed);
             RefreshRows(c, cfg);

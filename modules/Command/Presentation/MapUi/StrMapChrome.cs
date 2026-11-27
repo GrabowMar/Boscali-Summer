@@ -6,7 +6,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// STR owns its three layer switches, gated DRAW action and board/tool feedback. Expanded layout hosts them in the map
+    /// STR owns its three layer switches and board status. Expanded layout hosts them in the map
     /// drawer; stock layout retains its floating plate. The passive shape legend remains on the map. Both register with
     /// the pointer guard, and reparenting refreshes the plate's cached canvas without changing its actions or gates.
     /// </summary>
@@ -20,9 +20,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private readonly RectTransform mapChrome;
         private readonly AvFrame plateFrame, legendFrame;
         private readonly TMP_Text plateTitle, plateLine;
-        private readonly StrButton fronts, operation, sorties, draw;
-        /// <summary>The DRAW tool's prompt or answer; shown in place of the board line while set.</summary>
-        internal string Note = "";
+        private readonly StrButton fronts, operation, sorties;
         private readonly AvVector[] swatches = new AvVector[StrOverlayPlan.MaxLegend];
         private readonly TMP_Text[] labels = new TMP_Text[StrOverlayPlan.MaxLegend];
         private string lastLine = "";
@@ -49,8 +47,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             fronts = Toggle(StrLayers.Fronts);
             operation = Toggle(StrLayers.Operation);
             sorties = Toggle(StrLayers.Sorties);
-            draw = new StrButton(plate, "DRAW", AvButtonStyle.Default, () => owner.ToggleDraw(), AvIcon.Pencil);
-            draw.Control.Bracket = 0f;
 
             legend = Panel(viewport, "StrLegend", new Vector2(0f, 0f), new Vector2(12f, 10f), out legendFrame);
             for (int i = 0; i < swatches.Length; i++)
@@ -110,22 +106,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return toggle;
         }
 
-        /// <summary>The plate: three latched toggles that mirror the interface state, DRAW, and the board's age, on one row.</summary>
+        /// <summary>The plate shows the three layer switches and the board's age on one row.</summary>
         internal void BindPlate(StrViewModel vm, in StrUiState ui)
         {
             Bind(fronts, "layer.fronts", "FRONTS", ui.ShowFronts, "STR layer: platform badges and lane bars of every front. Lit = shown.");
             Bind(operation, "layer.operation", "OPERATION", ui.ShowOperation, "STR layer: the main effort, its axis, groups and wave route, and the proposals. Lit = shown.");
             Bind(sorties, "layer.sorties", "SORTIES", ui.ShowSorties, "STR layer: sortie markers and zones, and the enemy command posts when the host reports any. Lit = shown.");
-            draw.Bind(controls, "layer.draw", "DRAW", () => StrMapOverlay.DrawArmed ? new StrAct(StrWhy.None, "") : StrGate.DrawGate(vm),
-                "Draw your own offensive: right-press on a front, drag to the objective, release. Esc cancels.", StrMapOverlay.DrawArmed);
-            string line = string.IsNullOrEmpty(Note) ? StrPanelText.LayerLine(vm) : Note;
+            string line = StrPanelText.LayerLine(vm);
 
             if (line != lastLine)
             {
                 lastLine = line;
                 AvText.Set(plateLine, line);
             }
-            plateLine.color = string.IsNullOrEmpty(Note) ? AvInk.Dim : AvInk.Ink;
+            plateLine.color = AvInk.Dim;
             plateTitle.color = AvInk.Key;
             RefreshLayout(true);
         }
@@ -161,12 +155,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 AvLay.Fill(plate);
                 AvLay.Place(plateTitle.rectTransform, 0f, 0f, 34f, 28f);
                 float available = Mathf.Max(4f, width - 42f);
-                float total = fronts.Control.PreferredWidth + operation.Control.PreferredWidth + sorties.Control.PreferredWidth + draw.Control.PreferredWidth + 48f;
+                float total = fronts.Control.PreferredWidth + operation.Control.PreferredWidth + sorties.Control.PreferredWidth + 36f;
                 float scale = Mathf.Min(1f, available / total), x = 42f;
                 x = PlaceDocked(fronts, x, scale);
                 x = PlaceDocked(operation, x, scale);
                 x = PlaceDocked(sorties, x, scale);
-                x = PlaceDocked(draw, x, scale);
                 AvLay.Place(plateLine.rectTransform, x + 4f, 0f, Mathf.Max(1f, width - x - 4f), 28f);
                 plateLine.overflowMode = TextOverflowModes.Ellipsis;
                 return;
@@ -180,7 +173,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             stockX = Place(fronts, stockX, y);
             stockX = Place(operation, stockX, y);
             stockX = Place(sorties, stockX, y);
-            stockX = Place(draw, stockX + 8f, y);
             float lineW = Mathf.Ceil(AvText.Width(plateLine));
             AvLay.Place(plateLine.rectTransform, stockX + 8f, y, Mathf.Max(lineW, 20f), ToggleH);
             plate.sizeDelta = new Vector2(stockX + 8f + lineW + 10f, PlateH);

@@ -22,14 +22,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // SERVER is one page, so it has no tab bar.
             AvConsole c = AvConsole.Build(body, "SET", "SETTINGS", server ? 1 : 5, AvTokens.PanelWidth, height);
 
-            // The kit has no slot for a control between the header and the tabs. A hidden metric reserves one
-            // metric-height strip there and the mode switch (a module-local part) is drawn over exactly that strip.
-            AvMetric[] band = c.Metrics("MODE");
-            band[0].SetShown(false);
             var mode = new ModeSwitch(c.Root, SwitchMode);
-            mode.Place(new AvSlot(AvGridTokens.Pad, AvGridTokens.Header + 4f,
-                AvTokens.PanelWidth - 2f * AvGridTokens.Pad, AvGridTokens.Metric));
-            c.Ticker.Register(mode);
+            c.HeaderBand(mode);
 
             if (server) BuildServerPage(c.Page(SRules), SRules);
             else
@@ -77,12 +71,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// The two big segments under the header (what you are editing and who can change it). Not a kit part (the kit
-        /// has no console-level mode control), built from kit v2 controls. The footer says what each mode means.
+        /// Scope selector shared by the local and server settings pages.
         /// </summary>
         private sealed class ModeSwitch : AvPart
         {
-            private const float ButtonH = 44f;   // fills the strip the console reserves for it
             private readonly AvControl pilot, server;
             private readonly TMP_Text serverGlyph;
             private bool lockedIcon;
@@ -113,14 +105,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
 
-            public override float Measure(float width) => AvGridTokens.Metric;
+            public override float Measure(float width)
+            {
+                float half = AvFlowMath.ColumnWidth(width, 2, AvGridTokens.Gap);
+                return Mathf.Max(AvGridTokens.ToolCell, Mathf.Max(pilot.PreferredHeight(half), server.PreferredHeight(half)));
+            }
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                float half = (s.W - 4f) * 0.5f;
-                AvLay.Place(pilot.Rect, 0f, 0f, half, ButtonH);
-                AvLay.Place(server.Rect, half + 4f, 0f, half, ButtonH);
+                float half = AvFlowMath.ColumnWidth(s.W, 2, AvGridTokens.Gap);
+                AvLay.Place(pilot.Rect, 0f, 0f, half, s.H);
+                AvLay.Place(server.Rect, half + AvGridTokens.Gap, 0f, half, s.H);
             }
 
             public override void Restyle()

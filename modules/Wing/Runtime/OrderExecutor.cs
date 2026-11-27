@@ -502,19 +502,20 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// airframe when one is picked and offered (else the configured airframe or your type), that airframe's fit, its fuel and a field
         /// by SUPPLY's base rules, with the next pilot. Both pass the same <see cref="ShopRules"/> as SUPPLY's card, on a fresh snapshot,
         /// and answer from what really launched.</summary>
-        private static OrderResult Call(WingService w, WingOrder o)
+        private static string PrepareCall(WingService w, CallSpec c, bool refreshLists, out Aircraft caller, out LaunchRequest request)
         {
-            if (SpawnService.Instance == null) return OrderResult.Refused("Wing Command is not ready");
+            request = default;
+            caller = null;
+            if (SpawnService.Instance == null || w == null) return "Wing Command is not ready";
             // The player calls; under automation (no player aircraft) the anchor stands in, as the launch itself does.
-            Aircraft caller = w.Player != null ? w.Player : w.Leader;
-            if (caller == null) return OrderResult.Refused("Not flying");
-            CallSpec c = o.Call;
-            WingRequisition.RefreshLists(caller, force: true);
+            caller = w.Player != null ? w.Player : w.Leader;
+            if (caller == null) return "Not flying";
+            WingRequisition.RefreshLists(caller, force: refreshLists);
             bool draft = c.Airframe == null && c.Field == null && c.Pilot == null && c.Fit == null && c.Fuel <= 0f;
             AircraftDefinition drafted = draft && WingRequisition.Selected != null && WingRequisition.Catalogue.Contains(WingRequisition.Selected)
                 ? WingRequisition.Selected : null;
             AircraftDefinition type = drafted ?? (c.Airframe != null ? WingRequisition.FindAirframe(c.Airframe) : WingCommands.CallAirframe() ?? caller.definition);
-            if (type == null) return OrderResult.Refused("No such airframe: " + c.Airframe);
+            if (type == null) return "No such airframe: " + c.Airframe;
             if (draft)
             {
                 c.Fit = WingRequisition.FitOf(type);
@@ -522,43 +523,61 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             Airbase field = c.Field != null ? WingRequisition.FindField(c.Field) : draft ? WingRequisition.PickField(caller, type) : w.FieldFor(caller, type);
             if (field == null)
-                return OrderResult.Refused(c.Field != null ? "No such friendly field: " + c.Field
-                    : draft && WingRequisition.Fields.Count > 0 ? NoFieldWhy() : "No friendly field to launch from");
+                return c.Field != null ? "No such friendly field: " + c.Field
+                    : draft && WingRequisition.Fields.Count > 0 ? NoFieldWhy() : "No friendly field to launch from";
             WingPilot pilot = null;
             if (c.Pilot != null && (pilot = WingPilotRoster.FindByCallsign(c.Pilot)) == null)
-                return OrderResult.Refused("No pilot " + c.Pilot + " on the roster");
+                return "No pilot " + c.Pilot + " on the roster";
             bool own = c.Fit == CallSpec.YourLoadout;
             string template = null;
             if (c.Fit != null && !own)
             {
                 LoadoutTemplateRecord fit = WingLoadoutTemplates.ById(c.Fit);
-                if (fit == null) return OrderResult.Refused("That fit no longer exists");
-                if (fit.AirframeKey != type.jsonKey) return OrderResult.Refused("That fit is for another airframe");
+                if (fit == null) return "That fit no longer exists";
+                if (fit.AirframeKey != type.jsonKey) return "That fit is for another airframe";
                 template = c.Fit;
             }
+            request = new LaunchRequest { Field = field, Type = type, Count = 1, Pilot = pilot, Template = template, OwnLoadout = own, Fuel = c.Fuel };
+            return null;
+        }
+
+        /// <summary>Read the same bare-call draft and current quote as the command. No resources are reserved.</summary>
+        public static string CallBlocker(WingService w, out LaunchRequest request)
+        {
+            string why = PrepareCall(w, default, false, out Aircraft caller, out request);
+            if (why != null) return why;
+            ShopWing wing = WingRequisition.Wing(caller);
+            ShopAirframe airframe = WingRequisition.For(request.Type, caller.NetworkHQ);
+            ShopQuote quote = ShopRules.Quote(wing, airframe);
+            request.Price = quote.Price;
+            return quote.Allowed ? null : ShopRules.Blocker(quote, wing, airframe);
+        }
+
+        private static OrderResult Call(WingService w, WingOrder o)
+        {
+            string why = PrepareCall(w, o.Call, true, out Aircraft caller, out LaunchRequest request);
+            if (why != null) return OrderResult.Refused(why);
             // Review R4a: each aircraft is quoted with the ones this call already launched, so the one that crosses the faction's
             // AI limit pays and acts as over it (the snapshot advances by arithmetic; the game's own count lags a spawn by a tick).
             FactionHQ hq = caller.NetworkHQ;
             ShopWing before = WingRequisition.Wing(caller);
-            string fieldName = WingRequisition.NameOf(field), firstPilot = null, cutShort = null, effect = null;
+            string fieldName = WingRequisition.NameOf(request.Field), firstPilot = null, cutShort = null, effect = null;
             int launched = 0;
             float spent = 0f;
             for (int k = 0; k < (int)o.Number; k++)
             {
                 ShopWing sw = ShopRules.After(before, launched, spent);
                 if (sw.Mode == OverLimitMode.RtbOne && ShopRules.OverCap(sw)) sw.RtbCandidate = WingRequisition.RtbCandidate(hq) != null;
-                ShopAirframe sa = WingRequisition.For(type, hq);
+                ShopAirframe sa = WingRequisition.For(request.Type, hq);
                 ShopQuote q = ShopRules.Quote(sw, sa);
                 if (!q.Allowed)
                 {
                     cutShort = ShopRules.Blocker(q, sw, sa).Substring("BLOCKED · ".Length);
                     break;
                 }
-                int got = SpawnService.Instance.LaunchFromField(new LaunchRequest
-                {
-                    Field = field, Type = type, Count = 1, Pilot = k == 0 ? pilot : null, Template = template, OwnLoadout = own,
-                    Fuel = c.Fuel, Price = q.Price,
-                }, out _, out string refusal, out string seated);
+                if (k > 0) request.Pilot = null;
+                request.Price = q.Price;
+                int got = SpawnService.Instance.LaunchFromField(request, out _, out string refusal, out string seated);
                 if (got <= 0)
                 {
                     cutShort = refusal ?? (launched == 0 ? null : fieldName + " has no room for another");
@@ -569,8 +588,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 spent += q.Price;
                 if (q.OverLimit) effect = WingRequisition.ApplyOverLimit(sw.Mode, hq, got, sw);
             }
-            if (launched <= 0) return OrderResult.Refused(CallWords.Refused(type.unitName, cutShort, fieldName));
-            string answer = CallWords.Launched(launched, type.unitName, fieldName, firstPilot, cutShort);
+            if (launched <= 0) return OrderResult.Refused(CallWords.Refused(request.Type.unitName, cutShort, fieldName));
+            string answer = CallWords.Launched(launched, request.Type.unitName, fieldName, firstPilot, cutShort);
             return OrderResult.Acked(effect != null ? answer + " · " + effect : answer);
         }
 

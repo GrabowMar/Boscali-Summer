@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     internal sealed class WmcWingTable : AvPart
     {
         public const int MaxMembers = WcSnapshot.MaxMembers, MaxElements = ElementRoster.MaxElements;
-        private const float RowH = 19f, HeadH = 18f, SumH = 22f, Pad = 6f, Gap = 4f, RowGap = 1f;
+        private const float RowH = 27f, HeadH = 21f, SumH = 30f, Pad = 6f, Gap = 4f, RowGap = 1f;
         private const float NumW = 24f, NameW = 98f, TypeW = 44f, FuelW = 40f, AmmoW = 34f, DmgW = 36f;
         private const int KindHead = 0, KindRow = 1;
 
@@ -39,20 +39,21 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly AvFrame sumFrame, headBack;
         private readonly TMP_Text sumWing, sumElements, sumAlert, sumAction;
         private readonly TMP_Text hAll, hName, hType, hTask, hFuel, hAmmo, hDmg;
+        private readonly TMP_Text[] headings;
         private readonly AvFrame allHit;
-        private readonly AvRow seats;
+        private readonly WmcRequisitionCard seats;
         private readonly int[] order = new int[MaxMembers];
         private readonly int[] kind = new int[MaxMembers + MaxElements], which = new int[MaxMembers + MaxElements];
         private readonly int[] perElement = new int[MaxElements];
         private int count, shown = -1;
         private bool collapsed, collapsible, seatsOn, allLatched, summaryHover;
         private float measuredWidth = AvTokens.PanelWidth - 16f;
-        private string alertWord = "ALL CLEAR";
+        private string alertWord;
         private AvState alertState = AvState.Ready;
         private WmcContext last;
 
         /// <summary>Set by the owner: ALL, an element row, a member row (index into the rows; shift adds), the summary line, SUPPLY.</summary>
-        public Action AllPicked, SummaryPicked, SupplyPicked;
+        public Action AllPicked, SummaryPicked, SupplyPicked, CallPicked;
         public Action<int> ElementPicked;
         public Action<int, bool> RowPicked;
         /// <summary>Until this unscaled time the scope's rows flash (an order went to them).</summary>
@@ -90,19 +91,18 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             hFuel.text = "FUEL";
             hAmmo.text = "AMMO";
             hDmg.text = "DMG";
+            headings = new[] { hAll, hName, hType, hTask, hFuel, hAmmo, hDmg };
             for (int e = 0; e < heads.Length; e++) heads[e] = MakeCell("Head" + e, true, e);
             for (int i = 0; i < rows.Length; i++) rows[i] = MakeCell("Row" + i, false, i);
-            seats = new AvRow(Rect);
+            seats = new WmcRequisitionCard(Rect, () => CallPicked?.Invoke(), () => SupplyPicked?.Invoke()) { Parent = this };
             seats.Rect.gameObject.SetActive(false);
-            AvControl toSupply = seats.AddTrailing(new AvControl.Spec("SUPPLY", () => SupplyPicked?.Invoke()));
-            toSupply.Help = "Requisition a wingman: pilot, airframe, fit and base.";
-            SupplyButton = toSupply;
             // The summary line starts hidden: until the first mode change it sat unplaced over the table (a dark square and stray words).
             Apply();
             Restyle();
         }
 
-        public AvControl SupplyButton { get; }
+        public AvControl SupplyButton => seats.Supply;
+        private AvControl CallButton => seats.Call;
         public uint IdAt(int r) => r >= 0 && r < rows.Length ? rows[r].Id : 0u;
         public bool Collapsed => collapsed;
         private int shownRows, shownHeads;
@@ -166,9 +166,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             sumAlert.gameObject.SetActive(collapsible);
             sumAction.gameObject.SetActive(collapsible);
             bool full = !collapsed;
-            headBack.gameObject.SetActive(full);
-            allHit.gameObject.SetActive(full);
-            foreach (TMP_Text t in new[] { hAll, hName, hType, hTask, hFuel, hAmmo, hDmg }) t.gameObject.SetActive(full);
+            SetHeadings(full && last != null && last.Count > 0);
             if (!full)
             {
                 foreach (Cell c in heads) SetCellShown(c, false);
@@ -179,11 +177,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Changed();
         }
 
+        private void SetHeadings(bool on)
+        {
+            if (headBack.gameObject.activeSelf == on) return;
+            headBack.gameObject.SetActive(on);
+            allHit.gameObject.SetActive(on);
+            foreach (TMP_Text t in headings) t.gameObject.SetActive(on);
+        }
+
         private float ContentHeight()
         {
             float h = collapsible ? SumH + RowGap : 0f;
             if (collapsed) return Mathf.Max(0f, h - RowGap);
-            h += HeadH + RowGap;
+            if (count > 0) h += HeadH + RowGap;
             for (int i = 0; i < count; i++) h += RowH + RowGap;
             if (seatsOn) h += seats.Measure(measuredWidth) + RowGap;
             return Mathf.Max(0f, h - RowGap);
@@ -234,7 +240,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvLay.Place(hAmmo.rectTransform, x, y, AmmoW, HeadH);
             x += AmmoW + Gap;
             AvLay.Place(hDmg.rectTransform, x, y, DmgW, HeadH);
-            y += HeadH + RowGap;
+            if (count > 0) y += HeadH + RowGap;
             for (int i = 0; i < count; i++)
             {
                 if (kind[i] == KindHead) PlaceHead(heads[which[i]], y, w);
@@ -289,14 +295,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             AvStyle row = AvStyleHost.FuiStyle("row");
             Color inert = AvStyleHost.Resolve(row.Background, AvTheme.SurfaceInert);
-            sumFrame.Paint(inert, row.Border.HasValue ? AvStyleHost.Resolve(row.Border, Color.clear) : Color.clear);
-            headBack.Paint(Color.clear, Color.clear);
+            sumFrame.Paint(summaryHover ? AvTheme.SurfaceRaised : AvStyleHost.FuiColor("surface", AvTheme.Surface),
+                row.Border.HasValue ? AvStyleHost.Resolve(row.Border, Color.clear) : Color.clear);
+            headBack.Paint(inert, Color.clear);
             allHit.Paint(Color.clear, Color.clear);
             Color key = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
-            foreach (TMP_Text t in new[] { hAll, hName, hType, hTask, hFuel, hAmmo, hDmg }) t.color = key;
+            foreach (TMP_Text t in headings) t.color = key;
             Color name = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
-            sumWing.color = sumElements.color = name;
-            sumAction.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            sumWing.color = name;
+            sumElements.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            sumAction.color = key;
             sumAlert.color = WmcState.Color(Rail(alertState));
             foreach (Cell c in heads) Style(c);
             foreach (Cell c in rows) Style(c);
@@ -331,7 +339,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Color name = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             Color sub = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             c.Num.color = c.IsHead ? rail : sub;
-            c.Name.color = c.IsHead ? name : name;
+            c.Name.color = name;
             if (!c.IsHead)
             {
                 c.Type.color = sub;
@@ -342,6 +350,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void Refresh(WmcContext c, string alert, AvState alertAs)
         {
             last = c;
+            if (c.Count == 0) alert = "";
             if (alert != alertWord || alertAs != alertState)
             {
                 alertWord = alert;
@@ -355,9 +364,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             string letters = "";
             for (int e = 0; e < perElement.Length; e++)
                 if (perElement[e] > 0) letters += (letters.Length > 0 ? " · " : "") + ElementRoster.Letter(e) + " " + perElement[e];
-            AvText.Set(sumWing, "WING · " + c.Count + " AC");
+            AvText.Set(sumWing, "FLIGHT LIST · " + c.Count);
             AvText.Set(sumElements, letters);
-            AvText.Set(sumAction, collapsed ? "FLIGHT LIST ›" : "HIDE LIST ‹");
+            AvText.Set(sumAction, collapsed ? "SHOW +" : "HIDE −");
+            SetHeadings(!collapsed && c.Count > 0);
             allLatched = c.Scope.Kind == ScopeKind.Wing;
             hAll.color = allLatched ? AvStyleHost.FuiColor("select", AvTheme.Accent) : AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             if (collapsed)
@@ -393,7 +403,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < n; i++) shapeKey = shapeKey * 31 + kind[i] * 8 + which[i];
             // The seat row is the empty wing's call to action only: with wingmen, SUPPLY and the live count say there is room.
             bool wantSeats = c.Count == 0;
-            SeatsRow(c, wantSeats);
+            if (seats.Rect.gameObject.activeSelf != wantSeats) seats.Rect.gameObject.SetActive(wantSeats);
+            seatsOn = wantSeats;
             // Show exactly the cells named; hide the rest.
             int hn = 0, rn = 0;
             Span<bool> headOn = stackalloc bool[MaxElements];
@@ -411,7 +422,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             shownHeads = hn;
             shownRows = rn;
-            int sig = shapeKey * 7 + n + (wantSeats ? 1000003 : 0) + (seatsKey);
+            int sig = shapeKey * 7 + n + (wantSeats ? 1000003 : 0);
             if (n != count || sig != shown)
             {
                 count = n;
@@ -421,19 +432,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
-        private int seatsKey = int.MinValue;
-
-        private void SeatsRow(WmcContext c, bool on)
+        public void SetCallAvailability(WmcContext c, string reason, in LaunchRequest draft)
         {
-            if (seats.Rect.gameObject.activeSelf != on) seats.Rect.gameObject.SetActive(on);
-            seatsOn = on;
-            if (!on) return;
-            int key = (c.Client ? 1 : 0) + (c.Stale ? 2 : 0);
-            if (key == seatsKey) return;
-            seatsKey = key;
-            seats.Set(c.Client && c.Stale ? "WAITING FOR THE HOST'S WING" : "NO WINGMEN", "CALL one on the WING row, or requisition on SUPPLY.", "",
-                AvState.Inert);
-            SupplyButton.gameObject.SetActive(!c.Client);
+            if (reason == null)
+            {
+                seats.Set(draft.Type.unitName, Credits.Price(draft.Price), "Launch from " + WingRequisition.NameOf(draft.Field),
+                    IconFactory.Aircraft(draft.Type), true);
+                return;
+            }
+            string title = c.Client ? (c.Stale ? "AWAITING HOST" : "NO WINGMEN") : "CALL UNAVAILABLE";
+            string detail = c.Client ? "The host manages the wing." : reason;
+            seats.Set(title, "", detail, null, false);
         }
 
         private void FillHead(Cell h, int e, WmcContext c)

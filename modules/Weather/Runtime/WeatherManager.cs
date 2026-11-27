@@ -178,6 +178,13 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         internal float LocalRainIntensity => EffectiveRainIntensity();
         internal WeatherPoint LocalWeather => localWeather;
         internal Vector2 FieldPosition => fieldPosition;
+        internal float CloudShade => cloudShade;
+        internal float ViewSnow => viewSnow;
+        internal Vector4 LightningFlashA => lightning.FlashA;
+        internal Vector4 LightningFlashB => lightning.FlashB;
+        internal Texture2D OceanWeatherMap => flightClouds != null ? flightClouds.NearWeatherMap : null;
+        internal Texture2D OceanWeatherProfiles => flightClouds != null ? flightClouds.NearWeatherProfiles : null;
+        internal float OceanWeatherSpan => flightClouds != null ? flightClouds.NearMapSpan : 0f;
 
         public bool IsEnabled => settings != null && settings.Enabled.Value;
 

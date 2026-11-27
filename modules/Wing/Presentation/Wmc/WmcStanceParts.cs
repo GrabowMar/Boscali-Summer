@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     internal sealed class WmcStanceSlots : AvPart
     {
         public const int Count = StanceBook.Slots;
-        private const float CellH = 40f, SlimH = 22f, Gap = 3f;
+        private const float CellH = 46f, SlimH = 24f, Gap = 4f;
 
         private sealed class Slot
         {
@@ -88,7 +88,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public override float Measure(float width)
         {
             if (!book) return CellH + Gap + (SlimRow ? SlimH : CellH);
-            int rows = (shown + 2) / 3;
+            int columns = Columns(width);
+            int rows = (shown + columns - 1) / columns;
             return rows == 0 ? 0f : rows * (CellH + Gap) - Gap;
         }
 
@@ -110,22 +111,25 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>Plate <paramref name="i"/>'s key column: the hint ("W+2", or nothing).</summary>
         public void SetHint(int i, string hint) => AvText.Set(slots[i].Hint, hint);
 
+        private int Columns(float width) => book ? Mathf.Clamp(Mathf.FloorToInt((width + Gap) / (180f + Gap)), 1, 3) : 3;
+
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            float w = AvFlowMath.ColumnWidth(s.W, 3, Gap);
+            int columns = Columns(s.W);
+            float w = AvFlowMath.ColumnWidth(s.W, columns, Gap);
             for (int i = 0; i < slots.Length; i++)
             {
-                float x = i % 3 * (w + Gap), y = i / 3 * (CellH + Gap);
+                float x = i % columns * (w + Gap), y = i / columns * (CellH + Gap);
                 bool slim = i >= 3 && SlimRow;
                 float h = slim ? SlimH : CellH;
                 Slot c = slots[i];
                 AvLay.Place(c.Frame.rectTransform, x, y, w, h);
                 AvLay.Place(c.Rail.rectTransform, x, y, 2f, h);
-                AvLay.Place(c.Hint.rectTransform, x + 6f, y + 2f, 34f, 18f);
+                AvLay.Place(c.Hint.rectTransform, x + w - 38f, y + 4f, 32f, 18f);
                 if (!book && c.Name.gameObject.activeSelf == slim) c.Name.gameObject.SetActive(!slim);
-                AvLay.Place(c.Name.rectTransform, x + 42f, y + 2f, w - 46f, 18f);
-                AvLay.Place(c.Detail.rectTransform, x + 42f, y + (slim ? 2f : 20f), w - 46f, 18f);
+                AvLay.Place(c.Name.rectTransform, x + 8f, y + 4f, w - 50f, 18f);
+                AvLay.Place(c.Detail.rectTransform, x + 8f, y + (slim ? 3f : 23f), w - (slim ? 50f : 16f), 18f);
             }
         }
 
@@ -168,7 +172,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// result reads before it is pressed. Like <see cref="AvSegmented"/>, with that outline.</summary>
     internal sealed class WmcTuneRow : AvPart
     {
-        private const float RowH = 26f, LabelW = 78f;
+        private const float RowH = 32f, LabelW = 78f;
         private readonly TMP_Text label;
         private readonly AvControl[] options;
         private readonly string name;

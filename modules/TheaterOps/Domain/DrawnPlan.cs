@@ -4,15 +4,14 @@ using BoscaliSummer.Core.Contracts;
 namespace BoscaliSummer.Modules.TheaterOps.Domain
 {
     /// <summary>
-    /// An offensive a pilot draws on the map (HOI4's battle plan): press on the front, release on the objective. The live front nearest the
-    /// press carries it; the objective decides its kind and, once it is our ground, its success.
+    /// A directed offensive starts near a live front. The objective determines its kind and where to measure control.
     /// </summary>
     internal static class DrawnPlan
     {
-        /// <summary>Shortest and longest arrow, how far from a front the press may land, and the hold that makes the objective already ours.</summary>
+        /// <summary>Minimum and maximum range, maximum distance from a front to the origin, and the hold required to control the objective.</summary>
         public const float MinimumMetres = TheaterDrawLimits.MinimumMetres, MaximumMetres = TheaterDrawLimits.MaximumMetres,
             SnapMetres = TheaterDrawLimits.SnapMetres, OwnHold = 0.25f;
-        /// <summary>No theatre is larger: anything beyond is a corrupt or hostile packet.</summary>
+        /// <summary>Outer bound for theatre coordinates.</summary>
         public const float WorldLimit = 500000f;
 
         /// <summary>Finite, inside the world, and between the shortest and the longest arrow.</summary>

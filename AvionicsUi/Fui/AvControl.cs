@@ -35,7 +35,7 @@ namespace NOAvionics
             c.baseClass = cssClass;
             c.classes = ClassesFor(cssClass, spec.Style);
             c.frame = AvFrame.Add(root, "Frame", AvChamfer.Diagonal(4f));
-            c.frame.Bracket = 6f;
+            c.frame.Bracket = cssClass == "tab" || spec.Style == AvButtonStyle.Quiet ? 0f : 3f;
             AvLay.Fill(c.frame.rectTransform);
             c.rail = AvLay.Solid(root, "Rail", Color.clear);
             c.rail.rectTransform.anchorMin = new Vector2(0f, 0f); c.rail.rectTransform.anchorMax = new Vector2(1f, 0f);
@@ -55,9 +55,8 @@ namespace NOAvionics
             c.text = AvText.Make(root, "Label", AvTextRole.Head, spec.Label, TextAlignmentOptions.Center);
             AvText.Fit(c.text, true); // long labels shrink, then wrap, never spill into a neighbour
             AvLay.Fill(c.text.rectTransform);
-            c.text.rectTransform.offsetMin = new Vector2(8f, 0f);
-            c.text.rectTransform.offsetMax = new Vector2(-8f, 0f);
-            if (c.glyph != null && !c.iconOnly) { if (c.iconRight) c.text.rectTransform.offsetMax = new Vector2(-24f, 0f); else c.text.rectTransform.offsetMin = new Vector2(24f, 0f); }
+            bool hasInlineIcon = c.glyph != null && !c.iconOnly;
+            c.SetLabelInsets(hasInlineIcon && !c.iconRight ? 24f : 8f, 0f, hasInlineIcon && c.iconRight ? 24f : 8f, 0f);
             if (spec.OnClick != null) c.Clicked += spec.OnClick;
             AvHit hit = c.hit = AvHit.On(c.frame);
             hit.Hover = h => { c.hover = h; if (h && c.interactable) c.fx?.Play(AvFxKind.Shine, 0.15f); c.Restyle(); };
@@ -114,16 +113,31 @@ namespace NOAvionics
         /// <summary>Label shrinks toward the floor but never wraps (tabs, where a break would split a word).</summary>
         public void SingleLine() => AvText.Fit(text, false);
 
+        /// <summary>Use a larger label on a prominent action while retaining the control's fit behavior.</summary>
+        public void SetLabelRole(AvTextRole role)
+        {
+            bool wrap = text.enableWordWrapping;
+            AvType.Apply(text, role);
+            AvText.Fit(text, wrap);
+        }
+
+        /// <summary>Reserve space for a button's icon or secondary readout while keeping its full hit target.</summary>
+        public void SetLabelInsets(float left, float top, float right, float bottom)
+        {
+            text.rectTransform.offsetMin = new Vector2(left, bottom);
+            text.rectTransform.offsetMax = new Vector2(-right, -top);
+        }
+
         /// <summary>Hover help shown in the console footer (null/empty = none).</summary>
         public string Help { get => tip != null ? tip.Text : null; set => tip = AvHelpTip.Attach(frame.gameObject, value, text); }
         private AvHelpTip tip;
 
         /// <summary>Height the label needs at this width when it wraps at full size (the row grows rather than spill).</summary>
         public float PreferredHeight(float width) =>
-            AvText.Height(text, Mathf.Max(1f, width - (glyph != null && !iconOnly ? 24f : 8f) - 8f)) + 10f;
+            AvText.Height(text, Mathf.Max(1f, width + text.rectTransform.sizeDelta.x)) - text.rectTransform.sizeDelta.y + 10f;
 
         // TMP preferred values already use fontSizeMax when autosizing is enabled.
-        internal float PreferredWidth => AvText.Width(text) + (glyph != null && !iconOnly ? 32f : 16f);
+        internal float PreferredWidth => AvText.Width(text) - text.rectTransform.sizeDelta.x;
 
         public void Restyle()
         {

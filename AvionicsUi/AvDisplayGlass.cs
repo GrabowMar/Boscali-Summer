@@ -164,6 +164,14 @@ namespace NOAvionics
 
         public void Awake() => image = GetComponent<Image>();
 
+        private void OnRectTransformDimensionsChange()
+        {
+            if (scanlines == null) return;
+            Canvas canvas = image.canvas;
+            float scale = canvas == null ? 1f : canvas.scaleFactor;
+            scanlines.uvRect = new Rect(0f, 0f, 1f, Mathf.Max(1f, image.rectTransform.rect.height * scale / 4f));
+        }
+
         public void Update()
         {
             float now = Time.unscaledTime;
@@ -209,7 +217,7 @@ namespace NOAvionics
             if (scanlines == null) return;
             scanlines.enabled = effects && scanStrength > 0f;
             scanlines.color = new Color(0f, 0f, 0f, scanStrength * .28f);
-            scanlines.uvRect = new Rect(0f, 0f, 1f, Mathf.Max(1f, image.rectTransform.rect.height / 4f));
+            if (changed) OnRectTransformDimensionsChange();
             vignette.enabled = effects && edgeStrength > 0f;
             vignette.color = new Color(0f, 0f, 0f, edgeStrength * .5f);
         }

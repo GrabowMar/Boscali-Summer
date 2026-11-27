@@ -59,8 +59,16 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             console = AvConsole.Build(display, MfdSlots.Rad, "RADIO", 2, AvTokens.PanelWidth, height);
             console.Tabs((AvIcon.Radio, "BROADCAST"), (AvIcon.Music, "MUSIC"));
             BuildReceiver(console.Page(TabReceiver)); BuildDeck(console.Page(TabDeck));
-            console.Finish(); console.PageChanged += _ => { RefreshReceiver(); RefreshDeck(); };
-            RefreshReceiver(); RefreshDeck(); return null;
+            console.PageChanged += RefreshPage;
+            console.Finish();
+            RefreshPage(console.CurrentPage);
+            return null;
+        }
+
+        private static void RefreshPage(int page)
+        {
+            if (page == TabReceiver) RefreshReceiver();
+            else RefreshDeck();
         }
         private static void BuildReceiver(AvFlow p)
         {
@@ -147,7 +155,11 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 volumeHeader.Measure(width) + militaryStrip.Measure(width) + presetHeader.Measure(width);
             float rowHeight = ListRowHeight;
             foreach (AvRow row in stationRows) if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);
-            presetShown = p.ViewportHeight <= 0f ? PresetRows : Mathf.Clamp(Mathf.FloorToInt((p.ViewportHeight - fixedHeight) / rowHeight), 1, PresetRows);
+            int shown = p.ViewportHeight <= 0f ? PresetRows : Mathf.Clamp(Mathf.FloorToInt((p.ViewportHeight - fixedHeight) / rowHeight), 1, PresetRows);
+            if (shown == presetShown) return;
+            int first = stationPage * presetShown;
+            presetShown = shown;
+            stationPage = first / shown;
         }
         private static void BuildDeck(AvFlow p)
         {
@@ -279,11 +291,11 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 bool active = index == current && playing;
                 int percent = active ? Mathf.RoundToInt(Mathf.Clamp01(manager.DeckProgress) * 100f) : -1;
                 long key = ((long)(index + 1) * 200 + percent + 1) * 2 + (active ? 1 : 0);
-                if (trackKey[i] == key) continue;
+                string title = manager.DeckTrackTitle(index);
+                if (trackKey[i] == key && trackTipName[i] == title) continue;
                 trackKey[i] = key;
 
                 row.Interactable = true;
-                string title = manager.DeckTrackTitle(index);
                 if (trackTipName[i] != title)
                 {
                     trackTipName[i] = title;

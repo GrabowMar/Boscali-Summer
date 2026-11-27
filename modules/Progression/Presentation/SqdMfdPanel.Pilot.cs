@@ -207,10 +207,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             private static Sprite equipmentArt;
             private const float CardH = 156f, StripH = 26f, PortraitW = 92f, EmblemW = 64f, Pad = 10f;
-            private readonly AvFrame frame, rankFrame, stampFrame;
+            private readonly AvFrame frame, rankFrame;
             private readonly Image strip;
-            private readonly RectTransform stamp;
-            private readonly TMP_Text stampText;
             private readonly AvPortrait portrait, emblem;
             private readonly TMP_Text profileTag, callsignText, nameLine, rankCaption, rankNumber, rankTitle,
                 generationText, statusText, squadronText;
@@ -222,10 +220,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             public PilotIdCard(RectTransform parent)
             {
                 Rect = AvLay.Child(parent, "PilotIdentity");
-                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
+                frame = AvFrame.Add(Rect, "Frame", default);
                 AvLay.Fill(frame.rectTransform);
-                frame.Bracket = 6f;
-                AvBundle.Engraving(Rect, 0.75f);
                 strip = AvLay.Solid(Rect, "Rule", Color.clear);
 
                 profileTag = AvText.Make(Rect, "ProfileTag", AvTextRole.Micro);
@@ -255,18 +251,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 emblem = new AvPortrait(Rect, "Emblem", "NO ART");
                 squadronText = AvText.Make(Rect, "Squadron", AvTextRole.Micro, "", TextAlignmentOptions.Top, true);
                 AvText.Fit(squadronText, true);
-
-                // The rubber stamp over the photo plate is fixed paperwork, never a reading: a tilted outline, no state colour.
-                stamp = AvLay.Child(Rect, "Stamp");
-                stampFrame = AvFrame.Add(stamp, "Frame", default(AvChamfer));
-                AvLay.Fill(stampFrame.rectTransform);
-                stampFrame.Stroke = 1.2f;
-                stampFrame.raycastTarget = false;   // paperwork never takes the pointer from the portrait's hover help
-                stampText = AvText.Make(stamp, "StampText", AvTextRole.Micro, "FILE COPY", TextAlignmentOptions.Center);
-                AvText.Fit(stampText, false);
-                stampText.raycastTarget = false;
-                AvLay.Fill(stampText.rectTransform);
-                stamp.localEulerAngles = new Vector3(0f, 0f, 8f);
 
                 Restyle();
             }
@@ -313,11 +297,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
                 float top = StripH + 8f;
                 portrait.Place(new AvSlot(Pad, top, PortraitW, s.H - top - Pad));
-                float stampW = AvText.Width(stampText) + 14f, stampH = 20f;
-                stamp.anchorMin = stamp.anchorMax = new Vector2(0f, 1f);
-                stamp.pivot = new Vector2(0.5f, 0.5f);
-                stamp.sizeDelta = new Vector2(stampW, stampH);
-                stamp.anchoredPosition = new Vector2(Pad + PortraitW * 0.5f, -(s.H - Pad - 20f));
 
                 float emblemX = s.W - Pad - EmblemW;
                 emblem.Place(new AvSlot(emblemX, top, EmblemW, EmblemW));
@@ -343,7 +322,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             public override void Restyle()
             {
                 frame.PaintCard("card raised", AvTheme.SurfaceRaised, AvTheme.Frame);
-                frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
                 rankFrame.PaintCard("card inert", AvTheme.SurfaceInert, AvTheme.Hairline);
                 strip.color = AvTheme.Hairline;
                 profileTag.color = AvInk.Muted;
@@ -356,8 +334,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 statusText.color = SqdTone.Text(status);
                 if (statusIcon != null) statusIcon.color = SqdTone.Rail(status);
                 squadronText.color = AvInk.Muted;
-                stampFrame.Paint(AvTheme.SurfaceInert.WithAlpha(.82f), AvInk.Dim);
-                stampText.color = AvInk.Dim;
                 portrait.Restyle();
                 emblem.Restyle();
                 stateChip.Restyle();

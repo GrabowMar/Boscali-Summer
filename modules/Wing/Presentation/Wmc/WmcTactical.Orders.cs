@@ -20,6 +20,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private WmcScopeBar scopeBar;
         private WmcCommandCard card;
         private WmcQueueLane queue;
+        private AvSection orderSection;
+        private AvButtons referenceToggle;
+        private WmcLabeledButtons reactRow;
+        private bool referenceOpen;
+        private int callCell = -1;
+        private string callBlocker;
         private readonly AvControl[] grid = new AvControl[OrderGrid.Rows * OrderGrid.Columns];
         private readonly AvControl[] react = new AvControl[5];
         private readonly GridCell[] shownCells = new GridCell[OrderGrid.Rows * OrderGrid.Columns];
@@ -48,7 +54,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             cueRow.Rect.gameObject.SetActive(false);
 
             // The order keys come straight under the table and say who they go to; the profile slots live on BEHAVIOUR.
-            f.Section(AvIcon.Flag, "ORDERS", "WING KEY + LETTER");
+            referenceToggle = f.Buttons(new AvControl.Spec("SHOW COMMAND REFERENCE", ToggleReference, AvButtonStyle.Quiet, AvIcon.ChevronDown));
+            referenceToggle.Controls[0].Cue = AvUiCue.Navigate;
+            orderSection = f.Section(AvIcon.Flag, "ORDERS", "WING KEY + LETTER");
             BuildGrid(f);
         }
 
@@ -63,7 +71,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 int k = i;
                 reactSpecs[i] = new AvControl.Spec(OrderGrid.React[i].Label, () => PressReact(k));
             }
-            WmcLabeledButtons reactRow = f.Add(new WmcLabeledButtons(f.Content, OrderGrid.ReactLabel, WmcState.Of(OrderGrid.ReactRail), reactSpecs));
+            reactRow = f.Add(new WmcLabeledButtons(f.Content, OrderGrid.ReactLabel, WmcState.Of(OrderGrid.ReactRail), reactSpecs));
             for (int i = 0; i < react.Length; i++)
             {
                 react[i] = reactRow.Controls[i];
@@ -75,6 +83,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             queue.Rect.gameObject.SetActive(false);
             queue.Run.Help = "Run the plan steps queued in this lane, element by element.";
             queue.Clear.Help = "Empty the queued plan (a running one stops first: press twice).";
+            UpdateReference(true);
         }
 
         /// <summary>The grid's cells for jets or, with helicopters in scope, the helo swap (SUPPORT → TAKE OFF · RESCUE · LAND ·
@@ -91,6 +100,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     GridCell cell = OrderGrid.At(r, col, helos);
                     if (shownCells[k].Id == cell.Id) continue;
                     shownCells[k] = cell;
+                    if (cell.Order == GridOrder.Call) callCell = k;
                     shownTips[k] = null;
                     card.SetFace(k, cell.Label, cell.Input);
                 }
@@ -198,6 +208,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void RefreshOrders(WmcContext c)
         {
+            if (c.Count > 0) referenceOpen = false;
+            UpdateReference(c.Count == 0);
+            scopeBar.SetShown(c.Count > 0);
             scopeBar.Refresh(c);
             RefreshCue(c);
             HelosInScope(c, out bool anyHelo, out bool allHelo, out bool heloInWing);
@@ -208,11 +221,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 GridCell cell = shownCells[k];
                 // LAND and CARGO are helicopter orders: a wing without one leaves their places empty instead of two dead keys.
-                card.SetShown(k, heloInWing || allHelo || (cell.Order != GridOrder.Land && cell.Order != GridOrder.Cargo));
+                bool availableType = heloInWing || allHelo || (cell.Order != GridOrder.Land && cell.Order != GridOrder.Cargo);
+                card.SetShown(k, availableType && (c.Count > 0 || cell.Order != GridOrder.Call));
                 string why = OrderGrid.Why(cell, c.CanOrder, c.Count, scoped, anyHelo);
+                if (why == null && cell.Order == GridOrder.Call) why = callBlocker;
                 bool on = why == null;
                 string tip = why ?? cell.Tip;
-                if (on != shownEnabled[k] || !ReferenceEquals(tip, shownTips[k]))
+                if (on != shownEnabled[k] || tip != shownTips[k])
                 {
                     shownEnabled[k] = on;
                     shownTips[k] = tip;
@@ -226,6 +241,35 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             RefreshReact(c);
             RefreshQueue(c);
+        }
+
+        private void ToggleReference()
+        {
+            if (last == null || last.Count > 0) return;
+            referenceOpen = !referenceOpen;
+            UpdateReference(true);
+            flow.Relayout();
+        }
+
+        private void UpdateReference(bool empty)
+        {
+            referenceToggle.SetShown(empty);
+            AvControl toggle = referenceToggle.Controls[0];
+            if (toggle.Latched != referenceOpen)
+            {
+                toggle.Latched = referenceOpen;
+                toggle.Label = referenceOpen ? "HIDE COMMAND REFERENCE" : "SHOW COMMAND REFERENCE";
+                toggle.SetIcon(referenceOpen ? AvIcon.ChevronUp : AvIcon.ChevronDown);
+            }
+            bool show = !empty || referenceOpen;
+            orderSection.SetShown(show);
+            card.SetShown(show);
+            reactRow.SetShown(show);
+        }
+
+        private void CallFromRoster()
+        {
+            if (last != null && last.CanOrder && callBlocker == null && callCell >= 0) PressCell(callCell);
         }
 
         static WmcTactical()

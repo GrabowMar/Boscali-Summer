@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 foreach (TMP_Text t in console.Root.GetComponentsInChildren<TMP_Text>(false))
                     if (t.text.Contains("CHEATING")) cheating = true;
                 result["cheatingDisclaimer"] = cheating;
-                result["panelAlpha"] = console.Root.GetComponent<UnityEngine.CanvasGroup>()?.alpha ?? 1f;
+                result["panelAlpha"] = console.SurfaceOpacity;
                 result["page"] = console.CurrentPage;
                 var text = new List<string>();
                 foreach (TMP_Text t in console.Page(console.CurrentPage).Content.GetComponentsInChildren<TMP_Text>(false))

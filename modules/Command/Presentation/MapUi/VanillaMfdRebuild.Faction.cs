@@ -193,6 +193,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void ApplyNoHq()
             {
                 emptyApplied = true;
+                RefreshNation(null);
+                RefreshSupply(null);
                 factionHeader.Set("NO RETURN FROM FACTION HQ", "Standing by for the selected faction and its live mission data.");
                 factionHeader.SetLogo(null);
                 shownDefinitions.Clear();
@@ -346,7 +348,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void RefreshSupply(FactionHQ hq)
             {
                 Runtime.StrViewHub live = Runtime.StrViewHub.Active;
-                bool own = selectedFaction == 0;
+                bool own = hq != null && selectedFaction == 0;
                 bool str = own && live != null && ReferenceEquals(live, supplyHub) && live.Current.Built;
                 int key = StrNation.Refresh();
                 bool nation = str && IsLocalFaction(hq) && StrNation.Active;

@@ -94,6 +94,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                     DroneOrders.Claim(missile, null);
                     missile.SetTarget(null);
                 }
+                TickPilotWeapons();
                 if (role == VanguardRole.Scout) scout?.TickPiloted();
                 if (role == VanguardRole.Drone && Time.timeSinceLevelLoad >= nextEffect)
                 {

@@ -3,18 +3,24 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Networking;
+using BoscaliSummer.Modules.Vanguard.Presentation;
 using HarmonyLib;
 using Mirage;
 using Newtonsoft.Json;
+using NuclearOption.MissionEditorScripts;
 using NuclearOption.Networking;
+using NuclearOption.UI;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
     public static class DronePeerProof
     {
+        public static bool CatalogReady(Dictionary<string, object> _) => RemoraPrefab() != null;
+
         public static bool SeatBoth()
         {
             ServerOnly();
@@ -66,6 +72,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return net.SendDroneAction(drone, action);
         }
 
+        public static bool Fire(bool held)
+        {
+            RequirePeer();
+            DronePilot pilot = DronePilot.Active;
+            if (pilot == null || pilot.Current == null) return false;
+            pilot.SetTestInput(held ? (Vector3?)Vector3.zero : null, 0.7f, held);
+            return true;
+        }
+
         public static string Snapshot(uint id)
         {
             RequirePeer();
@@ -74,6 +89,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             DroneRoster.TryGet(drone, out DroneRoster.Entry entry);
             Aircraft aircraft = player != null ? player.Aircraft : null;
             NetworkIdentity prefab = RemoraPrefab();
+            DronePilot controller = DronePilot.Active;
+            DroneFlightView flightView = DroneFlightView.Active;
+            CameraStateManager stockCamera = SceneSingleton<CameraStateManager>.i;
             return JsonConvert.SerializeObject(new
             {
                 aircraft = aircraft != null && !aircraft.disabled ? aircraft.persistentID.Id : 0u,
@@ -89,7 +107,17 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 pilot = entry?.PilotId ?? 0u,
                 lease = entry?.Lease ?? 0u,
                 input = entry != null && entry.AcceptedInput,
-                flying = drone != null && DronePilot.Active != null && DronePilot.Active.Current == drone,
+                flying = drone != null && controller != null && controller.Current == drone,
+                droneCamera = flightView != null && flightView.Presenting,
+                aircraftCamera = aircraft != null && stockCamera != null && stockCamera.followingUnit == aircraft,
+                weapon = controller != null ? controller.Weapon.ToString() : "None",
+                gameplayOpen = DronePilotInput.GameplayOpen,
+                controls = controller != null && controller.ControlsEnabled,
+                inputGate = new { DynamicMap.mapMaximized, GameplayUI.GameIsPaused,
+                    radial = SceneSingleton<RadialMenuMain>.i != null && RadialMenuMain.IsInUse(),
+                    scoreboard = LeaderboardMenu.IsOpen(), InputFieldChecker.InsideInputField, typing = MapTool.Typing() },
+                trigger = DronePilot.Trigger(drone).ToString(),
+                gunShots = RemoraBoard.Views.TryGetValue(id, out RemoraView view) ? view.Shots : 0,
             });
         }
 

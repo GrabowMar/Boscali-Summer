@@ -116,7 +116,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private readonly Image[] pips, queuePips;
         private readonly FrontBar buildBar;
         private readonly AvControl open;
-        private readonly UnityEngine.UI.RawImage emblem;
         private float width = 458f, barX, barW;
         private FrontCardView shown;
         private bool painted;
@@ -125,11 +124,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public FrontCardPart(RectTransform parent, Front front, Action<Front> onOpen)
         {
             Rect = AvLay.Child(parent, "Front " + front);
-            back = FrontKit.Panel(Rect, "Back", 0f, 0f, width, Height, 6f, 7f);
+            back = FrontKit.Panel(Rect, "Back", 0f, 0f, width, Height, 0f, 0f);
             rail = FrontKit.Solid(Rect, "Rail", 0f, 0f, 3f, Height, Color.clear);
-            // The front's emblem as a faint watermark at the card's right, under every word.
-            emblem = FrontArt.Fill(Rect, FrontArt.Emblem(front), 0f, 0f, 84f, 84f, Color.white.WithAlpha(NOAvionics.AvBundle.OverlayAlpha(0.17f)));
-            if (emblem != null) emblem.raycastTarget = false;
 
             // Header: domain and room, codename, status stamp, OPEN.
             icon = AvIcons.Make(Rect, front == Front.Space ? AvIcon.Satellite : front == Front.Cyber ? AvIcon.Antenna : AvIcon.UsersGroup, 16f, AvInk.Ink);
@@ -187,7 +183,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AvLay.Place(back.rectTransform, 0f, 0f, w, Height);
             AvLay.Place(rail.rectTransform, 0f, 0f, 3f, Height);
             AvLay.Place(icon.rectTransform, 12f, 9f, 18f, 18f);
-            if (emblem != null) FrontArt.Place(emblem, w - 190f, 7f, 84f, 84f);
             stamp.Place(228f, 7f, 124f, 22f, 22f);
             AvLay.Place(stampIcon.rectTransform, 234f, 11f, 14f, 14f);
             AvLay.Place(open.Rect, w - 82f, 5f, 72f, 26f);
@@ -208,8 +203,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void StyleStatic()
         {
-            back.Paint(AvInk.Surface.WithAlpha(0.62f), AvInk.Hairline);
-            back.BracketColor = AvInk.Frame.WithAlpha(0.8f);
+            back.Paint(AvInk.Surface, AvInk.Hairline);
             supWell.color = AvInk.Ground.WithAlpha(0.92f);
             supNeedle.color = AvInk.Ink;
             Color dim = AvInk.Dim;

@@ -2,7 +2,7 @@
    Override: BepInEx/config/NOAvionics/avionics.fui.avss (base) or avionics.<theme>.avss (palette). */
 
 .console        { background: ground; border: 1 frame; }
-.header         { background: surface; border: 1 hairline; }
+.header         { background: surface-raised; border: 1 hairline; }
 .id-plate       { background: select 18; border: 1 select; color: select; }
 .title          { color: ink; }
 .page-index     { color: ink-dim; }
@@ -13,7 +13,7 @@
 .chip.danger    { color: danger; rail: 2 danger; }
 .chip.info      { color: info; rail: 2 info; }
 
-.metric         { background: surface-inert; border: 1 hairline; }
+.metric         { background: surface-inert; border: 1 hairline 18; }
 .metric-key     { color: ink-dim; }
 .metric-value   { color: ink; }
 .metric-unit    { color: ink-dim; }
@@ -22,10 +22,10 @@
 .metric-fill.caution { background: caution; }
 .metric-fill.danger  { background: danger; }
 
-.tab            { background: surface-sunken; border: 1 hairline 30; color: ink-dim; }
+.tab            { background: surface-inert; border: 1 hairline 20; color: ink-dim; }
 .tab:hover      { background: surface; border: 1 frame; color: ink; }
 .tab:pressed    { background: select 38; border: 1 select; color: ink; rail: 2 select; }
-.tab:latched    { background: select 28; border: 1 select; color: ink; rail: 2 select; }
+.tab:latched    { background: surface-raised; border: 1 frame 60; color: ink; rail: 2 select; }
 .tab:disabled   { background: surface-inert; border: 1 hairline; color: ink-muted; }
 
 .section        { border: 1 hairline; }
@@ -79,7 +79,7 @@
 .rail-key          { background: surface-inert; border: 1 hairline; color: ink-dim; }
 .rail-key:hover    { background: surface-raised; border: 1 frame; color: ink; }
 .rail-key:pressed  { background: select 38; border: 1 select; color: ink; }
-.rail-key:latched  { background: select 28; border: 1 select; color: ink; rail: 2 select; }
+.rail-key:latched  { background: surface-raised; border: 1 frame 70; color: ink; rail: 2 select; }
 .rail-key:disabled { background: surface-inert; border: 1 hairline; color: ink-muted; }
 
 .field          { background: surface-sunken; border: 1 hairline; color: ink; }
@@ -90,7 +90,7 @@
 .card           { background: surface; border: 1 hairline; }
 .card.raised    { background: surface-raised; border: 1 frame; }
 .card.inert     { background: surface-inert; border: 1 hairline; }
-.card-bracket   { background: frame 80; }
+.card-bracket   { background: frame 38; }
 
 .alert          { background: surface-raised; border: 1 caution; rail: 3 caution; }
 .alert.danger   { border: 1 danger; rail: 3 danger; }
@@ -117,8 +117,8 @@
 .slab.info      { background: info; }
 .slab.inert     { background: ink-dim; }
 
-/* Console ground: graticule crosses (background), terminal-glass texture tint (color). Theme tokens without alpha. */
-.console-ground { background: ink-muted 0c; color: ink 18; }
+/* Registration marks and engraving in the free space below a short page. */
+.console-ground { background: key 46; color: key 62; }
 
 /* Portal decoration: ruler + registration crosses (background), serial readout (color). */
 .decor          { background: frame 28; color: ink-muted; }

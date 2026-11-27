@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         public bool LaunchOffensive(FactionHQ hq, float x, float z, string by)
         {
             if (!Authoritative || hq?.faction == null || !wars.TryGetValue(hq.faction.factionName, out FactionWar war) || war.HQ == null) return false;
-            // The live front nearest the objective that a drawn arrow may start from (1.5 to 30 km off).
+            // The live front nearest the objective within the offensive's allowed range.
             float best = float.MaxValue, sx = 0f, sz = 0f;
             float min = TheaterDrawLimits.MinimumMetres * TheaterDrawLimits.MinimumMetres, max = TheaterDrawLimits.MaximumMetres * TheaterDrawLimits.MaximumMetres;
             for (int i = 0; i < war.Reads.Count; i++)
@@ -100,7 +100,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 best = d; sx = war.Reads[i].X; sz = war.Reads[i].Z;
             }
             if (best == float.MaxValue) return false;
-            return ApplyIntent(hq, 3, 0, 0, 0, new IntentActor(0UL, by), sx, sz, x, z).Code == TheaterCommandCode.Accepted;
+            return ApplyDirectedOffensive(hq, sx, sz, x, z, new IntentActor(0UL, by)).Code == TheaterCommandCode.Accepted;
         }
 
         public bool TryMainEffort(FactionHQ hq, out string name)

@@ -19,6 +19,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private AvConsole console;
         private AvSection rosterSection, feedSection;
         private AvList roster;
+        private AvNote selectionHint;
+        private AvButtons flight, optics;
         private AvControl locate, pilot, share, look, zoom, hud;
         private FeedPicture feed;
         private int lastSelection = -1;
@@ -84,7 +86,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             if (!installer.Tick() || installer.Bezel == null) return;
             installer.Bezel.enabled = installer.Bezel.interactable = true;
-            if (console != null && console.Root.gameObject.activeInHierarchy) feed.Show(drones.WantFeed());
+            if (console != null && console.Root.gameObject.activeInHierarchy && feed.Shown)
+                feed.Show(drones.WantFeed());
         }
 
         private RectTransform BuildScreen(RectTransform host, float height)
@@ -93,7 +96,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             console.Tabs((AvIcon.Drone, "DRONES"));
             AvFlow page = console.Page(0);
             rosterSection = page.Section(AvIcon.ListDetails, "AIRBORNE");
-            var flight = page.Buttons(
+            roster = page.Add(new AvList(page.Content, console.Ticker, 4, BindDrone) { RowClicked = Link });
+            selectionHint = page.Add(new AvNote(page.Content));
+            flight = page.Buttons(
                 new AvControl.Spec("LOCATE", Locate, AvButtonStyle.Default, AvIcon.Focus2),
                 new AvControl.Spec("TAKE CONTROL", Pilot, AvButtonStyle.Primary, AvIcon.Pilot),
                 new AvControl.Spec("SHARE WITH TEAM", Share, AvButtonStyle.Toggle, AvIcon.Link));
@@ -102,10 +107,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             share = flight.Controls[2];
             locate.Help = "Center the tactical map on the selected drone.";
             share.Help = "Allow teammates to pilot this drone. Press again to make it private.";
-            roster = page.Add(new AvList(page.Content, console.Ticker, 4, BindDrone) { RowClicked = Link });
 
             feedSection = page.Section(AvIcon.Camera, "SENSOR");
-            var optics = page.Buttons(
+            feed = page.Add(new FeedPicture(page.Content));
+            optics = page.Buttons(
                 new AvControl.Spec("VIEW", () => { if (ModuleServices.TryGet(out IDroneCommand d)) d.ToggleLook(); }, AvButtonStyle.Default, AvIcon.Eye),
                 new AvControl.Spec("ZOOM", () => { if (ModuleServices.TryGet(out IDroneCommand d)) d.CycleZoom(); }, AvButtonStyle.Default, AvIcon.Maximize),
                 new AvControl.Spec("HUD FEED", () => { if (ModuleServices.TryGet(out IDroneCommand d)) d.ToggleFeed(); }, AvButtonStyle.Toggle, AvIcon.Camera));
@@ -115,7 +120,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             look.Help = "Switch the sensor view.";
             zoom.Help = "Cycle the sensor magnification.";
             hud.Help = "Show or hide the selected drone's picture on the flight HUD.";
-            feed = page.Add(new FeedPicture(page.Content));
 
             console.Ticker.Add(0, AvTickRate.Fast, Refresh);
             console.Finish();
@@ -173,6 +177,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bool own = linked && drones.Owns(selected);
             bool shared = linked && drones.IsShared(selected);
             bool piloting = drones.Piloting;
+            roster.SetShown(drones.Linkable > 0);
+            selectionHint.SetShown(!linked);
+            if (!linked) selectionHint.Set(drones.Linkable > 0
+                ? "Select a drone to view its sensor and controls."
+                : "Your airborne drones and any shared by teammates appear here.");
+            flight.SetShown(linked || piloting);
+            feedSection.SetShown(linked);
+            feed.SetShown(linked);
+            optics.SetShown(linked);
             locate.Interactable = linked && drones.Track(selected) != null;
             pilot.Interactable = piloting || (linked && drones.CanPilot(selected));
             pilot.Label = piloting ? "RETURN TO AIRCRAFT" : "TAKE CONTROL";
@@ -192,11 +205,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (selected != lastSelection && linked) roster.Reveal(selected);
             lastSelection = selected;
             feedSection.SetCaption(linked ? drones.Name(selected) : "NO SELECTION");
-            feed.Show(drones.WantFeed());
             console.Footer.Set(piloting ? "REMOTE FLIGHT ACTIVE"
                 : linked ? drones.State(selected)
-                : drones.Linkable > 0 ? "SELECT A DRONE TO VIEW ITS SENSOR"
-                : "LAUNCH A DRONE OR WAIT FOR A TEAMMATE TO SHARE ONE");
+                : "");
         }
 
         private sealed class FeedPicture : AvPart

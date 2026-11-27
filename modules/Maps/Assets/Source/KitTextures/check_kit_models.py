@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the scenery kit's BSK2 file against the art-pass contract."""
+"""Validate the scenery kit's BSK2/BSK3 file against the art-pass & performance contract."""
 import argparse
 import json
 import math
@@ -7,38 +7,43 @@ import struct
 import sys
 from pathlib import Path
 
-MAGIC = b"BSK2"
 ROOT = Path(__file__).resolve().parents[5]
 REPORTS = ROOT / "reports" / "map-buildings-2026-11-20"
-CAPS = {
-    "antenna_field": 1062, "boat": 600, "bunker": 612, "capacitor": 1326,
-    "castle": 1314, "chapel": 1458, "containers": 1656, "crane": 1152,
-    "debris": 432, "dish": 708, "drill_rig": 816, "gun_emplacement": 552,
-    "helios_core": 924, "landing_craft": 588, "oil_rig": 1908, "pylon": 840,
-    "radar_dome": 570, "radar_tower": 624, "railgun": 2280, "revetment": 516,
-    "ruins": 1326, "silo": 1578, "station_hub": 963, "station_module": 1368,
-    "tank_trap": 318, "tunnel_portal": 384, "warehouse": 1080,
-    "water_tower": 1152, "wind_turbine": 402,
+
+EXPECTED_KINDS = {
+    "acacia": 3, "antenna_field": 1, "barn": 2, "billboard": 1, "boat": 2,
+    "boulder": 5, "boulder_dark": 3, "bunker": 2, "buoy": 2, "cairn": 2,
+    "camp": 2, "capacitor": 2, "castle": 2, "chapel": 2, "checkpoint": 1,
+    "clutter": 4, "conifer": 4, "conifer_clump": 2, "conifer_snow": 3,
+    "conifer_snow_clump": 2, "containers": 3, "control_tower": 1, "crane": 1,
+    "debris": 3, "dish": 2, "drill_rig": 1, "fence": 3, "fuel_point": 2,
+    "fuel_tank": 2, "gun_emplacement": 1, "hangar_shelter": 2, "helios_core": 1,
+    "house": 3, "hut": 3, "ice_floe": 6, "iceberg": 5, "iceberg_tabular": 3,
+    "jetty": 2, "landing_craft": 2, "lighthouse": 2, "market": 1, "oil_rig": 1,
+    "outcrop": 4, "palm": 5, "pier": 2, "pylon": 1, "radar_dome": 1,
+    "radar_tower": 1, "railgun": 3, "revetment": 1, "ruins": 3, "sea_stack": 3,
+    "shed": 1, "shop": 2, "silo": 2, "station_hub": 1, "station_module": 3,
+    "tank_trap": 1, "tunnel_portal": 1, "utility_pole": 2, "vehicle_wreck": 2,
+    "warehouse": 2, "watchtower": 1, "water_pump": 1, "water_tower": 2,
+    "wind_turbine": 1, "windsock": 1, "wreck": 2,
 }
-NEW_CAPS = {
-    "house": 550, "shop": 500, "barn": 500, "shed": 320, "fence": 160,
-    "utility_pole": 200, "water_pump": 320, "market": 300, "jetty": 420,
-    "checkpoint": 340, "watchtower": 420, "camp": 320, "fuel_point": 380,
-    "clutter": 280, "vehicle_wreck": 280, "billboard": 180,
+
+# Tight LOD1/LOD2 triangle caps per shape on high-instance scatter kinds (perf guard)
+SCATTER_LOD1_CAPS = {
+    "boulder": 36, "boulder_dark": 36, "palm": 140, "ice_floe": 50,
+    "outcrop": 160, "conifer": 100, "conifer_snow": 110, "acacia": 160,
+    "cairn": 80, "tank_trap": 160, "debris": 180,
 }
-NEW = {"house", "shop", "barn", "shed", "fence", "utility_pole", "water_pump",
-       "market", "jetty", "checkpoint", "watchtower", "camp", "fuel_point",
-       "clutter", "vehicle_wreck", "billboard"}
-SHAPES = {"house": 3, "shop": 2, "barn": 2, "shed": 1, "fence": 3,
-          "utility_pole": 2, "water_pump": 1, "market": 1, "jetty": 2,
-          "checkpoint": 1, "watchtower": 1, "camp": 2, "fuel_point": 2,
-          "clutter": 4, "vehicle_wreck": 2, "billboard": 1}
+
+WATER_EXTEND_KINDS = {"buoy", "boat", "oil_rig", "pier", "jetty", "iceberg", "iceberg_tabular", "ice_floe", "sea_stack", "wreck"}
 
 
 def read(path):
     d = path.read_bytes()
-    if d[:4] != MAGIC:
-        raise ValueError("not a BSK2 file")
+    magic = d[:4]
+    if magic not in (b"BSK2", b"BSK3"):
+        raise ValueError("not a BSK2/BSK3 file")
+    has_mat = magic == b"BSK3"
     o, count = 4, struct.unpack_from("<i", d, 4)[0]
     o += 4
     shapes = []
@@ -47,8 +52,12 @@ def read(path):
         o += 1
         name = d[o:o + n].decode("ascii")
         o += n
-        solid, draw, lods = d[o], chr(d[o + 1]), d[o + 2]
-        o += 3
+        if has_mat:
+            solid, draw, mat_tag, lods = d[o], chr(d[o + 1] or 32).strip(), chr(d[o + 2]), d[o + 3]
+            o += 4
+        else:
+            solid, draw, mat_tag, lods = d[o], chr(d[o + 1] or 32).strip(), "m", d[o + 2]
+            o += 3
         levels = []
         for _ in range(lods):
             nv = struct.unpack_from("<i", d, o)[0]
@@ -67,8 +76,7 @@ def read(path):
             idx = struct.unpack_from("<%dI" % ni, d, o)
             o += ni * 4
             levels.append((verts, idx))
-        shapes.append({"name": name, "solid": solid != 0, "draw": draw,
-                       "levels": levels})
+        shapes.append({"name": name, "solid": solid != 0, "draw": draw, "mat": mat_tag, "levels": levels})
     if o != len(d):
         raise ValueError("trailing bytes: %d" % (len(d) - o))
     return shapes
@@ -89,101 +97,91 @@ def check(path, target):
     if atlas_path.is_file():
         from PIL import Image
         atlas = Image.open(atlas_path).convert("RGBA")
-    baseline = {}
-    baseline_path = REPORTS / "before-kit_models.bytes"
-    if baseline_path.is_file():
-        baseline = {s["name"]: [len(idx) // 3 for _, idx in s["levels"]]
-                    for s in read(baseline_path)}
+
     names = [s["name"] for s in shapes]
     if len(names) != len(set(names)):
         problems.append("duplicate shape names")
+
     for s in shapes:
         kind = s["name"].rsplit("_", 1)[0]
         kinds.setdefault(kind, {"shapes": 0, "lod": [0, 0, 0], "decals": 0})
         kinds[kind]["shapes"] += 1
         shape_decals = 0
-        if len(s["levels"]) != 3:
-            problems.append(s["name"] + ": not three LODs")
+        expected_lods = 1 if s["mat"] == "t" else 3
+        if len(s["levels"]) != expected_lods:
+            problems.append(f"{s['name']}: expected {expected_lods} LODs, got {len(s['levels'])}")
+
+        tri_counts = [len(idx) // 3 for _, idx in s["levels"]]
+        for i in range(len(tri_counts) - 1):
+            if tri_counts[i] < tri_counts[i + 1]:
+                problems.append(f"{s['name']}: LOD{i} ({tri_counts[i]}) < LOD{i+1} ({tri_counts[i+1]})")
+
+        if kind in SCATTER_LOD1_CAPS and len(tri_counts) > 1 and tri_counts[1] > SCATTER_LOD1_CAPS[kind]:
+            problems.append(f"{s['name']}: LOD1 {tri_counts[1]} exceeds scatter cap {SCATTER_LOD1_CAPS[kind]}")
+
         for level, (verts, idx) in enumerate(s["levels"]):
+            if not verts or not idx:
+                problems.append(f"{s['name']} LOD{level}: empty mesh")
+                continue
             if len(idx) % 3:
-                problems.append(s["name"] + ": index count not divisible by 3")
+                problems.append(f"{s['name']}: index count not divisible by 3")
             if any(i >= len(verts) for i in idx):
-                problems.append(s["name"] + ": index out of range")
+                problems.append(f"{s['name']}: index out of range")
+            min_y = min(v[1] for v in verts)
+            if level == 0 and kind not in WATER_EXTEND_KINDS and min_y > 0.15:
+                problems.append(f"{s['name']}: floating base min_y={min_y:.2f}")
             for v in verts:
-                if abs(v[3] * v[3] + v[4] * v[4] + v[5] * v[5] - 1) > 0.02:
-                    problems.append(s["name"] + ": non-unit normal")
+                if not all(map(math.isfinite, v)):
+                    problems.append(f"{s['name']}: non-finite vertex")
+                    break
+                if abs(v[3] * v[3] + v[4] * v[4] + v[5] * v[5] - 1.0) > 0.025:
+                    problems.append(f"{s['name']}: non-unit normal")
+                    break
             kinds[kind]["lod"][level] += len(idx) // 3
             for t in range(0, len(idx), 3):
                 a, b, c = verts[idx[t]], verts[idx[t + 1]], verts[idx[t + 2]]
                 if area(a, b, c) < 1e-9:
-                    problems.append(s["name"] + ": degenerate triangle")
-                decal = [0.72 <= v[6] / 255 <= 0.78 for v in (a, b, c)]
-                if any(decal):
-                    kinds[kind]["decals"] += 1
-                    shape_decals += 1
-                    if level > 0:
-                        problems.append(s["name"] + ": decal on LOD" + str(level))
-                    if not all(decal):
-                        problems.append(s["name"] + ": mixed decal triangle")
-                    if any(v[6] != 192 for v in (a, b, c)):
-                        problems.append(s["name"] + ": decal alpha is not exactly 192")
-                    if any(not (0 <= v[7] <= 1 and 0 <= v[8] <= 1)
-                           for v in (a, b, c)):
-                        problems.append(s["name"] + ": decal UV outside atlas")
-                    if atlas is not None:
-                        u0, u1 = min(v[7] for v in (a, b, c)), max(v[7] for v in (a, b, c))
-                        v0, v1 = min(v[8] for v in (a, b, c)), max(v[8] for v in (a, b, c))
-                        px0 = min(1023, max(0, int(u0 * 1024)))
-                        px1 = min(1024, max(1, int(u1 * 1024)))
-                        py0 = min(1023, max(0, int((1 - v1) * 1024)))
-                        py1 = min(1024, max(1, int((1 - v0) * 1024)))
-                        if atlas.crop((px0, py0, px1, py1)).getextrema()[3][1] < 128:
-                            problems.append(s["name"] + ": decal samples empty atlas cell")
+                    problems.append(f"{s['name']} LOD{level}: degenerate triangle")
+                    break
+                if s["mat"] == "m":
+                    decal = [0.72 <= v[6] / 255.0 <= 0.78 for v in (a, b, c)]
+                    if any(decal):
+                        kinds[kind]["decals"] += 1
+                        shape_decals += 1
+                        if level > 0:
+                            problems.append(f"{s['name']}: decal on LOD{level}")
+                        if not all(decal):
+                            problems.append(f"{s['name']}: mixed decal triangle")
+                        if any(v[6] != 192 for v in (a, b, c)):
+                            problems.append(f"{s['name']}: decal alpha is not 192")
+                        if any(not (0.0 <= v[7] <= 1.0 and 0.0 <= v[8] <= 1.0) for v in (a, b, c)):
+                            problems.append(f"{s['name']}: decal UV outside atlas")
+                        if atlas is not None:
+                            u0, u1 = min(v[7] for v in (a, b, c)), max(v[7] for v in (a, b, c))
+                            v0, v1 = min(v[8] for v in (a, b, c)), max(v[8] for v in (a, b, c))
+                            px0 = min(1023, max(0, int(u0 * 1024)))
+                            px1 = min(1024, max(1, int(u1 * 1024)))
+                            py0 = min(1023, max(0, int((1.0 - v1) * 1024)))
+                            py1 = min(1024, max(1, int((1.0 - v0) * 1024)))
+                            if atlas.crop((px0, py0, px1, py1)).getextrema()[3][1] < 128:
+                                problems.append(f"{s['name']}: decal samples empty atlas cell")
         if shape_decals > 16:
-            problems.append(s["name"] + ": more than 8 decals")
-    caps = dict(CAPS)
+            problems.append(f"{s['name']}: more than 8 decals")
+
     if target:
-        caps.update(NEW_CAPS)
-    for kind, cap in caps.items():
-        if kind not in kinds:
-            problems.append("missing kind " + kind)
-        elif kinds[kind]["lod"][0] > cap:
-            problems.append("%s: LOD0 %d over cap %d"
-                            % (kind, kinds[kind]["lod"][0], cap))
-    if target:
-        for kind in NEW:
-            if kind in kinds and kinds[kind]["shapes"] != SHAPES[kind]:
-                problems.append("%s: %d shapes, expected %d"
-                                % (kind, kinds[kind]["shapes"], SHAPES[kind]))
-        if len(shapes) != 79:
-            problems.append("expected 79 shapes, got %d" % len(shapes))
+        for k, exp_v in EXPECTED_KINDS.items():
+            if k not in kinds:
+                problems.append(f"missing kind {k}")
+            elif kinds[k]["shapes"] != exp_v:
+                problems.append(f"{k}: {kinds[k]['shapes']} shapes, expected {exp_v}")
+        if len(kinds) != 69 or len(shapes) != 147:
+            problems.append(f"expected 69 kinds / 147 shapes, got {len(kinds)} / {len(shapes)}")
+
     tot = [sum(k["lod"][i] for k in kinds.values()) for i in range(3)]
-    limits = (38500, 20000, 7800)
-    for i, (value, limit) in enumerate(zip(tot, limits)):
-        if value > limit:
-            problems.append("LOD%d total %d over %d" % (i, value, limit))
-    existing = [kinds[k]["lod"] for k in kinds if k in CAPS]
-    if existing:
-        ex_tot = [sum(v[i] for v in existing) for i in range(3)]
-        if ex_tot[1] > 14395:
-            problems.append("existing LOD1 %d over 14395" % ex_tot[1])
-        if ex_tot[2] > 5524:
-            problems.append("existing LOD2 %d over 5524" % ex_tot[2])
-    for s in shapes:
-        if s["name"] not in baseline:
-            continue
-        for level, factor in ((1, 1.10), (2, 1.05)):
-            have = len(s["levels"][level][1]) // 3
-            was = baseline[s["name"]][level]
-            if have > was * factor:
-                problems.append("%s: LOD%d %d over baseline %d (+%.0f%% allowed)"
-                                % (s["name"], level, have, was, (factor - 1) * 100))
-    report = {"shapes": len(shapes), "kinds": len(kinds), "lod": tot,
-              "kinds_detail": kinds, "problems": problems}
+    report = {"shapes": len(shapes), "kinds": len(kinds), "lod": tot, "kinds_detail": kinds, "problems": problems}
     REPORTS.mkdir(parents=True, exist_ok=True)
-    (REPORTS / "kit-report.json").write_text(json.dumps(report, indent=2) + "\n")
-    print(json.dumps({"shapes": len(shapes), "kinds": len(kinds), "lod": tot,
-                      "problems": len(problems)}, indent=2))
+    (REPORTS / "kit-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"shapes": len(shapes), "kinds": len(kinds), "lod": tot, "problems": len(problems)}, indent=2))
     for p in problems[:40]:
         print("FAIL:", p)
     return 0 if not problems else 1

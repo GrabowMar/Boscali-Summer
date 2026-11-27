@@ -79,6 +79,21 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return View(c);
         }
 
+        /// <summary>Requests a window size for a rendered sandbox scenario after the game has applied its startup settings.</summary>
+        public static Dictionary<string, object> SetResolution(Dictionary<string, object> args)
+        {
+            float width = Number(args, "width", 0f), height = Number(args, "height", 0f);
+            int limit = SystemInfo.maxTextureSize;
+            if (!(width >= 1f && width <= limit && width == Mathf.Floor(width) &&
+                  height >= 1f && height <= limit && height == Mathf.Floor(height)))
+                return Failure("ScrollAutomation", "SetResolution", "Width and height must be positive whole pixels within the device texture limit.");
+            if (Application.isBatchMode) return Failure("ScrollAutomation", "SetResolution", "A rendered window is required.");
+
+            Screen.SetResolution((int)width, (int)height, FullScreenMode.Windowed);
+            // Unity applies the request after the frame. The scenario waits for Screen.width and Screen.height.
+            return new Dictionary<string, object> { ["ok"] = true };
+        }
+
         /// <summary>Positions a console for repeatable screenshots; input routing is tested separately by Wheel.</summary>
         public static Dictionary<string, object> Position(Dictionary<string, object> args)
         {
@@ -174,7 +189,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 ["tickerVisible"] = wire != null && Rendered(wire) && Within(ScreenBounds(wire), new Rect(0f, 0f, Screen.width, Screen.height)),
                 ["mapFrameVisible"] = mapFrame != null && Rendered(mapFrame.transform),
                 ["mapTrayVisible"] = mapTray != null && Rendered(mapTray.transform),
-                ["panelAlpha"] = c.Root.GetComponent<CanvasGroup>()?.alpha ?? 1f,
+                ["panelAlpha"] = c.SurfaceOpacity,
             };
             if ((string)Field(c, "id") == "SET" && c.CurrentPageName == "MAP")
             {

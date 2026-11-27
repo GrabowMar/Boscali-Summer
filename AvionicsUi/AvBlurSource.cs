@@ -13,7 +13,6 @@ namespace NOAvionics
     /// </summary>
     public static class AvBlurSource
     {
-        private const int MaxUsers = 16;
         private const float Interval = 1f / 30f;
         private static int users;
         private static bool hooked, grabOk, failed;
@@ -41,7 +40,7 @@ namespace NOAvionics
 
         public static void Acquire()
         {
-            if (users < MaxUsers) users++;
+            users++;
             Hook();
         }
 
@@ -117,7 +116,7 @@ namespace NOAvionics
         {
             Camera best = null;
             foreach (Camera c in Camera.allCameras)
-                if (c.enabled && c.targetTexture == null && (best == null || c.depth > best.depth)) best = c;
+                if (c.enabled && c.cameraType == CameraType.Game && c.targetTexture == null && (best == null || c.depth > best.depth)) best = c;
             return best;
         }
 

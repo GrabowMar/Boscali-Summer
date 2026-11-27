@@ -286,7 +286,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 plate = AvFrame.Add(root, "Plate", AvChamfer.Diagonal(8f));
                 AvLay.Fill(plate.rectTransform);
                 plate.Stroke = 1f;
-                plate.Bracket = 8f;
 
                 Restyle();
             }
@@ -323,8 +322,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             public override void Restyle()
             {
                 plate.Paint(AvStyleHost.FuiFill("console", AvTheme.Ground), AvStyleHost.FuiBorder("console", AvTheme.Frame));
-                plate.BracketColor = Role("select", AvTheme.Accent).WithAlpha(0.8f);
-                plate.SetVerticesDirty();
                 for (int i = 0; i < groupTexts.Count; i++)
                 {
                     groupTexts[i].color = Role("ink-muted", AvTheme.Dim);
@@ -379,8 +376,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             selection = AvLay.Solid(Rect, "Selection", Color.clear);
             divider = AvLay.Solid(Rect, "Divider", Color.clear);
             icon = AvIcons.Make(Rect, entry.Glyph, IconSize, Color.white);
-            code = AvText.Make(Rect, "Code", AvTextRole.Title, entry.Code);
-            name = AvText.Make(Rect, "Name", AvTextRole.Micro, entry.Name);
+            code = AvText.Make(Rect, "Code", AvTextRole.DataSmall, entry.Code);
+            name = AvText.Make(Rect, "Name", AvTextRole.Title, entry.Name);
+            AvText.Fit(code, false);
+            AvText.Fit(name, false);
             name.gameObject.SetActive(entry.HasName && entry.Name != entry.Code);
             hit = AvHit.On(frame);
             hit.Cue = AvUiCue.Open;
@@ -428,15 +427,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MfdChromeLay.Place(icon.rectTransform, new Rect((IconBay - IconSize) * 0.5f + 2f, -(h - IconSize) * 0.5f, IconSize, IconSize));
             MfdChromeLay.Place(divider.rectTransform, new Rect(TextLeft, -(h - 1f), w - TextLeft - 4f, 1f));
 
-            AvText.Size(code, Mathf.Clamp(h * 0.29f, 14f, 18f));
             float textWidth = w - TextLeft - 6f;
             if (Entry.HasName && Entry.Name != Entry.Code)
             {
-                MfdChromeLay.Place(code.rectTransform, new Rect(TextLeft, -h * 0.10f, textWidth, h * 0.44f));
-                MfdChromeLay.Place(name.rectTransform, new Rect(TextLeft, -h * 0.56f, textWidth, Mathf.Max(16f, h * 0.30f)));
+                // Lead with the destination. The smaller code still matches the native bezel.
+                MfdChromeLay.Place(name.rectTransform, new Rect(TextLeft, -h * .10f, textWidth, h * .46f));
+                MfdChromeLay.Place(code.rectTransform, new Rect(TextLeft, -h * .55f, textWidth, h * .34f));
             }
             else
             {
+                code.fontSizeMax = 18f;
                 MfdChromeLay.Place(code.rectTransform, new Rect(TextLeft, 0f, textWidth, h));
             }
         }
@@ -460,8 +460,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 : hover && available ? accent.WithAlpha(accent.a * .45f) : Color.clear;
             divider.color = active ? Color.clear : hairline;
             icon.color = available && Latched ? accent : quiet;
-            code.color = available ? Latched ? accent : ink : quiet;
-            name.color = quiet;
+            code.color = name.gameObject.activeSelf || !available ? quiet : ink;
+            name.color = available ? Latched ? accent : ink : quiet;
         }
     }
 }

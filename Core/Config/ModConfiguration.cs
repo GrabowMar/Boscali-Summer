@@ -22,6 +22,7 @@ using BoscaliSummer.Modules.TheaterOps.Configuration;
 using BoscaliSummer.Modules.Trenches.Configuration;
 using BoscaliSummer.Modules.Spooktober.Kaiju.Configuration;
 using BoscaliSummer.Modules.UrbanCombat.Configuration;
+using BoscaliSummer.Modules.Vanguard.Configuration;
 using BoscaliSummer.Modules.Weather.Configuration;
 using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Diagnostics;
@@ -72,6 +73,7 @@ namespace BoscaliSummer.Core.Config
         public BoscaliSummer.Modules.Megaplane.MegaplaneSettings Megaplane { get; }
         public ChatterSettings Chatter { get; }
         public ConfigEntry<KeyCode> MiscMenuKey { get; }
+        public DroneControlSettings DroneControls { get; }
 
         public ModConfiguration(ConfigFile config)
         {
@@ -123,6 +125,7 @@ namespace BoscaliSummer.Core.Config
                 Chatter = new ChatterSettings(config);
                 MiscMenuKey = config.Bind("Keys", "MiscMenuKey", KeyCode.F7,
                     "Toggle the standalone MISC (ARES / EXTRAS) window directly, including when the tactical map extension (AVIONICS) is turned off. None disables the shortcut.");
+                DroneControls = new DroneControlSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
                 // Last, so every module's entries are present to be sorted into what the
                 // F1 window lists and what stays in the config file only.

@@ -1,19 +1,18 @@
-/* Portal · smoked instrument glass. Cyan = selection/ready, amber = caution, red = danger.
-   The nearly opaque ground protects text over bright terrain; inner plates supply the frost depth. */
+/* Portal instrument glass. Slate reading planes, ice-blue focus and a separate mint ready light. */
 :root {
-  ground:          #0B1419 f5;
-  surface:         #20343E e8;
-  surface-raised:  #2D4652 f2;
-  surface-inert:   #12232B e8;
-  surface-sunken:  #0C171D f5;
-  hairline:        #78939F 58;
-  frame:           #A5BEC8 a8;
-  ink:             #EDF5F7;
-  ink-dim:         #C0D1D8;
-  ink-muted:       #A2B8C2;
-  key:             #8DDEEA;
-  select:          #8DDEEA;
-  ready:           #8DDEEA;
+  ground:          #101922 fb;
+  surface:         #233541;
+  surface-raised:  #324B59;
+  surface-inert:   #192832 f8;
+  surface-sunken:  #101C25 fa;
+  hairline:        #75909F 48;
+  frame:           #86A0B0 84;
+  ink:             #EDF5F8;
+  ink-dim:         #BCD0DA;
+  ink-muted:       #9CB2BF;
+  key:             #83CADB;
+  select:          #96E3F0;
+  ready:           #91DCC2;
   caution:         #F5BA56;
   effort:          #F5BA56;
   danger:          #FF695B;

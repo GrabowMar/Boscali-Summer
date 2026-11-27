@@ -231,15 +231,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         public bool RequestPick(int proposalId, int revision) => Request(0, proposalId, revision, 0);
         public bool RequestCancel(int operationId, int revision) => Request(1, operationId, revision, 0);
         public bool RequestPosture(TheaterWarPosture posture) => Request(2, 0, 0, (byte)posture);
-        public bool RequestDraw(float startX, float startZ, float fixX, float fixZ) =>
-            DrawnPlan.Valid(startX, startZ, fixX, fixZ) && Request(3, 0, 0, 0, startX, startZ, fixX, fixZ);
 
-        private bool Request(byte kind, int id, int revision, byte posture, float sx = 0f, float sz = 0f, float ox = 0f, float oz = 0f)
+        private bool Request(byte kind, int id, int revision, byte posture)
         {
             if (!CanCommand || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
-            if (!Authoritative) return network != null && network.SendIntent(kind, id, revision, posture, sx, sz, ox, oz);
+            if (!Authoritative) return network != null && network.SendIntent(kind, id, revision, posture);
             IntentActor actor = GameManager.GetLocalPlayer(out NuclearOption.Networking.Player local) ? ActorOf(local) : default;
-            IntentReply reply = ApplyIntent(hq, kind, id, revision, posture, actor, sx, sz, ox, oz);
+            IntentReply reply = ApplyIntent(hq, kind, id, revision, posture, actor);
             hostCommand = new TheaterCommandResult { Code = reply.Code, Detail = reply.Detail, LockSeconds = reply.LockSeconds };
             hostCommandAt = Time.unscaledTime;
             return reply.Code == TheaterCommandCode.Accepted;

@@ -24,12 +24,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             table.RowPicked = PickRow;
             table.SummaryPicked = ToggleTable;
             table.SupplyPicked = OpenSupply;
+            table.CallPicked = CallFromRoster;
         }
 
         private void ToggleTable()
         {
-            tableOpen = !tableOpen;
-            table.SetMode(sub != SubOrders, !tableOpen);
+            tableOpen[sub] = !tableOpen[sub];
+            table.SetMode(true, !tableOpen[sub]);
             if (last != null) Refresh(last);
             flow.RequestRelayout();
         }

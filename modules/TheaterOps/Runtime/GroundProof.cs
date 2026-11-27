@@ -7,6 +7,7 @@ using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.TheaterOps.Domain;
 using HarmonyLib;
+using NuclearOption.Networking;
 using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 
@@ -513,22 +514,22 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
         }
 
-        // ---- Draw: a pilot-drawn offensive through the real RequestDraw path ------------------------------------------------------------
+        // ---- Directed offensive with a fixed objective ---------------------------------------------------------------------------------
 
         private static int drawOpId = -1;
         private static float drawAt = -1f, drawFixX, drawFixZ, drawMean0 = -1f;
 
         /// <summary>
         /// {depth: metres, default 6000}: the local faction's live front with the most friendly ground in reach is the press; the release is depth metres
-        /// along whichever of sixteen rays ends on ground the enemy holds most strongly. Sent through ITheaterWarView.RequestDraw, as the map tool sends it.
+        /// along whichever of sixteen rays ends on ground the enemy holds most strongly. Uses the host's directed offensive path.
         /// </summary>
         public static Dictionary<string, object> Draw(Dictionary<string, object> args)
         {
             if (!InSimRun) return Failure("GroundProof", "Draw", "requires a nomodkit scenario run");
             LivingFrontService living = LivingFrontService.Active;
-            if (living == null || !ModuleServices.TryGet(out ITheaterWarView view) || !ModuleServices.TryGet(out ITerritoryIngress territory) ||
+            if (living == null || !ModuleServices.TryGet(out ITerritoryIngress territory) ||
                 !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.faction == null || !living.Wars.TryGetValue(hq.faction.factionName, out LivingFrontService.FactionWar war))
-                return Failure("GroundProof", "Draw", "no war, view or territory for the local faction");
+                return Failure("GroundProof", "Draw", "no war or territory for the local faction");
             float depth = Number(args, "depth", 6000f);
             int best = -1;
             for (int i = 0; i < war.Reads.Count; i++)
@@ -543,17 +544,18 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (territory.TryGetHoldStrength(id, x, z, out float hold) && hold < bestHold) { bestHold = hold; ox = x; oz = z; }
             }
             if (bestHold == float.MaxValue) return Failure("GroundProof", "Draw", "no hold read round the front");
-            bool sent = view.RequestDraw(read.X, read.Z, ox, oz);
+            IntentActor actor = GameManager.GetLocalPlayer(out Player player) ? LivingFrontService.ActorOf(player) : default;
+            IntentReply reply = living.ApplyDirectedOffensive(hq, read.X, read.Z, ox, oz, actor);
+            bool sent = reply.Code == TheaterCommandCode.Accepted;
             LivingFrontService.Operation op = war.Active;
             drawAt = Time.timeSinceLevelLoad; drawFixX = ox; drawFixZ = oz; drawMean0 = -1f;
             drawOpId = op != null && op.Drawn ? op.Id : -1;
-            TheaterCommandResult said = view.LastCommand;
-            Plugin.Logger?.LogInfo("[GroundProof] DRAW sent " + sent + " code " + (said != null ? said.Code.ToString() : "none") + " front " + read.Key +
+            Plugin.Logger?.LogInfo("[GroundProof] DRAW sent " + sent + " code " + reply.Code + " front " + read.Key +
                 " start " + (int)read.X + "," + (int)read.Z + " fix " + (int)ox + "," + (int)oz + " hold " + bestHold.ToString("0.00") +
                 " drawn " + (op != null && op.Drawn) + " pinned " + (op != null && op.X == ox && op.Z == oz) + " kind " + (op != null ? op.Kind.ToString() : "-"));
             return new Dictionary<string, object>
             {
-                { "ok", true }, { "sent", sent ? 1 : 0 }, { "code", said != null ? said.Code.ToString() : "none" }, { "detail", said?.Detail ?? "" },
+                { "ok", true }, { "sent", sent ? 1 : 0 }, { "code", reply.Code.ToString() }, { "detail", reply.Detail },
                 { "front", read.Key }, { "frontName", read.Name }, { "friendlyGround", read.ReachFriendlyGround },
                 { "startX", read.X }, { "startZ", read.Z }, { "fixX", ox }, { "fixZ", oz }, { "holdAtFix", bestHold },
                 { "drawn", op != null && op.Drawn ? 1 : 0 }, { "kind", op != null ? op.Kind.ToString().ToUpperInvariant() : "" },

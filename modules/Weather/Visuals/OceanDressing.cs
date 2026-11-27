@@ -5,6 +5,7 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Weather.Configuration;
 using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Modules.Weather.Runtime;
 using HarmonyLib;
 using UnityEngine;
 
@@ -38,11 +39,21 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly AccessTools.FieldRef<LevelInfo, ReflectionProbe> ProbeOf =
             AccessTools.FieldRefAccess<LevelInfo, ReflectionProbe>("reflectionProbe");
 
+        private static readonly Color CalmGrazing = new Color(0.014f, 0.145f, 0.24f, 1f), StormGrazing = new Color(0.036f, 0.082f, 0.095f, 1f);
+        private static readonly Color CalmShadow = new Color(0.003f, 0.032f, 0.085f, 1f), StormShadow = new Color(0.015f, 0.034f, 0.044f, 1f);
+        private static readonly Color CalmShallow = new Color(0.04f, 0.34f, 0.36f, 1f), StormShallow = new Color(0.06f, 0.17f, 0.16f, 1f);
+
         private static readonly int WavesId = Shader.PropertyToID("_Waves"), PhaseId = Shader.PropertyToID("_WavePhase"),
             AnchorId = Shader.PropertyToID("_OceanAnchor"), DispId = Shader.PropertyToID("_OceanDisp"), WindId = Shader.PropertyToID("_OceanWind"),
             SeaId = Shader.PropertyToID("_OceanSea"), Sea2Id = Shader.PropertyToID("_OceanSea2"), ShoreId = Shader.PropertyToID("_OceanShore"),
-            DeepId = Shader.PropertyToID("_OceanDeep"), ScatterId = Shader.PropertyToID("_OceanScatter"), FoamTintId = Shader.PropertyToID("_OceanFoamTint"),
+            DeepId = Shader.PropertyToID("_OceanDeep"), DeepGrazingId = Shader.PropertyToID("_OceanDeepGrazing"),
+            ShadowTintId = Shader.PropertyToID("_OceanShadowTint"), ShallowId = Shader.PropertyToID("_OceanShallow"),
+            ScatterId = Shader.PropertyToID("_OceanScatter"), FoamTintId = Shader.PropertyToID("_OceanFoamTint"),
             AmbientId = Shader.PropertyToID("_OceanAmbient"), FogColourId = Shader.PropertyToID("_OceanFogColor"), FogId = Shader.PropertyToID("_OceanFog"),
+            WeatherId = Shader.PropertyToID("_OceanWeather"), Weather2Id = Shader.PropertyToID("_OceanWeather2"),
+            FlashAId = Shader.PropertyToID("_OceanFlashA"), FlashBId = Shader.PropertyToID("_OceanFlashB"),
+            WeatherMapId = Shader.PropertyToID("_OceanWeatherMap"), WeatherProfileId = Shader.PropertyToID("_OceanWeatherProfile"),
+            WeatherSpanId = Shader.PropertyToID("_OceanWeatherSpan"),
             CalmId = Shader.PropertyToID("_OceanCalm"), WashId = Shader.PropertyToID("_OceanWash"), WashDirId = Shader.PropertyToID("_OceanWashDir"),
             SkyId = Shader.PropertyToID("_OceanSky");
 
@@ -64,6 +75,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         private WeatherSettings settings;
         private IWeatherView weather;
+        private WeatherManager weatherManager;
         private ManualLogSource logger;
         private readonly SeaSpray spray = new SeaSpray();
 
@@ -101,6 +113,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             settings = weatherSettings;
             weather = view;
+            weatherManager = view as WeatherManager;
             logger = log;
         }
 
@@ -138,7 +151,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             if (Application.isBatchMode || settings == null) return;
             LevelInfo level = LevelInfo.i;
-            Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            Camera camera = cameras != null ? cameras.mainCamera : null;
             if (!settings.Enabled.Value || level == null || camera == null || GameManager.gameState == GameState.Encyclopedia)
             {
                 ReleaseFx();
@@ -220,8 +234,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             Vector3 wind = level.windVelocity;
             float windSpeed = new Vector2(wind.x, wind.z).magnitude;
 
+            WeatherViewSample sky = default;
+            bool hasSky = weather != null && weather.TrySample(eye.x, eye.z, out sky);
             float target = ForcedWind >= 0f ? ForcedWind
-                : weather != null && weather.TrySample(eye.x, eye.z, out WeatherViewSample sky) ? SeaState.SeaWind(windSpeed, sky.Cover, sky.Rain01)
+                : hasSky ? SeaState.SeaWind(windSpeed, sky.Cover, sky.Rain01)
                 : SeaState.SeaWindFromConditions(windSpeed, level.conditions);
             seaWind = ForcedWind >= 0f ? target : SeaState.Ease(seaWind, target, dt);
 
@@ -297,7 +313,17 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (interactions) AddShipWakes(spray.WashCount);
 
             if (Time.unscaledTime >= nextLight) { nextLight = Time.unscaledTime + 0.5f; ReadLighting(level); }
-            Upload(level, crest);
+            float cover = hasSky ? sky.Cover : Mathf.Clamp01(level.conditions);
+            float rain = weatherManager != null ? weatherManager.LocalRainIntensity
+                : hasSky ? sky.Rain01
+                : WeatherForecast.RainIntensityFromConditions(level.conditions);
+            float snow = weatherManager != null ? weatherManager.ViewSnow : 0f;
+            float overcastShade = weatherManager != null ? weatherManager.CloudShade : 0f;
+            float gustBoost = weatherManager != null
+                ? Mathf.Clamp01(weatherManager.LocalWeather.Gust / 15f + weatherManager.LocalWeather.Turbulence * 0.4f)
+                : 0f;
+            float stormCore = weatherManager != null ? weatherManager.LocalWeather.CoreDepth : 0f;
+            Upload(level, crest, cover, rain, snow, overcastShade, gustBoost, stormCore);
         }
 
         /// <summary>Re-anchors on the 2 km grid and carries every phase and offset across, so the sea does not jump.</summary>
@@ -414,12 +440,18 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             probeMips = Mathf.Log(Mathf.Max(sky.width, 1), 2f);
         }
 
-        private void Upload(LevelInfo level, float crest)
+        private void Upload(LevelInfo level, float crest, float cover, float rain, float snow,
+            float overcastShade, float gustBoost, float stormCore)
         {
             float storm = SeaState.Storminess(seaWind);
             float coverage = SeaState.Whitecaps(seaWind);
             Vector2 windDir = Along(0);
             Light main = WeatherLighting.Source(level);
+            float sunElevation = main != null ? -main.transform.forward.y : (level.sun != null ? -level.sun.transform.forward.y : 0.3f);
+            float liquidRain = SeaState.LiquidRain(rain, snow);
+            float rainRipples = SeaState.RainRippleIntensity(liquidRain, seaWind);
+            float turbidity = SeaState.Turbidity(storm, liquidRain, cover);
+            float scatterScale = SeaState.ScatterStrength(storm, cover, sunElevation);
 
             water.SetVectorArray(WavesId, waves);
             water.SetVectorArray(PhaseId, wavePhase);
@@ -435,8 +467,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             for (int t = 0; t < Tile.Length; t++)
                 water.SetVector(LayerIds[t], new Vector4((float)offsetU[t], (float)offsetV[t], 1f / Tile[t], Weight[t]));
             water.SetVector(ShoreId, new Vector4(0.55f, 0.92f, 0.6f, 0.35f));
-            water.SetColor(DeepId, Color.Lerp(CalmDeep, StormDeep, storm));
-            water.SetColor(ScatterId, new Color(ScatterColour.r, ScatterColour.g, ScatterColour.b, ScatterGain * Mathf.Lerp(0.5f, 1f, storm)));
+            water.SetColor(DeepId, Color.Lerp(CalmDeep, StormDeep, turbidity));
+            water.SetColor(DeepGrazingId, Color.Lerp(CalmGrazing, StormGrazing, turbidity));
+            water.SetColor(ShadowTintId, Color.Lerp(CalmShadow, StormShadow, turbidity));
+            Color shallow = Color.Lerp(CalmShallow, StormShallow, turbidity);
+            shallow.a = turbidity;
+            water.SetColor(ShallowId, shallow);
+            water.SetColor(ScatterId, new Color(ScatterColour.r, ScatterColour.g, ScatterColour.b, ScatterGain * scatterScale));
             water.SetColor(FoamTintId, FoamTint);
             water.SetVector(AmbientId, new Vector4(skyIrradiance[0].r, skyIrradiance[0].g, skyIrradiance[0].b, 1f));
             // The shader works in linear light: the raw sRGB fog colour fogged the far sea paler and greyer than the terrain beside it,
@@ -444,6 +481,33 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             water.SetColor(FogColourId, RenderSettings.fogColor.linear);
             water.SetVector(FogId, new Vector4(RenderSettings.fogDensity, RenderSettings.fogMode == FogMode.ExponentialSquared ? 1f : 0f,
                 RenderSettings.fog ? 1f : 0f, main != null && main.cookie != null ? 1f : 0f));
+            water.SetVector(WeatherId, new Vector4(liquidRain, rainRipples, cover, 1f + Mathf.Clamp01(overcastShade)));
+            water.SetVector(Weather2Id, new Vector4(turbidity, sunElevation, gustBoost, stormCore));
+
+            Vector4 flashA = Vector4.zero, flashB = Vector4.zero;
+            if (weatherManager != null)
+            {
+                Vector4 fa = weatherManager.LightningFlashA;
+                if (fa.w > 0.001f) flashA = new Vector4((float)(fa.x - anchorX), fa.y, (float)(fa.z - anchorZ), fa.w);
+                Vector4 fb = weatherManager.LightningFlashB;
+                if (fb.w > 0.001f) flashB = new Vector4((float)(fb.x - anchorX), fb.y, (float)(fb.z - anchorZ), fb.w);
+            }
+            water.SetVector(FlashAId, flashA);
+            water.SetVector(FlashBId, flashB);
+
+            Texture2D weatherMap = weatherManager != null ? weatherManager.OceanWeatherMap : null;
+            Texture2D weatherProfiles = weatherManager != null ? weatherManager.OceanWeatherProfiles : null;
+            float weatherSpan = weatherManager != null ? weatherManager.OceanWeatherSpan : 0f;
+            if (weatherMap != null && weatherProfiles != null && weatherSpan > 1f)
+            {
+                water.SetTexture(WeatherMapId, weatherMap);
+                water.SetTexture(WeatherProfileId, weatherProfiles);
+                water.SetFloat(WeatherSpanId, weatherSpan);
+            }
+            else
+            {
+                water.SetFloat(WeatherSpanId, 0f);
+            }
             // The opaque underlay sits 2 m under the sea; sink it under the deepest trough or it cuts the troughs off.
             if (underlay != null) underlay.localPosition = underlayHome + Vector3.down * Mathf.Min(crest + 0.5f, 10f);
         }

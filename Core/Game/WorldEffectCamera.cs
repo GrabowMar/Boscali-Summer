@@ -9,7 +9,10 @@ namespace BoscaliSummer.Core.Game
             get
             {
                 var manager = SceneSingleton<CameraStateManager>.i;
-                return manager != null && manager.mainCamera != null ? manager.mainCamera : Camera.main;
+                Camera stock = manager != null ? manager.mainCamera : null;
+                if (stock != null && stock.isActiveAndEnabled) return stock;
+                Camera active = Camera.main;
+                return active != null ? active : stock;
             }
         }
 

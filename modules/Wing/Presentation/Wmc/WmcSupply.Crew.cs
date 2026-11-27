@@ -213,7 +213,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildPilot(AvFlow f)
         {
-            pilotHead = f.Add(new WmcHeadBar(f.Content, AvIcon.User, "2 · " + SupplyWords.PilotTitle));
+            pilotHead = f.Add(new WmcHeadBar(f.Content, AvIcon.User, SupplyWords.PilotTitle));
             // The card is not a click target (0.9 critique: a dead card click); only its arrows act.
             pilotCard = f.Add(new WmcPilotCard(f.Content, StepPilot));
             SetStepper(true, PilotTip);

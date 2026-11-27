@@ -218,10 +218,5 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         /// <summary>Hover help on a text field (the field frame raycasts; the tip bubbles up from it).</summary>
         private static void Tip(AvField field, string help) => AvHelpTip.Attach(field.Rect.gameObject, help);
 
-        private static void Show(AvPart part, bool visible)
-        {
-            // SetShown also tells the owning flow, so the page re-lays on the next tick instead of on the slow sweep.
-            part?.SetShown(visible);
-        }
     }
 }

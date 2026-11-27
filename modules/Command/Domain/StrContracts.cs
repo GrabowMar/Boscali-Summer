@@ -40,7 +40,7 @@ namespace BoscaliSummer.Modules.Command.Domain
     internal enum StrWhy : byte
     {
         None, NoBoard, Stale, Pending, Locked, Gone, NoOperation, SamePosture,
-        NotOffered, BoardFull, NoFunds, Cooldown, Forbidden, BadDraw,
+        NotOffered, BoardFull, NoFunds, Cooldown, Forbidden,
     }
 
     /// <summary>The answer of a gate or an action: allowed or the reason, plus whether a verb was sent.</summary>
@@ -58,7 +58,6 @@ namespace BoscaliSummer.Modules.Command.Domain
     {
         bool Pick(int proposalId, int revision);                    // ITheaterWarView.RequestPick (a redirect while an operation lives)
         bool Cancel(int operationId, int revision);                 // ITheaterWarView.RequestCancel (CALL OFF; REPLAN)
-        bool Draw(float startX, float startZ, float fixX, float fixZ);   // ITheaterWarView.RequestDraw (a pilot-drawn offensive)
         bool Posture(TheaterWarPosture posture);
         void Accept(int contractId);                                // ISecondaryObjectivesView.RequestAccept (void; the answer is ActionResult)
         bool BuyConvoy(int index);                                  // the game's own Player.CmdPurchaseConvoy: the pilot's funds pay, a depot delivers
@@ -76,7 +75,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         void Unhover(StrItemId id);
         void ClearSelection();
         StrAct Run(StrActionKind kind, StrItemId id, int arg = 0);   // the single command path
-        StrAct Draw(float startX, float startZ, float fixX, float fixZ);   // the map's DRAW: press on a front, release on the objective (global metres)
         void SetLayer(StrLayers layer, bool on);
     }
 

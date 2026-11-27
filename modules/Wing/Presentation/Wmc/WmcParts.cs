@@ -57,9 +57,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly AvFlow[] flows;
         private readonly RectTransform[] rects;
         private int current = -1;
-        private float seen = -1f;
+        private AvControl[] tabs;
 
-        public WmcSubPages(AvFlow outerFlow, AvTicker ticker, int pageIndex, int count)
+        public WmcSubPages(AvFlow outerFlow, int count)
         {
             outer = outerFlow;
             Rect = AvLay.Child(outerFlow.Content, "SubPages");
@@ -68,10 +68,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < count; i++)
             {
                 rects[i] = AvLay.Child(Rect, "Sub" + i);
-                flows[i] = new AvFlow(rects[i], ticker, outerFlow.Width);
+                flows[i] = new AvFlow(rects[i], outerFlow.Ticker, outerFlow.Width) { Host = this };
                 rects[i].gameObject.SetActive(false);
             }
-            ticker?.Add(pageIndex, AvTickRate.Fast, Watch);
         }
 
         /// <summary>The sub-tab strip a tabbed page opens with: one button per label, pressing one calls <paramref name="show"/>.</summary>
@@ -81,9 +80,24 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < specs.Length; i++)
             {
                 int k = i;
-                specs[i] = new AvControl.Spec(labels[i], () => show(k), AvButtonStyle.Default, icons[i]);
+                specs[i] = new AvControl.Spec(labels[i], () => show(k), AvButtonStyle.Quiet, icons[i]);
             }
-            return flow.Buttons(specs).Controls;
+            AvControl[] controls = flow.Buttons(specs).Controls;
+            foreach (AvControl control in controls)
+            {
+                control.SingleLine();
+                control.Cue = AvUiCue.Navigate;
+            }
+            return controls;
+        }
+
+        public static WmcSubPages AddTabbed(AvFlow flow, string[] labels, AvIcon[] icons)
+        {
+            var pages = new WmcSubPages(flow, labels.Length);
+            pages.tabs = Tabs(flow, labels, icons, pages.Show);
+            flow.Add(pages);
+            pages.Show(0);
+            return pages;
         }
 
         public int Current => current;
@@ -92,35 +106,37 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void Show(int i)
         {
-            if (i < 0 || i >= flows.Length) return;
+            if (i < 0 || i >= flows.Length || i == current) return;
+            bool switching = current >= 0;
+            if (switching)
+            {
+                WmcNameField.BlurAny();
+                AvPopup.CloseAny();
+            }
             current = i;
-            for (int k = 0; k < rects.Length; k++) rects[k].gameObject.SetActive(k == i);
-            seen = -1f;
-            outer.RequestRelayout();
+            for (int k = 0; k < rects.Length; k++)
+            {
+                rects[k].gameObject.SetActive(k == i);
+                if (tabs != null) tabs[k].Latched = k == i;
+            }
+            // A newly visible page needs its own geometry before the next rendered frame.
+            if (switching && outer.Content.gameObject.activeInHierarchy) outer.Relayout();
+            else outer.RequestRelayout();
         }
 
         public override float Measure(float width)
         {
             if (current < 0) return 0f;
-            flows[current].Relayout();
+            flows[current].EnsureLayout(width + 2f * AvGridTokens.Pad);
             return Mathf.Max(0f, flows[current].ContentHeight - 2f * AvGridTokens.Pad);
         }
 
         public override void Place(AvSlot slot)
         {
             float h = slot.H + 2f * AvGridTokens.Pad;
-            AvLay.Place(Rect, 0f, slot.Y - AvGridTokens.Pad, outer.Width, h);
-            for (int i = 0; i < rects.Length; i++) AvLay.Place(rects[i], 0f, 0f, outer.Width, h);
-        }
-
-        /// <summary>The current sub-page grew or shrank on its own (a list changed): the page's flow follows.</summary>
-        private void Watch()
-        {
-            if (current < 0) return;
-            float h = flows[current].ContentHeight;
-            if (Mathf.Abs(h - seen) < 0.5f) return;
-            seen = h;
-            outer.RequestRelayout();
+            float w = slot.W + 2f * AvGridTokens.Pad;
+            AvLay.Place(Rect, slot.X - AvGridTokens.Pad, slot.Y - AvGridTokens.Pad, w, h);
+            if (current >= 0) AvLay.Place(rects[current], 0f, 0f, w, h);
         }
     }
 

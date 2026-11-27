@@ -23,22 +23,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             TextMeshProUGUI t = AvText.Make(parent, name, role, text, align);
             AvText.Fit(t, false);
+            t.overflowMode = TextOverflowModes.Ellipsis;
             return t;
-        }
-
-        /// <summary>Sets <paramref name="full"/> and, when it is wider than <paramref name="avail"/>, cuts it a character at a time
-        /// (never with an ellipsis) until it fits: a slot too small for its words cuts them, it never spills.</summary>
-        public static void SetFit(TMP_Text t, string full, float avail)
-        {
-            full = full ?? "";
-            if (t.text != full) t.text = full;
-            if (avail < 8f) return;
-            string s = full;
-            for (int guard = 0; guard < 96 && s.Length > 1 && AvText.Width(t) > avail; guard++)
-            {
-                s = s.Substring(0, s.Length - 1).TrimEnd(' ', '·');
-                t.text = s;
-            }
         }
 
         /// <summary>A state class ("ok", "warn", "bad", "info", "inert" or a rail word) as a colour.</summary>
@@ -410,12 +396,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             x += tw > 0f ? tw + 8f : 0f;
             AvText.Set(s.Main, s.MainFull);
             float mw = Mathf.Min(AvText.Width(s.Main) + 4f, Mathf.Max(0f, (right - x) * 0.55f));
-            WmcSheet.SetFit(s.Main, s.MainFull, mw);
+            AvText.Set(s.Main, s.MainFull);
             mw = Mathf.Max(0f, Mathf.Min(AvText.Width(s.Main) + 4f, right - x));
             AvLay.Place(s.Main.rectTransform, x, 0f, mw, h);
             x += mw > 0f ? mw + 8f : 0f;
             float sw = Mathf.Max(0f, right - x);
-            WmcSheet.SetFit(s.Sub, s.SubFull, sw);
+            AvText.Set(s.Sub, s.SubFull);
             AvLay.Place(s.Sub.rectTransform, x, 0f, sw, h);
         }
 
@@ -524,7 +510,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvText.Set(pos, posFull);
             float pw = posFull.Length == 0 ? 0f : AvText.Width(pos) + 4f;
             float avail = Mathf.Max(0f, x + boxW - 8f - tx - (pw > 0f ? pw + 6f : 0f));
-            WmcSheet.SetFit(pick, pickFull, avail);
+            AvText.Set(pick, pickFull);
             float ww = Mathf.Min(avail, AvText.Width(pick) + 4f);
             AvLay.Place(pick.rectTransform, tx, 0f, ww, H);
             AvLay.Place(pos.rectTransform, tx + ww + 6f, 0f, pw, H);
@@ -1003,7 +989,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             float hw = AvText.Width(head) + 4f;
             AvLay.Place(head.rectTransform, 2f, 0f, hw, HeadH);
             float nw = Mathf.Max(0f, w - arrows - hw - 14f);
-            WmcSheet.SetFit(note, noteFull, nw);
+            AvText.Set(note, noteFull);
             AvLay.Place(note.rectTransform, hw + 8f, 0f, Mathf.Max(0f, w - arrows - hw - 10f), HeadH);
         }
 
@@ -1011,9 +997,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             float w = width > 0f ? (width - CellGap) * 0.5f : 200f;
             AvLay.Place(c.Rail.rectTransform, 0f, 0f, 2f, CellH);
-            WmcSheet.SetFit(c.Name, c.NameFull, w - 20f);
+            AvText.Set(c.Name, c.NameFull);
             AvLay.Place(c.Name.rectTransform, 8f, 1f, Mathf.Max(0f, w - 20f), 18f);
-            WmcSheet.SetFit(c.Verdict, c.VerdictFull, w - 14f);
+            AvText.Set(c.Verdict, c.VerdictFull);
             AvLay.Place(c.Verdict.rectTransform, 8f, 18f, Mathf.Max(0f, w - 14f), 15f);
         }
 

@@ -54,9 +54,9 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             return bundle != null && !string.IsNullOrEmpty(name) ? bundle.LoadAsset<T>(name) : null;
         }
 
-        /// <summary>Lays the game's own surfaces over the modelled shapes: concrete paving, hangar sheet and gabion
-        /// textures of the running game on the kit's KitModel material (its vertex alpha picks one per face). Until
-        /// the game has them loaded the shapes keep their plain colours; nothing of the game ships in the kit.</summary>
+        /// <summary>Lays the game's own surfaces over the modelled shapes: concrete paving, hangar sheet, gabion,
+        /// rock albedo and normal textures of the running game on the kit's KitModel material (its vertex alpha picks
+        /// one per face). Missing textures are skipped gracefully so the kit degrades cleanly across game updates.</summary>
         public static void Dress()
         {
             if (dressed) return;
@@ -67,29 +67,46 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 (material.GetTexture("_DetailTex") != null ? "on" : "off") +
                 ", normal " + (material.GetTexture("_DetailNormal") != null ? "on" : "off") +
                 ", decals " + (material.GetTexture("_DecalTex") != null ? "on" : "off") +
-                ", keyword " + (material.IsKeywordEnabled("_DETAIL") ? "on" : "off") + ".");
-            string[] wanted = { "concrete_paving_b", "hangar_b", "gabion_b" }, slots = { "_TexA", "_TexB", "_TexC" };
-            float[] gain = { 2.45f, 2.1f, 2.3f }; // one over each texture's mean, so the model keeps its colours
-            var found = new Texture2D[3];
+                ", textured " + (material.IsKeywordEnabled("_TEXTURED") ? "on" : "off") +
+                ", detailKw " + (material.IsKeywordEnabled("_DETAIL") ? "on" : "off") + ".");
+            string[] wanted = { "concrete_paving_b", "hangar_b", "gabion_b", "rocky_b" };
+            string[] slots = { "_TexA", "_TexB", "_TexC", "_TexD" };
+            float[] gain = { 2.45f, 2.1f, 2.3f, 2.2f }; // one over each texture's mean, so the model keeps its colours
+            string[] wantedNormals = { "concrete_paving_n", "hangar_n", "gabion_n", "rocky_n" };
+            string[] normalSlots = { "_TexAN", "_TexBN", "_TexCN", "_TexDN" };
+            var found = new Texture2D[4];
+            var foundNormals = new Texture2D[4];
             foreach (Texture2D texture in Resources.FindObjectsOfTypeAll<Texture2D>())
             {
                 int at = Array.IndexOf(wanted, texture.name);
                 if (at >= 0 && found[at] == null) found[at] = texture;
+                int nat = Array.IndexOf(wantedNormals, texture.name);
+                if (nat >= 0 && foundNormals[nat] == null) foundNormals[nat] = texture;
             }
-            if (found.Any(t => t == null))
+            if (found[0] == null && found[1] == null && found[2] == null && found[3] == null)
             {
-                Plugin.Logger?.LogInfo("[Maps] Scenery kit keeps its plain colours for now: the game has not loaded " + string.Join(", ", wanted.Where((w, i) => found[i] == null)) + ".");
+                Plugin.Logger?.LogInfo("[Maps] Scenery kit keeps its plain colours for now: the game has not loaded base textures yet.");
                 return; // looked for again with the next map
             }
-            Vector4 gains = Vector4.zero;
-            for (int i = 0; i < 3; i++)
+            Vector4 gains = Vector4.one;
+            for (int i = 0; i < 4; i++)
             {
-                material.SetTexture(slots[i], found[i]);
-                gains[i] = gain[i];
+                Texture2D tex = found[i];
+                if (i == 3 && tex == null) tex = found[0]; // rock falls back to concrete if rocky_b isn't resident
+                if (tex != null && material.HasProperty(slots[i]))
+                {
+                    material.SetTexture(slots[i], tex);
+                    gains[i] = gain[i];
+                }
+                else gains[i] = 1f;
+                Texture2D nrm = foundNormals[i];
+                if (nrm != null && material.HasProperty(normalSlots[i])) material.SetTexture(normalSlots[i], nrm);
             }
             material.SetVector("_TexGain", gains);
-            dressed = true;
-            Plugin.Logger?.LogInfo("[Maps] Scenery kit dressed in the game's concrete, hangar and gabion surfaces.");
+            dressed = found[0] != null && found[1] != null && found[2] != null;
+            Plugin.Logger?.LogInfo("[Maps] Scenery kit dressed: albedo [" +
+                string.Join(", ", wanted.Where((w, i) => found[i] != null)) + "], normals [" +
+                string.Join(", ", wantedNormals.Where((w, i) => foundNormals[i] != null)) + "].");
         }
 
         /// <summary>When the mod is torn down: the lookups read as empty again; objects already made from the kit keep

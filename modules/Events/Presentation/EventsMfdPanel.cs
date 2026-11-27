@@ -202,18 +202,17 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private void BuildDeskPage(AvFlow p)
         {
-            // The archive's eight drawers, in the library's own tab order: two rows of four. The case file below grows.
+            // A two-column directory keeps long shelf names legible beside their record counts.
             archiveSection = p.Section(AvIcon.Database, "FIELD ARCHIVE", "RECORDS HELD");
             tiles = new ArchiveTilePart[ArchiveShelf.Count];
             for (int i = 0; i < tiles.Length; i++)
             {
                 int shelf = i;
                 tiles[i] = new ArchiveTilePart(p.Content, ArchiveShelf.Icons[i], ArchiveShelf.Names[i],
-                    "DWR " + ArchiveUi.Two(i + 1), () => OpenArchive(shelf));
+                    () => OpenArchive(shelf));
                 tiles[i].Help = ArchiveShelf.Help[i] + " Opens the field archive at this drawer.";
             }
-            p.Row(tiles[0], tiles[1], tiles[2], tiles[3]);
-            p.Row(tiles[4], tiles[5], tiles[6], tiles[7]);
+            for (int i = 0; i < tiles.Length; i += 2) p.Row(tiles[i], tiles[i + 1]);
 
             // The case file takes the page's spare height only while it has a poster to show.
             deskCase = p.Add(new EventCaseFilePart(p.Content));

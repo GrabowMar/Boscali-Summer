@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildAirframe(AvFlow f)
         {
-            airHead = f.Add(new WmcHeadBar(f.Content, AvIcon.Plane, "1 · " + SupplyWords.AirframeTitle));
+            airHead = f.Add(new WmcHeadBar(f.Content, AvIcon.Plane, "AVAILABLE AIRCRAFT"));
             tiles = f.Add(new WmcAirGrid(f.Content, PickTile));
         }
 
@@ -97,7 +97,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildFit(AvFlow f)
         {
-            fitHead = f.Add(new WmcHeadBar(f.Content, AvIcon.Settings, "3 · " + SupplyWords.FitTitle));
+            fitHead = f.Add(new WmcHeadBar(f.Content, AvIcon.Settings, SupplyWords.FitTitle));
             fitRow = f.Add(new WmcTuneRow(f.Content, "STORES", new[] { "AUTO", "YOUR LOADOUT", "CUSTOM" }, PickFit));
             var fuel = new string[SupplyWords.FuelSteps.Length];
             for (int i = 0; i < fuel.Length; i++) fuel[i] = SupplyWords.FuelSteps[i] + " %";

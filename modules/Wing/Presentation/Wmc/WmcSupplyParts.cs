@@ -64,8 +64,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void Fit()
         {
             float w = Mathf.Max(0f, (width > 0f ? width : 400f) - 46f - 2f * ArrowW - 18f);
-            WmcSheet.SetFit(nameText, nameFull, w);
-            WmcSheet.SetFit(infoText, infoFull, w);
+            AvText.Set(nameText, nameFull);
+            AvText.Set(infoText, infoFull);
             AvLay.Place(nameText.rectTransform, 46f, 3f, w, 18f);
             AvLay.Place(infoText.rectTransform, 46f, 21f, w, 16f);
         }
@@ -175,7 +175,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             float w = width > 0f ? width : 400f;
             float tw = Mathf.Max(0f, w - Pad - ChipW - 8f - Pad - (icon.enabled ? 26f : 0f));
-            WmcSheet.SetFit(title, titleFull, tw);
+            AvText.Set(title, titleFull);
             AvLay.Place(title.rectTransform, Pad + ChipW + 8f, Pad, tw, TopH);
         }
 

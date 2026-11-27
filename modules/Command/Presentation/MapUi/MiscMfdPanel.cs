@@ -86,7 +86,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
             AvConsole c = AvConsole.Build(host, MfdSlots.Misc, "EXTRAS", Math.Max(1, tabs.Count), AvTokens.PanelWidth, height);
-            c.Chips(1)[0].Set("CHEATING · THESE ACTIONS ALTER THE MISSION", AvState.Caution);
+            if (tabs.Count > 0) c.Chips(1)[0].Set("CHEATING · THESE ACTIONS ALTER THE MISSION", AvState.Caution);
 #if !PUBLIC_RELEASE
             console = c;
 #endif
@@ -113,7 +113,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (tabs.Count == 0)
             {
                 AvFlow flow = c.Page(0);
-                flow.Section(AvIcon.Stack2, "EXTRAS", "NO PAGES AVAILABLE");
                 flow.Add(new AvNote(flow.Content, "No extra tools or incident files are enabled for this session."));
             }
 

@@ -117,6 +117,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal int TargetWidth => pass.Width;
         internal int TargetHeight => pass.Height;
         internal long TargetBytes => pass.TargetBytes;
+        internal Texture2D NearWeatherMap => Active ? near.Current : null;
+        internal Texture2D NearWeatherProfiles => Active ? near.CurrentProfiles : null;
+        internal float NearMapSpan => Active ? mapHalf * 2f : 0f;
 
         internal WeatherVolumeDressing(ManualLogSource log)
         {

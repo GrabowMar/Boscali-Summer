@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             subTabs[SubRoster].Help = "This mission's pilots and the selected pilot's personnel file: rank, record, ribbons, perks, SAR.";
             subTabs[SubStudio].Help = "The saved pilots and the pilot studio: identity, look, radio and bio.";
 
-            subPages = flow.Add(new WmcSubPages(flow, ticker, pageIndex, SubLabels.Length));
+            subPages = flow.Add(new WmcSubPages(flow, SubLabels.Length));
             BuildRoster(subPages.Flow(SubRoster));
             BuildStudio(subPages.Flow(SubStudio));
             ShowSub(SubRoster);

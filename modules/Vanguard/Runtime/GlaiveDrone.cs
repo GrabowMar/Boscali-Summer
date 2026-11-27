@@ -39,6 +39,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         /// <summary>Horizontal distance from the orbit centre to its objective (HAND-OFF still to run).</summary>
         public float Slide { get; private set; }
         public int RoundsLeft => GlaiveProfile.Rounds-(int)shots;
+        internal Transform PilotMuzzle => gun != null ? muzzle : null;
         public GlobalPosition Centre => centre;
         public float BankAngle => bank;
 
@@ -249,7 +250,22 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Vector3 to=aim-muzzle.position.ToGlobalPosition();
             if (!GlaiveProfile.CanFire(to.magnitude,-to.y,missile.speed,Vector3.Dot(muzzle.forward,Solution(to)))) return;
             if (Physics.Linecast(muzzle.position+to.normalized*.15f,aim.ToLocalPosition()-to.normalized*.4f,(int)PhysicsLayers.StaticsMask)) return;
-            Fire(target); shots++; gun.ammo=RoundsLeft; engaged=target;
+            FireRound(target);
+        }
+
+        internal void TickPiloted(bool trigger)
+        {
+            Vector2 pilotAim = GlaiveProfile.ClampGun(rest);
+            desiredYaw = pilotAim.x;
+            desiredPitch = pilotAim.y;
+            Pose(Time.fixedDeltaTime, true);
+            if (trigger && gun != null && RoundsLeft > 0 && Time.time >= nextShot) FireRound(null);
+            if (Time.time >= nextSnapshot) { nextSnapshot = Time.time + .2f; Publish(); }
+        }
+
+        private void FireRound(Unit aim)
+        {
+            Fire(aim); shots++; gun.ammo=RoundsLeft; engaged=aim;
             missile.rb.AddForceAtPosition(-muzzle.forward*GlaiveProfile.RecoilImpulse,muzzle.position,ForceMode.Impulse);
             nextShot=Time.time+GlaiveProfile.ShotInterval;
             VanguardStats.Bump("glaive2s.shots");

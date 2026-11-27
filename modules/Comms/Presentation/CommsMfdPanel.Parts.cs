@@ -6,8 +6,7 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Comms.Presentation
 {
-    // Local layout parts of the COM console. The kit has no part for a key grid with wide keys, a swatch-and-width
-    // line or a multi-column ledger row, so each is composed here from kit primitives.
+    // Layout parts for the shared map's drawing tools.
     internal sealed partial class CommsMfdPanel
     {
         /// <summary>
@@ -177,113 +176,5 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             }
         }
 
-        /// <summary>
-        /// One ledger line of the net: a tag, who, the words (they wrap, and the line grows), a trailing mono value,
-        /// and optionally a key at the far end. A column with no text gives its width back to the words. The line
-        /// is the kit's list row in every other respect: state rail, hover and click, hover help.
-        /// </summary>
-        private sealed class NetRow : AvPart
-        {
-            private const float PadX = 8f, PadY = 4f, Gap = 6f, KeyW = 58f, MinH = 26f, LineH = 18f;
-            private readonly AvFrame frame;
-            private readonly Image rail;
-            private readonly TMP_Text lead, who, text, trail;
-            private readonly float leadW, whoW, trailW;
-            private readonly bool tagLead;
-            private AvControl key;
-            private AvState state = AvState.Info;
-            private bool hover;
-            private AvSlot lastSlot;
-            private bool placed;
-
-            public NetRow(RectTransform parent, AvTextRole leadRole, float leadWidth, float whoWidth, float trailWidth, Action onClick = null)
-            {
-                leadW = leadWidth; whoW = whoWidth; trailW = trailWidth;
-                tagLead = leadRole == AvTextRole.Head;   // a stencilled tag carries the tone; a plain value (an age) does not
-                Rect = AvLay.Child(parent, "Net Row");
-                frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
-                AvLay.Fill(frame.rectTransform);
-                rail = AvLay.Solid(Rect, "Rail", Color.clear);
-                lead = AvText.Make(Rect, "Lead", leadRole);
-                who = AvText.Make(Rect, "Who", AvTextRole.Label);
-                text = AvText.Make(Rect, "Text", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
-                trail = AvText.Make(Rect, "Trail", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
-                AvText.Fit(lead, false); AvText.Fit(who, false); AvText.Fit(trail, false);
-                if (onClick != null)
-                {
-                    AvHit hit = AvHit.On(frame);
-                    hit.Hover = h => { hover = h; Restyle(); };
-                    hit.Click = e => onClick();
-                }
-                Restyle();
-            }
-
-            /// <summary>Hover help shown in the console footer.</summary>
-            public string Help { set { frame.raycastTarget = true; AvHelpTip.Attach(frame.gameObject, value); } }
-
-            /// <summary>Adds the far-end key (MUTE); the words and the other columns make room for it.</summary>
-            public AvControl AddKey(AvControl.Spec spec)
-            {
-                key = AvControl.Make(Rect, spec);
-                return key;
-            }
-
-            public void Set(string leadText, string whoText, string words, string trailText, AvState st)
-            {
-                bool changed = AvText.Set(lead, leadText);
-                changed |= AvText.Set(who, whoText);
-                changed |= AvText.Set(text, words);
-                changed |= AvText.Set(trail, trailText);
-                if (st != state) { state = st; Restyle(); }
-                if (!changed) return;
-                // A column that appears or vanishes narrows the words, so lay out inside the slot at once.
-                if (placed) Place(lastSlot);
-                Changed();
-            }
-
-            private float TextWidth(float width) =>
-                width - 2f * PadX - 4f
-                - (lead.text.Length > 0 ? leadW + Gap : 0f)
-                - (who.text.Length > 0 ? whoW + Gap : 0f)
-                - (trail.text.Length > 0 ? trailW + Gap : 0f)
-                - (key != null ? KeyW + Gap : 0f);
-
-            public override float Measure(float width) =>
-                Mathf.Max(MinH, 2f * PadY + AvText.Height(text, TextWidth(width)));
-
-            public override void Place(AvSlot s)
-            {
-                base.Place(s);
-                lastSlot = s; placed = true;
-                float tw = TextWidth(s.W), th = AvText.Height(text, tw);
-                bool multi = th > LineH + 2f;
-                float colY = multi ? PadY : (s.H - LineH) * 0.5f;
-                AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
-                float x = PadX + 4f;
-                if (lead.text.Length > 0) { AvLay.Place(lead.rectTransform, x, colY, leadW, LineH); x += leadW + Gap; }
-                if (who.text.Length > 0) { AvLay.Place(who.rectTransform, x, colY, whoW, LineH); x += whoW + Gap; }
-                AvLay.Place(text.rectTransform, x, multi ? PadY : (s.H - th) * 0.5f, Mathf.Max(0f, tw), th);
-                float right = s.W - PadX;
-                if (key != null) { AvLay.Place(key.Rect, right - KeyW, (s.H - 24f) * 0.5f, KeyW, 24f); right -= KeyW + Gap; }
-                if (trail.text.Length > 0) AvLay.Place(trail.rectTransform, right - trailW, colY, trailW, LineH);
-            }
-
-            public override void Restyle()
-            {
-                string st = hover ? "hover" : null;
-                AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(state), st);
-                frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
-                    r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
-                rail.color = AvStyleHost.Resolve(r.Rail, AvTheme.RailInfo);
-                bool plain = state == AvState.Info || state == AvState.Inert;
-                lead.color = !tagLead ? AvStyleHost.FuiInk("row-sub", AvTheme.Dim)
-                    : plain ? AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo)
-                    : AvStyleHost.FuiInk("row-value " + AvStates.Class(state), AvTheme.TextPrimary);
-                who.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
-                text.color = state == AvState.Inert ? AvStyleHost.FuiInk("row-sub", AvTheme.Dim) : AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
-                trail.color = AvStyleHost.FuiInk("row-value", AvTheme.TextPrimary);
-                if (key != null) key.Restyle();
-            }
-        }
     }
 }

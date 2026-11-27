@@ -12,31 +12,28 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
     [HarmonyAfter("com.marci.boscalisummer.module.autopilot")]
     internal static class DronePilotAxesPatch
     {
-        private static MethodBase TargetMethod() => AccessTools.Method(typeof(PilotPlayerState), nameof(PilotPlayerState.FixedUpdateState));
+        private static MethodBase TargetMethod() => AccessTools.Method(typeof(PilotPlayerState), nameof(PilotPlayerState.FixedUpdateState), new[] { typeof(Pilot) });
         private static bool Prepare() => TargetMethod() != null && DronePilot.Supported;
 
-        private static bool Prefix(PilotPlayerState __instance)
+        private static bool Prefix(Pilot pilot)
         {
-            DronePilot pilot = DronePilot.Active;
-            if (pilot == null || !pilot.Controls(__instance)) return true;
-            try { pilot.ReadPlayerAxes(__instance); return false; }
-            catch (Exception error) { PatchGuard.Report(nameof(DronePilotAxesPatch), error); pilot.Release(); return true; }
+            DronePilot station = DronePilot.Active;
+            if (station == null || !station.Holds(pilot)) return true;
+            try { station.HoldAircraft(); return false; }
+            catch (Exception error) { PatchGuard.Report(nameof(DronePilotAxesPatch), error); station.Release(); return true; }
         }
     }
 
     [HarmonyPatch]
     internal static class DronePilotActionsPatch
     {
-        private static MethodBase TargetMethod() => AccessTools.Method(typeof(PilotPlayerState), "PlayerControls");
+        private static MethodBase TargetMethod() => AccessTools.Method(typeof(PilotPlayerState), nameof(PilotPlayerState.UpdateState), new[] { typeof(Pilot) });
         private static bool Prepare() => TargetMethod() != null && DronePilot.Supported;
 
-        private static bool Prefix(PilotPlayerState __instance)
+        private static bool Prefix(Pilot pilot)
         {
-            DronePilot pilot = DronePilot.Active;
-            if (pilot == null || !pilot.Controls(__instance)) return true;
-            try { pilot.ReadPlayerActions(__instance); }
-            catch (Exception error) { PatchGuard.Report(nameof(DronePilotActionsPatch), error); pilot.Release(); }
-            return false;
+            DronePilot station = DronePilot.Active;
+            return station == null || !station.Holds(pilot);
         }
     }
 

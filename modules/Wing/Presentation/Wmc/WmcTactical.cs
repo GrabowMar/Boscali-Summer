@@ -1,4 +1,5 @@
 using NOAvionics;
+using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>ROSTER (was TACTICAL; spec 2026-10-04 §4.2, mockups board/orders.html, formation.html, route.html), the page the player spends most of the
@@ -27,14 +28,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private AvControl[] subTabs;
         private int sub = -1;
         private WmcContext last;
-        private bool relayout, tableOpen;
+        private bool relayout;
+        private readonly bool[] tableOpen = { true, false, false };
 
         public int Sub => sub;
 
-        public string Hint => last != null && last.Count == 0 && !last.Client
-            ? "No wingmen yet: CALL one on the WING row, requisition on SUPPLY, or use the radial menu."
-            : sub == SubFormation ? form.Hint : sub == SubRoute ? route.Hint
+        public string Hint => sub == SubFormation ? form.Hint : sub == SubRoute ? route.Hint
             : last != null && last.Client ? "Orders are host only for now."
+            : last == null || last.Count == 0 ? ""
             : "ORDERS TO picks who: ALL, an element, or a table row (shift adds). A profile sets how they fight.";
 
         public string Alert => alertText;
@@ -53,7 +54,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             BuildTable(flow);
 
-            subPages = flow.Add(new WmcSubPages(flow, ticker, pageIndex, SubLabels.Length));
+            subPages = flow.Add(new WmcSubPages(flow, SubLabels.Length));
             BuildOrders(subPages.Flow(SubOrders));
             form.Build(subPages.Flow(SubFormation), ticker, pageIndex);
             route.Build(subPages.Flow(SubRoute), ticker, pageIndex);
@@ -73,7 +74,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             sub = k;
             subPages.Show(k);
             for (int i = 0; i < subTabs.Length; i++) subTabs[i].Latched = i == k;
-            table.SetMode(k != SubOrders, !tableOpen);
             WmcNameField.BlurAny();
             if (last != null) Refresh(last);
             flow.RequestRelayout();
@@ -91,9 +91,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void Refresh(WmcContext c)
         {
             last = c;
+            LaunchRequest draft = default;
+            if (sub == SubOrders || c.Count == 0)
+                callBlocker = c.CanOrder ? OrderExecutor.CallBlocker(c.Wing, out draft) : WmcPostureActions.Cannot(c);
             // The alerts first: the table's summary line, the strip and the footer read this refresh's.
             RefreshAlertList(c);
             table.FlashUntil = flashUntil;
+            table.SetMode(c.Count > 0, !tableOpen[sub]);
+            if (c.Count == 0) table.SetCallAvailability(c, callBlocker, draft);
             table.Refresh(c, AlertWord(out AvState alertAs), alertAs);
             if (sub == SubOrders) RefreshOrders(c);
             else if (sub == SubFormation) form.Refresh(c);

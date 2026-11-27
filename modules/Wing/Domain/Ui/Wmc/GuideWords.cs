@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
     {
         public static readonly string[] Orders =
         {
-            "Pick who listens first: a table row, ALL or an element letter. The footer names the scope.",
+            "Select a flight-list row to address that aircraft. Shift-click adds another aircraft to the selection.",
         };
 
         public static readonly string[] Formation =
@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static readonly string[] Supply =
         {
-            "Tap an airframe tile, then work down: pilot, stores and fuel, launch base. Then REQUISITION at the top.",
+            "Choose an airframe, crew, base and equipment. REQUISITION sends the aircraft shown above.",
         };
     }
 }

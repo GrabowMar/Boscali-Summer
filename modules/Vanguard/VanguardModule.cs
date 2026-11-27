@@ -97,7 +97,11 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<Presentation.AlexHud>(60);
             context.AddSceneService<Presentation.SkywellScopeFeed>(60);
             Networking.VanguardNet net = context.AddSceneService<Networking.VanguardNet>(60);
-            context.AddSceneService<DronePilot>(60).Configure(net);
+            var droneControls = context.Settings.DroneControls;
+            droneControls.Register(context);
+            context.AddSceneService<DronePilot>(60).Configure(net, droneControls);
+            context.AddSceneService<Presentation.DroneFlightView>(60);
+            context.AddSceneService<Presentation.DroneFlightHud>(60).Configure(droneControls);
             Presentation.DroneLinkService drones = context.AddSceneService<Presentation.DroneLinkService>(60);
             drones.Configure(net);
             context.AddService<IDroneCommand>(drones);

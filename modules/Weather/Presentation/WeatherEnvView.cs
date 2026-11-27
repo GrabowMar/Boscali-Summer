@@ -111,10 +111,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         private void BuildPage(AvFlow p)
         {
-            Track(p.Section(AvIcon.Cloud, "SKY NOW", "OVER YOUR POSITION"));
-            stateRow = Track(p.Add(new EnvStateRow(p.Content)));
-            briefRow = Track(p.Add(new AvRow(p.Content)));
-            briefRow.Help = "STORY: the weather system the tape is playing and the part of it over you. The line under it is the next front ahead: its distance across the line and the side it comes from.";
+            Track(p.Section(AvIcon.Cloud, "CURRENT CONDITIONS", "AT YOUR POSITION"));
             card = Track(p.Add(new EnvConditionCard(p.Content)));
             card.SetHelp("SKY: the sky code and word for the current weather state, how much of the sky the cloud covers, and the flight category from visibility and ceiling (VFR good, MVFR marginal, IFR poor, LIFR very poor).");
             visGauge = new AvGauge(p.Content, "VIS KM");
@@ -124,6 +121,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             rainGauge.Help = "RAIN: current rain intensity, as a percentage of the heaviest rain.";
             nextGauge.Help = "NEXT: distance to the next front ahead, with the ladder full at 150 km. HELD means the tape is not moving, so nothing is coming.";
             p.Row(Track(visGauge), Track(rainGauge), Track(nextGauge));
+            stateRow = Track(p.Add(new EnvStateRow(p.Content)));
             viewAirRow = Track(p.Add(new AvRow(p.Content)));
             viewAirRow.Help = "VIEW AIR: conditions at the current camera. Cloud density follows visible cloud bodies, including clear gaps. Rain is falling precipitation; cloud moisture can wet the glass without rain. Temperature is the local weather estimate at altitude.";
             // Storm risk is only drawn while it is real; it is not a page part so the empty state cannot re-show it.
@@ -131,6 +129,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             stormBar.SetShown(false);
             profile = Track(p.Add(new EnvProfile(p.Content)));
             profile.SetHelp("PROFILE: the cloud layer as a slab between its base and top on a metre scale, with your altitude as a dashed level. The line under the top edge says whether you are below, inside or above the cloud.");
+            briefRow = Track(p.Add(new AvRow(p.Content)));
+            briefRow.Help = "The weather system overhead, its movement and the next front.";
             outlook = Track(p.Add(new EnvOutlookStrip(p.Content, WeatherForecast.DefaultOffsetsMinutes.Length)));
             outlook.SetHelp("NEXT 60 MIN: the expected sky now and at +5, +10, +15, +30 and +60 minutes. The bar under each icon is the chance of rain; amber or red marks rain or a storm.");
             Track(p.Section(AvIcon.Wind, "SUN · MOON · WIND"));
@@ -208,7 +208,9 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             if (d.Story.Length > 0 && (briefStory != d.Story || briefRole != d.Role || briefMarker != d.NextMarker || briefHeld != d.ForecastHeld))
             {
                 briefStory = d.Story; briefRole = d.Role; briefMarker = d.NextMarker; briefHeld = d.ForecastHeld;
-                briefRow.Set("STORY · " + d.Story.ToUpperInvariant() + (d.Role.Length > 0 ? " · " + d.Role.ToUpperInvariant() : ""),
+                string role = d.Role.Length > 0 && !string.Equals(d.Role, d.Story, StringComparison.OrdinalIgnoreCase)
+                    ? " · " + d.Role.ToUpperInvariant() : "";
+                briefRow.Set(d.Story.ToUpperInvariant() + role,
                     d.NextMarker, d.ForecastHeld ? "HELD" : "MOVING", d.ForecastHeld ? AvState.Inert : AvState.Info);
             }
 

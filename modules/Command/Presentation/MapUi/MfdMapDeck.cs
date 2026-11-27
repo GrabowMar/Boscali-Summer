@@ -36,9 +36,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static GameObject tray;
 
         private static Image backdropBaseImage;
-        private static Image backdropGradientImage;
+        private static AvFrost backdropFrost;
         private static Image trayBaseImage;
-        private static Image trayGradientImage;
 
         private static Image terrainImage;
         private static bool terrainWasEnabled;
@@ -73,27 +72,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (backdropBaseImage != null)
             {
                 // With frosted glass the tint is opaque (no sharp world under the blur); MFD OPACITY then sets how much blur bleeds through.
-                bool frosted = AvBlurSource.Enabled;
-                backdropBaseImage.color = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(frosted ? 1f : opacity);
-                AvFrost frost = backdrop.GetComponentInChildren<AvFrost>(true);
-                if (frost != null) frost.Bleed = Mathf.Clamp(1.33f - opacity, .38f, .8f);
-            }
-
-            if (backdropGradientImage != null)
-            {
-                backdropGradientImage.color = Color.white.WithAlpha(Mathf.Clamp01(opacity * 0.75f));
+                Color tint = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(opacity);
+                if (backdropFrost != null)
+                {
+                    backdropFrost.SetBackdrop(backdropBaseImage, tint);
+                    backdropFrost.Bleed = 1f - opacity;
+                }
+                else backdropBaseImage.color = tint;
             }
 
             if (trayBaseImage != null)
             {
-                float trayAlpha = mapTrayOpacity;
-                trayBaseImage.color = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(trayAlpha);
-            }
-
-            if (trayGradientImage != null)
-            {
-                float gradAlpha = 0.35f * mapTrayOpacity;
-                trayGradientImage.color = Color.white.WithAlpha(gradAlpha);
+                trayBaseImage.color = AvStyleHost.FuiColor("surface-sunken", AvTheme.Ground).WithAlpha(mapTrayOpacity);
             }
 
             // Sync DynamicMap terrain image. Map darkening is the tray behind the viewport;
@@ -149,6 +139,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             ConfigureBackdrop(backdropRect);
             ConfigureTray(trayRect, columns);
+            ApplyAppearance();
 
             // The tray shares the map canvas, where sibling order is draw order. Its root is
             // first, so DynamicMap and every other map-canvas control retain their normal
@@ -164,9 +155,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             DestroyOwned(ref backdrop);
             DestroyOwned(ref tray);
             backdropBaseImage = null;
-            backdropGradientImage = null;
+            backdropFrost = null;
             trayBaseImage = null;
-            trayGradientImage = null;
 
             if (terrainImage != null)
             {
@@ -282,15 +272,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             backdropBaseImage.type = Image.Type.Simple;
             backdropBaseImage.raycastTarget = false;
             backdropBaseImage.enabled = true;
-            AvSurfaceGradient.Apply(backdropBaseImage, Color.white, (Color.white * .72f).WithAlpha(1f));
-
-            // Frosted glass: the blurred world over the opaque deck tint, under the screen gradient.
-            if (root.GetComponentInChildren<AvFrost>(true) == null) AvFrost.Add(root, "Frost", .38f).Rect.SetAsFirstSibling();
-
-            if (backdropGradientImage == null || backdropGradientImage.transform.parent != root)
-                backdropGradientImage = CreateGradient(root, "ScreenGradient", Color.white.WithAlpha(0.38f));
-
-            ApplyAppearance();
+            // The gradient shades the selected theme directly. A second baked ground used to
+            // cover both this tint and its opacity setting after a palette change.
+            AvSurfaceGradient.Apply(backdropBaseImage, Color.white, new Color(.78f, .83f, .88f, 1f));
+            if (backdropFrost == null || backdropFrost.Rect.parent != root)
+                backdropFrost = AvFrost.Add(root, "Frost", 0f);
         }
 
         private static void ConfigureTray(RectTransform root, MfdLayout.Columns columns)
@@ -310,26 +296,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             trayBaseImage.type = Image.Type.Simple;
             trayBaseImage.raycastTarget = false;
             trayBaseImage.enabled = true;
-
-            if (root.childCount == 0)
-                trayGradientImage = CreateGradient(root, "MapTrayGradient", Color.white.WithAlpha(0.50f));
-
-            ApplyAppearance();
-        }
-
-        private static Image CreateGradient(RectTransform parent, string name, Color color)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-            RectTransform rt = go.GetComponent<RectTransform>();
-            rt.SetParent(parent, worldPositionStays: false);
-            AvLay.Fill(rt);
-
-            Image image = go.GetComponent<Image>();
-            image.sprite = AvSprites.GroundGradient;
-            image.type = Image.Type.Simple;
-            image.color = color;
-            image.raycastTarget = false;
-            return image;
         }
 
         private static void DestroyOwned(ref GameObject root)

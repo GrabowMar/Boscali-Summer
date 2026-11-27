@@ -54,6 +54,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         public SentinelPhase Phase { get; private set; }
         public int Rounds { get; private set; } = SentinelProfile.Rounds;
+        internal Transform PilotMuzzle => gun != null ? muzzle : null;
         private uint shots, seenShots;
         private bool configured, hasSnapshot;
         private Unit launchTarget, designated, engaged;
@@ -375,6 +376,21 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             float pitchDeg = SentinelProfile.Angles(missile.transform.InverseTransformDirection(aimDir)).y;
             bool visible = !Physics.Linecast(muzzle.position + aimDir * .5f, engaged.transform.position - to.normalized * 3f, (int)PhysicsLayers.StaticsMask);
             if (!SentinelProfile.CanFire(to.magnitude, pitchDeg, Vector3.Dot(muzzle.forward, aimDir), visible, Spin(now), Rounds)) return;
+            FireRound(now);
+        }
+
+        internal void TickPiloted(bool trigger)
+        {
+            engaged = null;
+            desiredYaw = desiredPitch = 0f;
+            Pose(Time.fixedDeltaTime);
+            float now = Time.time;
+            if (trigger && gun != null && Rounds > 0 && now >= nextShot) FireRound(now);
+            if (now >= nextSnapshot) { nextSnapshot = now + .2f; Publish(); }
+        }
+
+        private void FireRound(float now)
+        {
             Fire(shots % SentinelProfile.BurstRounds == 0);
             Rounds--;
             shots++;

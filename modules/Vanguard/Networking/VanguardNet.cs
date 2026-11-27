@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Net;
+using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Runtime;
 using Mirage;
 using Mirage.Serialization;
@@ -34,12 +35,13 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         public byte Protocol;
         public uint DroneId, Lease, Sequence;
         public float Pitch, Roll, Yaw, Throttle;
+        public byte FireWeapon;
     }
 
     /// <summary>The server resolves the authenticated player for each order and owns sharing and pilot leases.</summary>
     internal sealed class VanguardNet : MonoBehaviour, ISceneService
     {
-        internal const byte ProtocolVersion = 6;
+        internal const byte ProtocolVersion = 7;
         private const float OrderInterval = 0.2f, ResendInterval = 2f, InputInterval = 0.025f;
 
         private readonly SenderThrottle throttle = new SenderThrottle();
@@ -111,6 +113,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     writer.WriteSingle(value.Roll);
                     writer.WriteSingle(value.Yaw);
                     writer.WriteSingle(value.Throttle);
+                    writer.WriteByte(value.FireWeapon);
                 },
                 reader =>
                 {
@@ -120,6 +123,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     {
                         Protocol = protocol, DroneId = reader.ReadPackedUInt32(), Lease = reader.ReadPackedUInt32(), Sequence = reader.ReadPackedUInt32(),
                         Pitch = reader.ReadSingle(), Roll = reader.ReadSingle(), Yaw = reader.ReadSingle(), Throttle = reader.ReadSingle(),
+                        FireWeapon = reader.ReadByte(),
                     };
                 });
         }
@@ -179,7 +183,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             return Send(new VanguardDroneOrder { Protocol = ProtocolVersion, Action = (byte)action, UnitId = drone.persistentID.Id });
         }
 
-        internal static bool SendDroneControls(Missile drone, Vector3 axes, float throttle)
+        internal static bool SendDroneControls(Missile drone, Vector3 axes, float throttle, DroneWeapon fireWeapon = DroneWeapon.None)
         {
             if (!DroneRoster.TryGet(drone, out DroneRoster.Entry entry) ||
                 !GameManager.GetLocalPlayer(out Player player) || !entry.ControlledBy(player)) return false;
@@ -187,6 +191,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             {
                 Protocol = ProtocolVersion, DroneId = drone.persistentID.Id, Lease = entry.Lease, Sequence = ++entry.SentSequence,
                 Pitch = axes.x, Yaw = axes.y, Roll = axes.z, Throttle = throttle,
+                FireWeapon = (byte)fireWeapon,
             };
             if (GameAccess.IsServer()) return ApplyControls(player, entry, message);
             return Send(message, Channel.Unreliable);
@@ -221,7 +226,11 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             if (resend) nextResend = now + ResendInterval;
             foreach (DroneRoster.Entry entry in DroneRoster.LiveEntries)
             {
-                bool released = entry.Occupied && (!entry.ValidPilot || entry.InputExpired(now));
+                // A paused or stalled host frame stops both the sender and receiver. The local station can
+                // resume the same seat after the hitch, while remote peers still have a heartbeat deadline.
+                DronePilot station = DronePilot.Active;
+                bool hosted = entry.Pilot != null && entry.Pilot.IsHostPlayer && station != null && station.Current == entry.Missile;
+                bool released = entry.Occupied && (!entry.ValidPilot || (!hosted && entry.InputExpired(now)));
                 if (released) entry.SetPilot(null);
                 if (released || resend && entry.OwnerId != 0) Publish(entry);
             }
@@ -231,7 +240,8 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         {
             if (!TrySender(sender, message.Protocol, out Player player) || message.Action > (byte)DroneAction.Release) return;
             DroneAction action = (DroneAction)message.Action;
-            if (!throttle.Allow(DroneRoster.PlayerId(player), Time.unscaledTime, OrderInterval)) return;
+            // A pilot can return immediately, even just after taking the seat.
+            if (action != DroneAction.Release && !throttle.Allow(DroneRoster.PlayerId(player), Time.unscaledTime, OrderInterval)) return;
             if (action >= DroneAction.Share)
             {
                 if (FindDrone(message.UnitId, out DroneRoster.Entry entry)) ApplyDroneAction(player, entry, action);
@@ -290,9 +300,9 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         private static bool ApplyControls(Player player, DroneRoster.Entry entry, VanguardDroneControls message)
         {
             if (!entry.ControlledBy(player) || !entry.ValidPilot || message.Lease != entry.Lease ||
-                !Axis(message.Pitch) || !Axis(message.Roll) || !Axis(message.Yaw) ||
+                !Axis(message.Pitch) || !Axis(message.Roll) || !Axis(message.Yaw) || message.FireWeapon > (byte)DroneWeapon.Guided ||
                 !(message.Throttle >= 0f && message.Throttle <= 1f) || !entry.AcceptInput(message.Sequence, Time.unscaledTime)) return false;
-            DronePilot.Receive(entry.Missile, player, new Vector3(message.Pitch, message.Yaw, message.Roll), message.Throttle);
+            DronePilot.Receive(entry.Missile, player, new Vector3(message.Pitch, message.Yaw, message.Roll), message.Throttle, (DroneWeapon)message.FireWeapon);
             return true;
         }
 

@@ -151,7 +151,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             // Inside gun range the REMORA points its nose at the lead point, so the fixed gun bears.
             if (phase == RemoraPhase.Engage && gunReady && FastMath.InRange(aim, pos, RemoraArcher.GunRange * 1.3f)) aim = GunLead(aim, vel, pos);
             if (!ramHoming) missile.SetAimpoint(aim, vel);
-            if (phase == RemoraPhase.Engage && left > 0) TryDroneShot(aim - pos);
+            if (phase == RemoraPhase.Engage && left > 0) TryDroneShot(target, aim - pos);
             return true;
         }
 
@@ -268,7 +268,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             PublishArcher();
         }
 
-        private void TryDroneShot(Vector3 toTarget)
+        private void TryDroneShot(Unit target, Vector3 toTarget, bool manual = false)
         {
             int rounds = manta ? MantaRules.Rounds : RemoraArcher.Rounds;
             int left = DroneRounds.Left(archerFired, rounds);
@@ -282,7 +282,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             bool canFire = manta
                 ? MantaRules.CanFire(range, offNose, now - archerLastShot, left, tracked)
                 : RemoraArcher.CanFire(range, offNose, now - archerLastShot, left, tracked, target is Missile ? RemoraArcher.DefenceCone : RemoraArcher.FireCone);
-            if (!canFire || launcher == null || launcher.disabled) return;
+            if (!canFire || (!manual && (launcher == null || launcher.disabled))) return;
             float since = SinceRound(target, now);
             // Shoot, look, then shoot; never at an inbound missile, which will not wait.
             if (!(target is Missile) && DroneRounds.HoldForResult(since < float.MaxValue, since, manta ? MantaRules.LookSeconds : RemoraArcher.LookSeconds)) return;
@@ -364,8 +364,13 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Vector3 to = GunLead(TargetPosition(out Vector3 vel), vel, pos) - pos;
             float now = Time.timeSinceLevelLoad;
             if (!RemoraArcher.CanGun(true, to.magnitude, Vector3.Angle(missile.transform.forward, to), gunAmmo, now - lastGunShot, gunShots)) return;
+            FireRemoraGun(now, target);
+        }
+
+        private void FireRemoraGun(float now, Unit aimTarget)
+        {
             gunAim.SetPositionAndRotation(gun.transform.position, Quaternion.LookRotation(missile.transform.forward, missile.transform.up));
-            FireGun(gun, ref gunBullets, gunAim, missile, target, gunShots % RemoraArcher.GunBurst == 0);
+            FireGun(gun, ref gunBullets, gunAim, missile, aimTarget, gunShots % RemoraArcher.GunBurst == 0);
             gunAmmo--;
             gunShots++;
             gun.ammo = gunAmmo;

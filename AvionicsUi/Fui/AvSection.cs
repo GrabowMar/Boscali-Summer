@@ -9,8 +9,7 @@ namespace NOAvionics
     {
         private const float Line = 22f;
         private readonly TMP_Text icon, title, caption;
-        private readonly Image rule, cap;
-        private readonly AvQuadGraphic wash;
+        private readonly Image rule;
         private bool twoLines;
         private bool placed;
         private AvSlot lastSlot;
@@ -19,19 +18,12 @@ namespace NOAvionics
         public AvSection(RectTransform parent, AvIcon glyph, string titleText, string captionText = null)
         {
             Rect = AvLay.Child(parent, "Section " + titleText);
-            // A soft wash of the key colour behind the title, strongest at the left edge: the eye finds each section's start at a glance.
-            var washGo = new GameObject("Wash", typeof(RectTransform), typeof(CanvasRenderer));
-            washGo.transform.SetParent(Rect, false);
-            wash = washGo.AddComponent<AvQuadGraphic>();
-            wash.raycastTarget = false;
             icon = AvIcons.Make(Rect, glyph, AvGridTokens.IconHead, Color.white);
             title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText);
-            title.font = AvType.Face(AvFace.Cond);
-            title.characterSpacing = 5f;
+            title.characterSpacing = 2f;
             AvText.Fit(title, false);
             caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, captionText ?? "", TextAlignmentOptions.MidlineRight);
             rule = AvLay.Solid(Rect, "Rule", Color.clear);
-            cap = AvLay.Solid(Rect, "Cap", Color.clear);
             Restyle();
         }
 
@@ -68,9 +60,6 @@ namespace NOAvionics
                 twoLines ? Mathf.Max(0f, slot.W - 22f) : captionW, twoLines ? captionH : Line);
             caption.alignment = twoLines ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.MidlineRight;
             AvLay.Place(rule.rectTransform, 0f, slot.H - 1f, slot.W, 1f);
-            AvLay.Place(cap.rectTransform, 0f, slot.H - 2f, 16f, 2f);
-            AvLay.Place(wash.rectTransform, 0f, 0f, slot.W, slot.H - 1f);
-            PaintWash();
         }
 
         public override void Restyle()
@@ -79,16 +68,6 @@ namespace NOAvionics
             icon.color = AvStyleHost.FuiInk("section-icon", AvTheme.RailInfo);
             caption.color = AvStyleHost.FuiInk("section-caption", AvTheme.Disabled);
             rule.color = AvStyleHost.FuiBorder("section", AvTheme.Hairline);
-            cap.color = icon.color;
-            if (placed) PaintWash();
-        }
-
-        private void PaintWash()
-        {
-            Color key = icon.color;
-            wash.Begin();
-            wash.Add(0f, 0f, lastSlot.W * 0.7f, Mathf.Max(0f, lastSlot.H - 1f), key.WithAlpha(AvBundle.OverlayAlpha(0.10f)), key.WithAlpha(0f), true);
-            wash.End();
         }
     }
 }

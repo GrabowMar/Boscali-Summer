@@ -43,6 +43,7 @@ namespace NOAvionics
         public float Width { get; private set; }
         public float Inner => math.Inner;
         public float ContentHeight { get; private set; }
+        internal event Action HeightChanged;
 
         private float viewport;
 
@@ -234,7 +235,11 @@ namespace NOAvionics
                 }
                 ContentHeight = math.ContentHeight;
                 Content.sizeDelta = new Vector2(Width, ContentHeight);
-                if (Host != null && Mathf.Abs(ContentHeight - before) > 0.5f) Host.Changed();
+                if (Mathf.Abs(ContentHeight - before) > 0.5f)
+                {
+                    Host?.Changed();
+                    HeightChanged?.Invoke();
+                }
             }
         }
 

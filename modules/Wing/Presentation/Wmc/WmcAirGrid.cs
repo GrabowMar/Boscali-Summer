@@ -7,13 +7,13 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>The airframe grid SUPPLY and LOADOUT share (remade 2026-11-05; replaces the paged one-line rows and LOADOUT's ◂ ▸ row):
-    /// every listed airframe at once as a tile, three across — silhouette, code, name, and a foot line (left: price or what it carries;
+    /// every listed airframe as a tile, one to three across by width — silhouette, code, name, and a foot line (left: price or what it carries;
     /// right: a status word in its level colour). The picked tile is lit and bracketed. Tiles are pooled and rebound only when their key
     /// changes; one inert line says why when nothing is listed. ponytail: a fixed pool (<see cref="Capacity"/>); a longer list shows its
     /// first tiles only — grow the pool if the game ever lists more airframes.</summary>
     internal sealed class WmcAirGrid : AvPart
     {
-        public const int Capacity = 30, Columns = 3;
+        public const int Capacity = 30;
         private const float TileH = 58f, Gap = 4f;
 
         private sealed class Tile
@@ -129,20 +129,24 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public override float Measure(float w)
         {
             if (empty) return Mathf.Max(WmcSheet.RowH, AvText.Height(emptyText, w - 16f) + 10f);
-            int rows = (ShownCount() + Columns - 1) / Columns;
+            int columns = Columns(w);
+            int rows = (ShownCount() + columns - 1) / columns;
             return rows == 0 ? 0f : rows * (TileH + Gap) - Gap;
         }
+
+        private static int Columns(float width) => Mathf.Clamp(Mathf.FloorToInt((width + Gap) / (180f + Gap)), 1, 3);
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            tileW = AvFlowMath.ColumnWidth(s.W, Columns, Gap);
+            int columns = Columns(s.W);
+            tileW = AvFlowMath.ColumnWidth(s.W, columns, Gap);
             AvLay.Place(emptyText.rectTransform, 8f, 5f, Mathf.Max(0f, s.W - 16f), AvText.Height(emptyText, s.W - 16f));
             int at = 0;
             foreach (Tile t in tiles)
             {
                 if (!t.Shown) continue;
-                AvLay.Place(t.Root, at % Columns * (tileW + Gap), at / Columns * (TileH + Gap), tileW, TileH);
+                AvLay.Place(t.Root, at % columns * (tileW + Gap), at / columns * (TileH + Gap), tileW, TileH);
                 at++;
                 Fit(t);
             }
@@ -153,18 +157,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             float w = tileW, textX = 44f, textW = Mathf.Max(0f, w - textX - 6f);
             AvLay.Place(t.Rail.rectTransform, 0f, 0f, 3f, TileH);
             AvLay.Place(t.Icon.rectTransform, 8f, 6f, 30f, 30f);
-            WmcSheet.SetFit(t.Code, t.CodeFull, textW);
+            AvText.Set(t.Code, t.CodeFull);
             AvLay.Place(t.Code.rectTransform, textX, 4f, textW, 18f);
-            WmcSheet.SetFit(t.Name, t.NameFull, textW);
+            AvText.Set(t.Name, t.NameFull);
             AvLay.Place(t.Name.rectTransform, textX, 21f, textW, 15f);
             // The status word takes what it needs (at most 60 %), the foot (price, ON SUPPLY) the rest: neither is cut short.
             float inner = Mathf.Max(0f, w - 12f);
             AvText.Set(t.Status, t.StatusFull);
             float sw = Mathf.Min(inner * 0.55f, AvText.Width(t.Status) + 2f);
-            WmcSheet.SetFit(t.Status, t.StatusFull, sw);
             AvLay.Place(t.Status.rectTransform, w - 6f - sw, TileH - 19f, sw, 15f);
             float fw = Mathf.Max(0f, inner - sw - 2f);
-            WmcSheet.SetFit(t.Foot, t.FootFull, fw);
+            AvText.Set(t.Foot, t.FootFull);
             AvLay.Place(t.Foot.rectTransform, 7f, TileH - 19f, fw, 15f);
         }
 

@@ -67,33 +67,36 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         /// The one command entry, for the host's own pilot and for a client's intent alike. Guarded: a throw answers Invalid and propagates nothing, and a host
         /// whose staff is faulting or whose mission is over refuses with NotAllowed.
         /// </summary>
-        internal IntentReply ApplyIntent(FactionHQ hq, byte kind, int id, int revision, byte posture, in IntentActor actor,
-                                         float sx = 0f, float sz = 0f, float ox = 0f, float oz = 0f)
+        internal IntentReply ApplyIntent(FactionHQ hq, byte kind, int id, int revision, byte posture, IntentActor actor) =>
+            ApplyOrder(hq, (war, now) => Apply(war, kind, id, revision, posture, actor, now));
+
+        internal IntentReply ApplyDirectedOffensive(FactionHQ hq, float sx, float sz, float ox, float oz, IntentActor actor) =>
+            ApplyOrder(hq, (war, now) => StartDirectedOffensive(war, sx, sz, ox, oz, actor, now));
+
+        private IntentReply ApplyOrder(FactionHQ hq, Func<FactionWar, float, IntentReply> apply)
         {
             if (!Authoritative || MissionOver || hq?.faction == null || !wars.TryGetValue(hq.faction.factionName, out FactionWar war) ||
                 war.HQ == null || !war.Faults.Healthy) return new IntentReply(TheaterCommandCode.NotAllowed);
             float now = Time.timeSinceLevelLoad;
-            IntentActor who = actor;
             var reply = new IntentReply(TheaterCommandCode.Invalid);
-            if (!Guard.Run(war.Faults, now, () => reply = Apply(war, kind, id, revision, posture, who, now, sx, sz, ox, oz), LogFault, "command"))
+            if (!Guard.Run(war.Faults, now, () =>
+            {
+                reply = apply(war, now);
+                if (reply.Code == TheaterCommandCode.Accepted) Publish(war, now);
+            }, LogFault, "command"))
                 reply = new IntentReply(TheaterCommandCode.Invalid);
             return reply;
         }
 
-        private IntentReply Apply(FactionWar war, byte kind, int id, int revision, byte posture, in IntentActor actor, float now,
-                                  float sx, float sz, float ox, float oz)
+        private IntentReply Apply(FactionWar war, byte kind, int id, int revision, byte posture, in IntentActor actor, float now)
         {
-            IntentReply reply;
             switch (kind)
             {
-                case 0: reply = PickCard(war, id, revision, actor, false, false, now); break;
-                case 1: reply = CallOff(war, id, revision, actor, now); break;
-                case 2: reply = SetPosture(war, posture, now); break;
-                case 3: reply = DrawOperation(war, sx, sz, ox, oz, actor, now); break;
+                case 0: return PickCard(war, id, revision, actor, false, false, now);
+                case 1: return CallOff(war, id, revision, actor, now);
+                case 2: return SetPosture(war, posture, now);
                 default: return new IntentReply(TheaterCommandCode.Invalid);
             }
-            if (reply.Code == TheaterCommandCode.Accepted) Publish(war, now);
-            return reply;
         }
 
         /// <summary>
@@ -152,11 +155,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         }
 
         /// <summary>
-        /// A pilot's own offensive, drawn on the map: the live front nearest the press (within 8 km) carries it, its origin is the press and its fix is
-        /// pinned on the release instead of following the front. The ground's slots ride the front toward that fix, and the hold there decides SECURED.
+        /// A directed offensive starts on the live front within 8 km of its origin and has a fixed objective.
+        /// The ground's slots ride the front toward that fix, and the hold there decides SECURED.
         /// The same 120 s lock as a pick; a live operation is redirected.
         /// </summary>
-        private IntentReply DrawOperation(FactionWar war, float sx, float sz, float ox, float oz, in IntentActor actor, float now)
+        private IntentReply StartDirectedOffensive(FactionWar war, float sx, float sz, float ox, float oz, in IntentActor actor, float now)
         {
             if (!DrawnPlan.Valid(sx, sz, ox, oz)) return new IntentReply(TheaterCommandCode.Invalid, "DRAW 1.5 TO 30 KM");
             Operation live = war.Active;

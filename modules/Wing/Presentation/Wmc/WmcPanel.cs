@@ -16,8 +16,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — ROSTER · BEHAVIOUR ‖ SUPPLY (LOADOUT folded into SUPPLY 2026-11-15; the 2026-11-14
     /// panels fold moved the WING tab to PILOT STUDIO) on a kit v2
     /// <see cref="AvConsole"/> (display glass included), claimed through <see cref="BezelRegistry.Wmc"/>, refreshed at
-    /// 5 Hz. The header names the open tab (the live wing count leads the footer status; funds live on FAC), and three vitals
-    /// chips (FUEL MIN · AMMO MIN · THREAT) on every tab; there are no metric tiles. Every tab is an <see cref="IWmcPage"/> that builds into its console page's
+    /// 5 Hz. The header reports wing strength or link status, with fuel, ammo and threat chips on every tab.
+    /// Every tab is an <see cref="IWmcPage"/> that builds into its console page's
     /// <see cref="AvFlow"/>.</summary>
     internal sealed class WmcPanel : IWingService
     {
@@ -97,6 +97,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 WmcNameField.BlurAny();
                 tactical?.CloseWindows();
+                shownPage = -1;
             }
             wasVisible = visible;
             bool enabled = !gaveUp && WingSettings.Instance.ShowWmc.Value && CoreGameAccess.MfdAvailable;
@@ -287,7 +288,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             s.label = label;
             s.highlight = highlight;
             AvDisplayGlass.Attach(content);
-            shell.SetPage(WmcTabs.Roster);
             return s;
         }
 
@@ -342,6 +342,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (fitButton == null || step == fitStep) return;
             fitStep = step;
             fitButton.Label = FitLabels[step];
+            fitButton.Help = step == 0 ? "Frame your aircraft and wing on the map."
+                : step == 1 ? "Show the whole map." : "Follow your aircraft on the map.";
         }
 
         private void OnPage(int tab)
@@ -402,9 +404,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     if (pageFaults.Add(page)) WingLog.Logger.LogError("[WMC] the " + WmcTabs.Labels[page] + " page failed to refresh: " + e);
                 }
             }
+            bool emptyOrders = p is WmcTactical roster && roster.Sub == WmcTactical.SubOrders && context.Count == 0;
+            string[] guide = context.Client || emptyOrders ? null : GuideFor(p);
+            if (page != shownPage || !ReferenceEquals(guide, shownGuide)) { shell.Orders(page, guide); shownGuide = guide; }
             shownPage = page;
-            string[] guide = GuideFor(p);
-            if (!ReferenceEquals(guide, shownGuide)) { shell.Orders(page, guide); shownGuide = guide; }
             bool fresh = WingToast.Last != null && Time.unscaledTime - WingToast.LastAt < 6f;
             WriteStatus(p?.Alert, context.Map.Prompt(context.ScopeLabel), fresh ? WingToast.Last : p?.Hint ?? "");
         }
@@ -436,11 +439,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             int max = WingService.MaxMembers;
             int pending = !context.Client && SpawnService.Instance != null ? SpawnService.Instance.PendingTotal : 0;
-            // The live count leads the footer status (the header's left is the tab's own name).
+            // Keep the wing's identity and link status visible even while a hover tip owns the footer.
             if (Changed(0, context.Count * 100000 + max * 1000 + airborne * 100 + pending * 4 + (context.Client ? 2 : 0) + (context.Stale ? 1 : 0)))
             {
-                wingWords = WmcHeader.Title(context.Count, max, airborne, pending, context.Client, context.Stale, out string _);
-                statusAmbient = null; // the footer repaints with the new count
+                shell.SetTitle(WmcHeader.Title(context.Count, max, airborne, pending, context.Client, context.Stale, out _));
             }
             WingVitals v = WingVitals.Of(context.Rows, context.Count);
             int fuelKey = v.Count * 100000 + Percent(v.MinFuel) * 100 + (v.BingoSlot + 1) * 10 + v.JokerSlot + 1;
@@ -448,6 +450,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             int ammoKey = v.Count * 100000 + Percent(v.MinAmmo) * 100 + v.WinchesterSlot + 1;
             if (Changed(2, ammoKey)) Chip(1, WmcHeader.Ammo(v, out string s1), s1);
             int hostiles = context.Wing != null && !context.Client ? context.Wing.HostilesNear() : -1;
+            shell.SetChipsShown(v.Count > 0 || hostiles > 0);
             if (Changed(3, (hostiles + 1) * 100 + v.DefendingSlot + 1)) Chip(2, WmcHeader.Threat(v, hostiles, out string s2), s2);
         }
 
@@ -480,16 +483,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         /// <summary>The footer line: the armed-order prompt first, then an alert, else the page's ambient hint. Hover help replaces it
         /// while a control is hovered: kit v2 controls publish theirs to the console footer themselves (<see cref="AvHelpTip"/>).</summary>
-        private string statusAlert, statusPrompt, statusAmbient, wingWords = "";
+        private string statusAlert, statusPrompt, statusAmbient;
 
         private void WriteStatus(string alert, string prompt, string ambient)
         {
-            // Same inputs as the last refresh: skip the concatenation the footer would compare and drop.
             if (alert == statusAlert && prompt == statusPrompt && ambient == statusAmbient) return;
             statusAlert = alert; statusPrompt = prompt; statusAmbient = ambient;
             if (!string.IsNullOrEmpty(prompt)) shell.Footer.Set(prompt, AvState.Caution);
             else if (!string.IsNullOrEmpty(alert)) shell.Footer.Set(alert, AvState.Danger);
-            else shell.Footer.Set(string.IsNullOrEmpty(ambient) ? wingWords : wingWords + " · " + ambient, AvState.Inert);
+            else shell.Footer.Set(ambient, AvState.Inert);
         }
     }
 }

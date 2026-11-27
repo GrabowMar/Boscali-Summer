@@ -38,19 +38,6 @@ namespace BoscaliSummer.Modules.Command.Domain
             return Proposal(vm, id) != null ? Allowed : Gone();
         }
 
-        /// <summary>
-        /// DRAW on the map: the war must be current and taking orders, and no other pilot may hold the lock; there need be no proposal. The arrow's
-        /// length is checked on release (StrActions.Draw), the front under the press by the host.
-        /// </summary>
-        public static StrAct DrawGate(StrViewModel vm)
-        {
-            if (vm == null) return new StrAct(StrWhy.NoBoard, "NO BOARD YET");
-            if (vm.Mode != StrBoardMode.Operation && vm.Mode != StrBoardMode.Proposals && vm.Mode != StrBoardMode.NoOpening) return NoBoard(vm);
-            StrAct war = WarGate(vm);
-            if (!war.Allowed) return war;
-            return Locked(vm.Effort, out StrAct locked) ? locked : Allowed;
-        }
-
         private static bool Locked(StrEffortView e, out StrAct act)
         {
             act = Allowed;
@@ -224,22 +211,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                     return gate;
             }
         }
-
-        /// <summary>The map's DRAW released: the gate, then the arrow's length, then the verb. The host snaps the press to a front and answers.</summary>
-        public static StrAct Draw(StrViewModel vm, IStrVerbs verbs, ref StrUiState ui, float sx, float sz, float ox, float oz, float nowUnscaled)
-        {
-            StrAct gate = StrGate.DrawGate(vm);
-            if (!gate.Allowed) return gate;
-            float dx = ox - sx, dz = oz - sz, d2 = dx * dx + dz * dz;
-            if (!(d2 >= TheaterDrawLimits.MinimumMetres * TheaterDrawLimits.MinimumMetres))
-                return new StrAct(StrWhy.BadDraw, "TOO SHORT" + StrWords.Dot + "DRAG AT LEAST " + Km(TheaterDrawLimits.MinimumMetres));
-            if (d2 > TheaterDrawLimits.MaximumMetres * TheaterDrawLimits.MaximumMetres)
-                return new StrAct(StrWhy.BadDraw, "TOO LONG" + StrWords.Dot + Km(TheaterDrawLimits.MaximumMetres) + " AT MOST");
-            if (verbs == null) return Declined();
-            return verbs.Draw(sx, sz, ox, oz) ? Noted(ref ui, StrWhy.None, "OFFENSIVE SENT" + StrWords.Dot + "THE HOST ANSWERS NEXT", nowUnscaled, true) : Declined();
-        }
-
-        private static string Km(float metres) => (metres / 1000f).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " KM";
 
         private static StrAct Sent(string text) => new StrAct(StrWhy.None, text, true);
 

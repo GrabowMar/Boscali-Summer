@@ -30,242 +30,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// The mission hero card: mission name and clock, the lead objective (its type word, title,
-        /// progress and nearest fix), then the briefing text. One framed block, one glance.
-        /// </summary>
-        private sealed class MissionHeroPart : AvPart
-        {
-            private const float Pad = 12f, ClockW = 104f, PctW = 64f;
-            private readonly AvFrame frame;
-            private readonly TMP_Text keyIcon, key, clock, name, meta, objIcon, objWord, objPct, objTitle, fixKey, fixValue, situation, brief;
-            private readonly Image ruleTop, ruleBottom;
-            private readonly AvGaugeGraphic bar;
-            private bool hasBrief = true, hasObjective, hasFix;
-            private AvState objState = AvState.Info;
-
-            public MissionHeroPart(RectTransform parent)
-            {
-                Rect = AvLay.Child(parent, "MissionHero");
-                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f)); AvLay.Fill(frame.rectTransform);
-                frame.Bracket = 8f;
-                keyIcon = AvIcons.Make(Rect, AvIcon.Flag, AvGridTokens.IconHead, Color.white);
-                key = AvText.Make(Rect, "Key", AvTextRole.Micro, "OPERATION ORDER", TextAlignmentOptions.MidlineLeft);
-                clock = AvText.Make(Rect, "Clock", AvTextRole.DataStrong, "—", TextAlignmentOptions.MidlineRight);
-                name = AvText.Make(Rect, "Name", AvTextRole.Title, "LOADING MISSION", TextAlignmentOptions.TopLeft, true);
-                meta = AvText.Make(Rect, "Meta", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft, true);
-                ruleTop = AvLay.Solid(Rect, "RuleTop", Color.clear);
-                objIcon = AvIcons.Make(Rect, AvIcon.Target, AvGridTokens.IconHead, Color.white);
-                objWord = AvText.Make(Rect, "ObjWord", AvTextRole.Head, "", TextAlignmentOptions.MidlineLeft);
-                objPct = AvText.Make(Rect, "ObjPct", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
-                objTitle = AvText.Make(Rect, "ObjTitle", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
-                bar = MakeBar(Rect, "Bar", AvGaugeShape.Bar);
-                fixKey = AvText.Make(Rect, "FixKey", AvTextRole.Micro, "NEAREST FIX", TextAlignmentOptions.MidlineLeft);
-                fixValue = AvText.Make(Rect, "FixValue", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
-                ruleBottom = AvLay.Solid(Rect, "RuleBottom", Color.clear);
-                situation = AvText.Make(Rect, "Situation", AvTextRole.Micro, "SITUATION", TextAlignmentOptions.MidlineLeft);
-                brief = AvText.Make(Rect, "Brief", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
-                Restyle();
-            }
-
-            public void SetMission(string missionName, string modeLine, string clockText, string briefText, bool hasBriefText)
-            {
-                name.text = missionName ?? "";
-                key.text = string.IsNullOrEmpty(modeLine) ? "OPERATION ORDER" : "OPERATION ORDER  \u00b7  " + modeLine;
-                meta.text = "";
-                clock.text = clockText ?? "—";
-                brief.text = briefText ?? "";
-                brief.fontStyle = hasBriefText ? FontStyles.Normal : FontStyles.Italic;
-                if (hasBriefText != hasBrief) { hasBrief = hasBriefText; Restyle(); }
-                Changed();
-            }
-
-            /// <summary>The lead objective; a null title means there is none.</summary>
-            public void SetObjective(string title, string word, AvIcon icon, float fraction, string distance, AvState state)
-            {
-                bool has = !string.IsNullOrEmpty(title);
-                hasObjective = has;
-                hasFix = has && !string.IsNullOrEmpty(distance);
-                objTitle.text = has ? title : "NO ACTIVE OBJECTIVE";
-                objWord.text = has ? word ?? "" : "";
-                objPct.text = has ? AvNum.Percent(fraction) : "";
-                AvIcons.Set(objIcon, icon, AvGridTokens.IconHead);
-                bar.Value = has ? fraction : 0f;
-                fixValue.text = hasFix ? distance : "";
-                objState = state;
-                Restyle();
-                Changed();
-            }
-
-            private float Lay(float w, bool place)
-            {
-                float iw = w - 2f * Pad, y = 10f;
-                if (place)
-                {
-                    AvLay.Place(keyIcon.rectTransform, Pad, y + 1f, 16f, 16f);
-                    AvLay.Place(key, Pad + 22f, y, iw - 22f - ClockW, 18f);
-                    AvLay.Place(clock, w - Pad - ClockW, y, ClockW, 18f);
-                }
-                y += 22f;
-                float nh = AvText.Height(name, iw);
-                if (place) AvLay.Place(name, Pad, y, iw, nh);
-                y += nh + 2f;
-                float mh = meta.text.Length > 0 ? AvText.Height(meta, iw) : 0f;
-                if (place) AvLay.Place(meta, Pad, y, iw, mh);
-                y += mh + 8f;
-                if (place) AvLay.Place(ruleTop.rectTransform, Pad, y, iw, 1f);
-                y += 9f;
-
-                if (hasObjective)
-                {
-                    if (place)
-                    {
-                        AvLay.Place(objIcon.rectTransform, Pad, y + 1f, 16f, 16f);
-                        AvLay.Place(objWord, Pad + 22f, y, iw - 22f - PctW, 18f);
-                        AvLay.Place(objPct, w - Pad - PctW, y, PctW, 18f);
-                    }
-                    y += 20f;
-                    float th = AvText.Height(objTitle, iw);
-                    if (place) AvLay.Place(objTitle, Pad, y, iw, th);
-                    y += th + 6f;
-                    if (place) AvLay.Place(bar.rectTransform, Pad, y, iw, 4f);
-                    y += 4f + 6f;
-                    if (hasFix)
-                    {
-                        if (place)
-                        {
-                            AvLay.Place(fixKey, Pad, y, iw * 0.5f, 18f);
-                            AvLay.Place(fixValue, Pad + iw * 0.5f, y, iw * 0.5f, 18f);
-                        }
-                        y += 20f;
-                    }
-                }
-                else
-                {
-                    float th = AvText.Height(objTitle, iw);
-                    if (place) AvLay.Place(objTitle, Pad, y, iw, th);
-                    y += th + 4f;
-                }
-
-                float bh = brief.text.Length > 0 ? AvText.Height(brief, iw) : 0f;
-                if (bh > 0f)
-                {
-                    y += 2f;
-                    if (place) AvLay.Place(ruleBottom.rectTransform, Pad, y, iw, 1f);
-                    y += 9f;
-                    if (place) AvLay.Place(situation, Pad, y, iw, 14f);
-                    y += 16f;
-                    if (place) AvLay.Place(brief, Pad, y, iw, bh);
-                    y += bh;
-                }
-                return y + 12f;
-            }
-
-            public override float Measure(float width) => Lay(width, false);
-
-            public override void Place(AvSlot s)
-            {
-                base.Place(s);
-                bar.gameObject.SetActive(hasObjective);
-                objIcon.gameObject.SetActive(hasObjective);
-                objWord.gameObject.SetActive(hasObjective);
-                objPct.gameObject.SetActive(hasObjective);
-                fixKey.gameObject.SetActive(hasFix);
-                fixValue.gameObject.SetActive(hasFix);
-                ruleBottom.gameObject.SetActive(brief.text.Length > 0);
-                situation.gameObject.SetActive(brief.text.Length > 0);
-                Lay(s.W, true);
-            }
-
-            public override void Restyle()
-            {
-                AvStyle card = AvStyleHost.FuiStyle("card raised");
-                frame.Paint(AvStyleHost.Resolve(card.Background, AvTheme.SurfaceRaised), AvStyleHost.Resolve(card.Border, AvTheme.Frame));
-                frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
-                frame.SetVerticesDirty();
-                Color keyColor = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
-                keyIcon.color = keyColor; key.color = keyColor; fixKey.color = keyColor; situation.color = keyColor;
-                clock.color = AvStyleHost.FuiInk("readout", AvTheme.TextPrimary);
-                name.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
-                meta.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
-                Color hairline = AvStyleHost.FuiBorder("section", AvTheme.Hairline);
-                ruleTop.color = hairline; ruleBottom.color = hairline;
-                Color word = hasObjective ? StateFill(objState) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
-                objIcon.color = word; objWord.color = word;
-                objPct.color = AvStyleHost.FuiInk("row-value " + AvStates.Class(objState), AvTheme.TextPrimary);
-                objTitle.color = hasObjective ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
-                fixValue.color = AvStyleHost.FuiInk("row-value info", AvTheme.TextPrimary);
-                bar.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
-                bar.FillColor = bar.FillEnd = StateFill(objState);
-                bar.SetVerticesDirty();
-                brief.color = hasBrief ? AvStyleHost.FuiInk("row-sub", AvTheme.Dim) : AvStyleHost.FuiInk("section-caption", AvTheme.Disabled);
-            }
-        }
-
-        /// <summary>
-        /// The objectives tally: how many issued objectives are done, as a big mono fraction over one
-        /// segment per objective, with the nearest objective fix on the right.
-        /// </summary>
-        private sealed class ObjectiveTallyPart : AvPart
-        {
-            private const float Pad = 12f, SideW = 140f;
-            private readonly AvFrame frame;
-            private readonly TMP_Text value, caption, sideKey, sideValue;
-            private readonly AvGaugeGraphic segments;
-            private AvState state = AvState.Info;
-
-            public ObjectiveTallyPart(RectTransform parent)
-            {
-                Rect = AvLay.Child(parent, "ObjectiveTally");
-                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f)); AvLay.Fill(frame.rectTransform);
-                frame.Bracket = 8f;
-                value = AvText.Make(Rect, "Value", AvTextRole.Display, "0/0", TextAlignmentOptions.MidlineLeft);
-                caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, "TASKS DONE", TextAlignmentOptions.MidlineLeft);
-                sideKey = AvText.Make(Rect, "SideKey", AvTextRole.Micro, "NEAREST FIX", TextAlignmentOptions.MidlineRight);
-                sideValue = AvText.Make(Rect, "SideValue", AvTextRole.DataStrong, "—", TextAlignmentOptions.MidlineRight);
-                segments = MakeBar(Rect, "Segments", AvGaugeShape.Segments);
-                segments.SegmentGap = 3f;
-                Restyle();
-            }
-
-            public void Set(int done, int total, string nearest, AvState st)
-            {
-                value.text = AvNum.Fixed(done, 0) + "/" + AvNum.Fixed(total, 0);
-                sideValue.text = string.IsNullOrEmpty(nearest) ? "—" : nearest;
-                segments.Segments = Mathf.Clamp(total, 1, 16);
-                segments.Value = total > 0 ? done / (float)total : 0f;
-                segments.SetVerticesDirty();
-                if (st != state) { state = st; Restyle(); }
-            }
-
-            public override float Measure(float width) => 84f;
-
-            public override void Place(AvSlot s)
-            {
-                base.Place(s);
-                AvLay.Place(value, Pad, 8f, s.W - 2f * Pad - SideW, 32f);
-                AvLay.Place(caption, Pad, 40f, s.W - 2f * Pad - SideW, 16f);
-                AvLay.Place(sideKey, s.W - Pad - SideW, 12f, SideW, 16f);
-                AvLay.Place(sideValue, s.W - Pad - SideW, 28f, SideW, 20f);
-                AvLay.Place(segments.rectTransform, Pad, 62f, s.W - 2f * Pad, 8f);
-            }
-
-            public override void Restyle()
-            {
-                AvStyle card = AvStyleHost.FuiStyle("card");
-                frame.Paint(AvStyleHost.Resolve(card.Background, AvTheme.Surface), AvStyleHost.Resolve(card.Border, AvTheme.Hairline));
-                frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
-                frame.SetVerticesDirty();
-                value.color = AvStyleHost.FuiInk("readout", AvTheme.TextPrimary);
-                caption.color = AvStyleHost.FuiInk("readout-unit", AvTheme.Dim);
-                sideKey.color = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
-                sideValue.color = AvStyleHost.FuiInk("row-value info", AvTheme.TextPrimary);
-                segments.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
-                segments.FillColor = segments.FillEnd = StateFill(state);
-                segments.SetVerticesDirty();
-            }
-        }
-
-        /// <summary>
         /// The escalation ladder as one horizontal track: three gates (conventional, tactical, strategic)
         /// with a node, name, threshold and state word each. The lit track is the score's progress; every
         /// state reads as a word as well as a colour.
@@ -283,7 +47,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             public EscalationLadderPart(RectTransform parent)
             {
                 Rect = AvLay.Child(parent, "EscalationLadder");
-                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f)); AvLay.Fill(frame.rectTransform);
+                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(4f)); AvLay.Fill(frame.rectTransform);
                 track = AvLay.Solid(Rect, "Track", Color.clear);
                 lit = AvLay.Solid(Rect, "Lit", Color.clear);
                 for (int i = 0; i < 3; i++)
@@ -299,16 +63,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             public void SetRung(int rung, string threshold, string word, AvState state)
             {
-                thresholds[rung].text = threshold ?? "—";
-                words[rung].text = AvStates.Glyph(state) + (word ?? "—");
+                AvText.Set(thresholds[rung], threshold ?? "—");
+                AvText.Set(words[rung], word ?? "—");
                 if (states[rung] != state) { states[rung] = state; Restyle(); }
                 Changed();
             }
 
             public void SetFill(float value)
             {
-                fill = Mathf.Clamp01(value);
-                Restyle();
+                float next = Mathf.Clamp01(value);
+                if (Mathf.Approximately(fill, next)) return;
+                fill = next;
                 PlaceLit(Rect.rect.width);
             }
 
@@ -371,7 +136,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     names[i].color = reached ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                     thresholds[i].color = reached ? AvStyleHost.FuiInk("readout", AvTheme.TextPrimary) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                     words[i].color = states[i] == AvState.Inert
-                        ? AvStyleHost.FuiInk("section-caption", AvTheme.Disabled)
+                        ? AvStyleHost.FuiInk("row-sub", AvTheme.Dim)
                         : AvStyleHost.FuiInk("row-value " + AvStates.Class(states[i]), AvTheme.TextPrimary);
                 }
             }
@@ -384,13 +149,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// </summary>
         private sealed class ChecklistRow : AvPart
         {
-            private const float PadX = 12f, PadY = 6f, IconW = 26f, ValueW = 92f, BarH = 5f;
+            private const float PadX = 12f, PadY = 8f, IconW = 26f, BarH = 3f;
             private readonly AvFrame frame;
             private readonly Image rail;
             private readonly TMP_Text icon, title, sub, value;
             private readonly AvGaugeGraphic bar;
             private AvState state = AvState.Inert;
             private bool hasBar;
+            private float placedWidth;
 
             public ChecklistRow(RectTransform parent)
             {
@@ -398,7 +164,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 frame = AvFrame.Add(Rect, "Frame", default(AvChamfer)); AvLay.Fill(frame.rectTransform);
                 rail = AvLay.Solid(Rect, "Rail", Color.clear);
                 icon = AvIcons.Make(Rect, AvIcon.Circle, AvGridTokens.IconTool, Color.white);
-                title = AvText.Make(Rect, "Title", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
+                title = AvText.Make(Rect, "Title", AvTextRole.Head, "", TextAlignmentOptions.TopLeft, true);
                 sub = AvText.Make(Rect, "Sub", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
                 value = AvText.Make(Rect, "Value", AvTextRole.DataStrong, "", TextAlignmentOptions.TopRight);
                 AvText.Fit(value, false);
@@ -409,41 +175,51 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             /// <summary>Hover help shown in the console footer.</summary>
             public string Help { set { frame.raycastTarget = true; AvHelpTip.Attach(frame.gameObject, value); } }
 
-            public void Set(string titleText, string subText, string valueText, float fraction, bool showBar, AvState st)
+            public void Set(string titleText, string subText, string valueText, float fraction, bool showBar, AvIcon glyph, AvState st)
             {
-                title.text = titleText ?? "";
-                sub.text = subText ?? "";
-                value.text = valueText ?? "";
+                bool layoutChanged = AvText.Set(title, titleText);
+                layoutChanged |= AvText.Set(sub, subText);
+                layoutChanged |= AvText.Set(value, valueText);
+                layoutChanged |= hasBar != showBar;
                 bar.Value = fraction;
                 hasBar = showBar;
                 bar.gameObject.SetActive(showBar);
-                AvIcons.Set(icon, st == AvState.Ready ? AvIcon.CircleCheck : st == AvState.Danger ? AvIcon.X : AvIcon.Circle,
-                    AvGridTokens.IconTool);
-                state = st;
-                Restyle();
-                Changed();
+                AvIcons.Set(icon, glyph, AvGridTokens.IconTool);
+                if (state != st) { state = st; Restyle(); }
+                if (layoutChanged)
+                {
+                    if (placedWidth > 0f) Arrange(placedWidth, true);
+                    Changed();
+                }
             }
 
-            private float TextWidth(float w) => w - PadX - IconW - ValueW - 8f;
-
-            public override float Measure(float width)
-            {
-                float tw = TextWidth(width);
-                float h = PadY + AvText.Height(title, tw) + (sub.text.Length > 0 ? 2f + AvText.Height(sub, tw) : 0f) + PadY;
-                if (hasBar) h += BarH + 2f;
-                return Mathf.Max(AvGridTokens.Row + 4f, h);
-            }
+            public override float Measure(float width) => Arrange(width, false);
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                float tw = TextWidth(s.W), th = AvText.Height(title, tw);
+                placedWidth = s.W;
                 AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
-                AvLay.Place(icon.rectTransform, PadX, PadY - 1f, 20f, 20f);
-                AvLay.Place(title, PadX + IconW, PadY, tw, th);
-                AvLay.Place(sub, PadX + IconW, PadY + th + 2f, tw, sub.text.Length > 0 ? AvText.Height(sub, tw) : 0f);
-                AvLay.Place(value, s.W - PadX - ValueW, PadY, ValueW, 18f);
-                AvLay.Place(bar.rectTransform, PadX + IconW, s.H - BarH - 5f, s.W - PadX - IconW - PadX, BarH);
+                Arrange(s.W, true);
+            }
+
+            private float Arrange(float width, bool place)
+            {
+                float x = PadX + IconW, inner = Mathf.Max(1f, width - x - PadX);
+                float vw = Mathf.Min(inner * .44f, AvText.Width(value) + 3f);
+                float tw = Mathf.Max(1f, inner - vw - 8f);
+                float top = Mathf.Max(20f, Mathf.Max(AvText.Height(title, tw), AvText.Height(value, vw)));
+                float y = PadY + top + 2f;
+                float sh = sub.text.Length > 0 ? AvText.Height(sub, inner) : 0f;
+                if (place)
+                {
+                    AvLay.Place(icon.rectTransform, PadX, PadY, 18f, 18f);
+                    AvLay.Place(title, x, PadY, tw, top);
+                    AvLay.Place(value, width - PadX - vw, PadY, vw, top);
+                    AvLay.Place(sub, x, y, inner, sh);
+                    AvLay.Place(bar.rectTransform, x, y + sh + 4f, inner, BarH);
+                }
+                return y + sh + (hasBar ? 4f + BarH : 0f) + PadY;
             }
 
             public override void Restyle()

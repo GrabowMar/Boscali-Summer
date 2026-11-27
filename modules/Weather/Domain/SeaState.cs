@@ -146,5 +146,22 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Bounded stern trail in metres, longer for large or fast hulls.</summary>
         internal static float ShipWakeLength(float speed, float radius)
             => Math.Min(650f, Math.Max(40f, Math.Max(radius, 0f) * 3f + Math.Max(speed, 0f) * 7f));
+
+        /// <summary>Liquid rain fraction 0..1: freezing snow falls dry on the sea without triggering raindrop splash rings.</summary>
+        internal static float LiquidRain(float rain, float snow)
+            => Scalar.Clamp01(rain) * (1f - Scalar.Clamp01(snow));
+
+        /// <summary>Visibility of raindrop impact rings 0..1: crisp in calm-to-moderate rain, progressively masked by gale chop.</summary>
+        internal static float RainRippleIntensity(float liquidRain, float wind)
+            => Scalar.Clamp01(liquidRain) * Scalar.Lerp(1f, 0.35f, WeatherMath.Smoothstep(8f, 22f, wind));
+
+        /// <summary>Optical turbidity 0..1 from storminess, rain and cloud cover: shifts clear blue water toward churned storm slate-green.</summary>
+        internal static float Turbidity(float storminess, float rain, float cover)
+            => Scalar.Clamp01(0.60f * Scalar.Clamp01(storminess) + 0.25f * Scalar.Clamp01(rain) + 0.25f * Scalar.Clamp01(cover));
+
+        /// <summary>Subsurface wave translucency gain 0..1: bright emerald crests in sunlit clear air, suppressed under overcast and at night.</summary>
+        internal static float ScatterStrength(float storminess, float cover, float sunElevation)
+            => Scalar.Lerp(1.0f, 0.32f, Scalar.Clamp01(cover) * 0.7f + Scalar.Clamp01(storminess) * 0.3f)
+                * WeatherMath.Smoothstep(-0.04f, 0.22f, sunElevation);
     }
 }

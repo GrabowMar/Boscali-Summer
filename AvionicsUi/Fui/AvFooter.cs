@@ -198,10 +198,12 @@ namespace NOAvionics
             }
             order.enabled = showOrder;
             bool nextOrderOnly = showOrder && baseText.Length == 0;
+            bool showBadge = hovering || showOrder || baseValue.Length > 0;
+            badge.gameObject.SetActive(showBadge);
             sop.enabled = showOrder && !nextOrderOnly;
             if (!showOrder) art.SetPips(0, 0, 0f, 0f, 0f);
             AvLay.Place(text.rectTransform, Indent, y, colW, compact ? height : textH);
-            art.SetLayout(TagW, statusShown ? readingHeight : -1f);
+            art.SetLayout(showBadge ? TagW : 0f, statusShown ? readingHeight : -1f);
             // Without a status line the order occupies its place, so its tag belongs there too.
             if (orderOnly != nextOrderOnly) { orderOnly = nextOrderOnly; Restyle(); }
         }

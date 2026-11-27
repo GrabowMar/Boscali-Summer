@@ -30,6 +30,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 settings.Enabled.Value && hasMissionClock;
             CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
             Camera view = cameras != null ? cameras.mainCamera : null;
+            Camera renderView = WorldEffectCamera.Main;
             if (liveWeather && view != null && Field != null)
             {
                 GlobalPosition position = view.transform.GlobalPosition();
@@ -46,17 +47,16 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             }
             float atmosHaze = !SkyYielded && settings != null ? settings.AtmosphericHaze.Value : 0f;
             // Clouds, rain and terrain must read the same atmosphere for this frame.
-            if (liveWeather) { UpdateRainSystems(weatherTime); sunDisc.Tick(LevelInfo.i, view, viewTransmission); }
+            if (liveWeather) { UpdateRainSystems(weatherTime); sunDisc.Tick(LevelInfo.i, renderView, viewTransmission); }
             else { environmentSnapshot = default; TeardownRainSystems(); atmosphere.Restore(); HighAltitudeSky.Clear(); sunDisc.Release(); }
             if (!Application.isBatchMode && settings != null && settings.Enabled.Value) heatHaze.Update(Time.unscaledTime);
             else heatHaze.Restore();
-            sunShafts.Tick(LevelInfo.i, view, liveWeather && settings.SunShaftsEnabled.Value && !SkyYielded, viewTransmission, atmosHaze);
+            sunShafts.Tick(LevelInfo.i, renderView, liveWeather && settings.SunShaftsEnabled.Value && !SkyYielded, viewTransmission, atmosHaze);
             bool wantClouds = liveWeather && settings.CinematicCloudsEnabled.Value && !SkyYielded;
             if (wantClouds)
             {
                 flightClouds ??= new WeatherVolumeDressing(logger);
-                Camera worldCamera = SceneSingleton<CameraStateManager>.i?.mainCamera;
-                flightClouds.Update(LevelInfo.i, Field, worldCamera,
+                flightClouds.Update(LevelInfo.i, Field, renderView,
                     weatherTime, settings.CloudHalfResolution.Value,
                     settings.CloudTemporalUpdate.Value, settings.CloudSteps.Value, settings.CloudFarSteps.Value,
                     lightning.FlashNow, lightning.FlashA, lightning.FlashB,
@@ -78,10 +78,10 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 clouds.Restore();
                 HighAltitudeSky.Clear();
             }
-            float skyHeight = view != null ? view.transform.position.GlobalY() : 0f;
+            float skyHeight = renderView != null ? renderView.transform.position.GlobalY() : 0f;
             float skyHaze = Mathf.Clamp01(Mathf.InverseLerp(80f, 10f, localWeather.VisibilityKm) +
                 atmosHaze * 0.45f * Mathf.Exp(-Mathf.Max(0f, skyHeight) / 2500f));
-            skyAtmosphere.Tick(LevelInfo.i, view, wantClouds && flightClouds != null && flightClouds.Active,
+            skyAtmosphere.Tick(LevelInfo.i, renderView, wantClouds && flightClouds != null && flightClouds.Active,
                 skyHaze, atmosphere.LastNightLight);
             Trace();
 

@@ -22,7 +22,7 @@ namespace NOAvionics
             unit = AvText.Make(Rect, "Unit", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
             symbol = AvIcons.Make(Rect, Symbol(keyText), 22f, Color.white);
             hasSymbol = Symbol(keyText) != AvIcon.Activity;   // a tile whose key names no subject carries no ornament
-            frame.Bracket = 3f;
+            frame.raycastTarget = true;  // the tile owns the hover tip for its unit or data source
             AvText.Fit(key, false); AvText.Fit(value, false); AvText.Fit(unit, false);
             var go = new GameObject("Gauge", typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(Rect, false);
@@ -45,7 +45,7 @@ namespace NOAvionics
             // The unit shares the key line, or the value line, and is left off when neither has room:
             // the tile cannot grow, and a clipped unit fails the overflow gate.
             if (!unit.gameObject.activeSelf) unit.gameObject.SetActive(true);
-            float avail = s.W - 12f, kw = AvText.Width(key) + 4f, uw = AvText.Width(unit) + 4f, vw = AvText.Width(value) + 6f;
+            float avail = s.W - 12f, kw = AvText.Width(key) + 4f, uw = unit.text.Length == 0 ? 0f : AvText.Width(unit) + 4f, vw = AvText.Width(value) + 6f;
             MetricLine line = AvFlowMath.PlaceMetric(avail, kw, uw, vw);
             unit.gameObject.SetActive(line.UnitShown);
             if (line.UnitOnTop)
@@ -77,7 +77,7 @@ namespace NOAvionics
         private void SyncHelp(bool unitShown)
         {
             AvHelpTip tip = Rect.GetComponent<AvHelpTip>();
-            if (unitShown)
+            if (unitShown || string.IsNullOrEmpty(shownUnit))
             {
                 if (tipOwned && tip != null) tip.Text = null;
                 tipOwned = false;
@@ -113,7 +113,6 @@ namespace NOAvionics
                 ? AvStyleHost.FuiInk("chip " + AvStates.Class(state), AvTheme.Warning)
                 : AvStyleHost.FuiInk("metric-unit", AvTheme.Dim);
             symbol.color = unit.color.WithAlpha(0.65f);
-            frame.BracketColor = unit.color.WithAlpha(0.6f);
             gauge.Track = AvStyleHost.FuiFill("metric-track", AvTheme.Hairline);
             gauge.FillColor = gauge.FillEnd = AvStyleHost.FuiFill("metric-fill " + AvStates.Class(state), AvTheme.Accent);
             gauge.SetVerticesDirty();

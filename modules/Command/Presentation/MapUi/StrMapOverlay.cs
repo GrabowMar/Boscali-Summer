@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// pose of the frame (execution order 101), and does nothing while the map is closed.
     /// </summary>
     [DefaultExecutionOrder(101)]
-    internal sealed partial class StrMapOverlay : MonoBehaviour, ISceneService
+    internal sealed class StrMapOverlay : MonoBehaviour, ISceneService
     {
         internal const int InkCapacity = 900, PulseCapacity = 120;
         private const float PoseSeconds = 0.066f, PulseSeconds = 1f / 15f, WindowSeconds = 5f, LeaderClear = 14f, ViewMargin = 6f;
@@ -99,8 +99,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (Visible && !Application.isBatchMode && BoscaliSummer.Core.Ui.MapTool.CancelPressed())
             {
                 IStrHub hub = Hub;
-                if (DrawArmed) CancelDraw("DRAW CANCELLED");
-                else if (hub != null && !hub.Ui.Selected.IsNone) hub.ClearSelection();
+                if (hub != null && !hub.Ui.Selected.IsNone) hub.ClearSelection();
             }
         }
 
@@ -147,14 +146,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bool rebuilt = false;
             if (worldOn && (planChanged || poseChanged)) rebuilt = Rebuild(map, projection, now, planChanged);
             else if (!worldOn) Plan.TagCount = 0;
-            TickDraw(map, now);
-            if (worldOn && drawHeld && !rebuilt)
-            {
-                DrawPulse(now);   // the draft follows the cursor every frame
-                pulse.Commit();
-                PulseQuads = pulse.Buffer.Count;
-            }
-            else if (worldOn && pulseCount > 0 && !AvFxDriver.ReducedMotion && now >= nextPulse && !rebuilt)
+            if (worldOn && pulseCount > 0 && !AvFxDriver.ReducedMotion && now >= nextPulse && !rebuilt)
             {
                 nextPulse = now + PulseSeconds;
                 DrawPulse(now);
@@ -237,7 +229,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private void Hide()
         {
-            if (DrawArmed) CancelDraw("");
             if (!Visible) return;
             Visible = false;
             if (root != null) root.gameObject.SetActive(false);
@@ -268,7 +259,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             CardPlan.Valid = false;
             planModel = null; planRevision = -1; planLayers = StrLayers.None; planSelected = planHover = StrItemId.None;
             pulseCount = 0; cardDirty = false; warnedShape = false; startGrid = null; garrisonCount = 0;
-            if (DrawArmed) CancelDraw("");
             Visible = false; Relief = false;
             tagsStale = true;
             gate.Reset(); reliefGate.Reset();
@@ -282,7 +272,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             float factor = map.mapDisplayFactor, zoom = Mathf.Abs(map.mapImage.transform.localScale.x);
             if (!(zoom > 1e-4f) || (projection == null && !(factor > 1e-6f))) return false;
             float px = 1f / zoom;
-            drawProjection = projection; drawFactor = factor;
             Camera camera = CameraOf(map);
             RectTransform viewport = map.mapBackground.rectTransform;
             Rect screen = ScreenRect(viewport, camera);
@@ -493,7 +482,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 float phase = AvFxDriver.ReducedMotion ? 0.5f : now * 0.35f;
                 StrStrokes.Chevrons(pb, pulseCurveX[i], pulseCurveY[i], pulseN[i], phase, pulseSize[i], 1.1f * pulsePx, chevron);
             }
-            DrawDraft(pb);
         }
 
         // ---- where an offensive jumps off ------------------------------------------------------------------------------------

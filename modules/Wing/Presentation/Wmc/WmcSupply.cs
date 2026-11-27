@@ -5,19 +5,16 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>SUPPLY (spec 2026-10-04 §SUPPLY × LOADOUT, "One Sheet"): one sheet that does not scroll on a tall dock. A DISPATCH card
-    /// first (state tag, what REQUISITION would send, funds after the call, REQUISITION and the blocker's reason in words), INBOUND and
-    /// ADOPT strips only when they have something to say, then
-    /// ① AIRFRAME (a grid of every listed airframe) · ② PILOT &amp; CREW · ③ FIT &amp; FUEL (labelled rows) · ④ LAUNCH BASE (2026-11-05 remake). REQUISITION sends the
-    /// card as a Call order (airframe, field, pilot, fit, fuel); the executor quotes again on the same rules and answers in the same
-    /// words, and a bare call (the hotkey, TACTICAL CALL) flies the same draft. EDIT LOADOUT (under FIT & FUEL) opens the picked airframe's hardpoints, stores and livery, and MY AIRCRAFT closes the sheet. A client looks;
-    /// the host requisitions: everything stays visible, disabled with the one reason.</summary>
+    /// <summary>SUPPLY shows one dispatch draft above its airframe catalogue, crew and base selectors, or equipment editor.
+    /// The host requisitions the aircraft, field, pilot, fit and fuel shown on the card. Clients can inspect the same sections.</summary>
     internal sealed partial class WmcSupply : IWmcPage
     {
         /// <summary>A client sees every control disabled with this one reason.</summary>
         private static readonly string ClientWhy = ShopRules.WingReason(WingBlock.Client, default);
 
         private AvFlow flow;
+        private WmcSubPages sections;
+        private const int Airframes = 0, CrewAndBase = 1, Equipment = 2;
         private readonly WmcLoadout loadout = new WmcLoadout();
         private bool relayout;
 
@@ -38,7 +35,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public string Hint => hint;
 
-        public string Alert => loadout.Alert;
+        public string Alert => sections != null && sections.Current == Equipment ? loadout.Alert : null;
 
         public void Build(AvFlow pageFlow, AvTicker pageTicker, int index)
         {
@@ -46,12 +43,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildPin(flow);
             BuildInbound();
             BuildAdopt();
-            BuildAirframe(flow);
-            BuildPilot(flow);
-            BuildFit(flow);
-            loadout.BuildEditor(flow);
-            BuildBase(flow);
-            WmcLoadout.BuildMine(flow, index);
+            sections = WmcSubPages.AddTabbed(flow,
+                new[] { "AIRFRAMES", "CREW & BASE", "EQUIPMENT" },
+                new[] { AvIcon.Plane, AvIcon.UsersGroup, AvIcon.Stack2 });
+            BuildAirframe(sections.Flow(Airframes));
+            BuildPilot(sections.Flow(CrewAndBase));
+            BuildBase(sections.Flow(CrewAndBase));
+            BuildFit(sections.Flow(Equipment));
+            loadout.BuildEditor(sections.Flow(Equipment));
+            WmcLoadout.BuildMine(sections.Flow(Equipment), index);
         }
 
         /// <summary>A step header's caption: the state word, with the glyph a caution or danger carries.</summary>
@@ -159,8 +159,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 WingBlock b = client ? WingBlock.Client : ShopRules.WingBlocker(wing);
                 blocker = b != WingBlock.None ? "BLOCKED · " + ShopRules.WingReason(b, wing) : null;
-                dispatch.Set(word, WmcState.Of(cls), "NO AIRFRAME", null, "Tap an airframe in step 1",
-                    blocker ?? "Pick a pilot, an airframe, its fit and a base", blocker != null ? "warn" : "");
+                dispatch.Set(word, WmcState.Of(cls), "NO AIRFRAME", null, "Choose an aircraft under AIRFRAMES.",
+                    blocker, blocker != null ? "warn" : "");
                 dispatch.SetMeta(client ? "THE HOST REQUISITIONS" : "");
             }
             else

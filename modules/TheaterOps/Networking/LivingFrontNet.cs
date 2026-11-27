@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
     {
         public byte Protocol, Kind, Posture;
         public int Id, Revision, RequestId, Session, HostEpoch;
-        /// <summary>Kind 3 (a drawn offensive) only: the press and the release, global metres. Zero otherwise.</summary>
+        /// <summary>Coordinates from the retired draw command. Protocol 4 still carries them; supported intents require zero.</summary>
         public float StartX, StartZ, FixX, FixZ;
     }
 
@@ -49,7 +49,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
     /// <summary>Faction-private, host-authored war picture and validated player intent.</summary>
     internal sealed class LivingFrontNet : MonoBehaviour
     {
-        internal const byte ProtocolVersion = 4;   // 4: kind 3, the drawn offensive, adds its four floats to the intent
+        internal const byte ProtocolVersion = 4;   // 4 carries four coordinate floats in the intent
         private const int MaximumRecipients = 64;
         private const int MaximumPlayers = 64;
         private const float QueryInterval = 1f;
@@ -188,9 +188,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             nextIntent.Prune(now);
         }
 
-        internal bool SendIntent(byte kind, int id, int revision, byte posture, float sx = 0f, float sz = 0f, float ox = 0f, float oz = 0f)
+        internal bool SendIntent(byte kind, int id, int revision, byte posture)
         {
-            if (GameAccess.IsServer() || CommandPending || !ValidIntent(kind, id, revision, posture, sx, sz, ox, oz) ||
+            if (GameAccess.IsServer() || CommandPending || !ValidIntent(kind, id, revision, posture) ||
                 seenHostEpoch <= 0 || !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq?.faction == null)
                 return false;
             NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
@@ -204,7 +204,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 Protocol = ProtocolVersion, Kind = kind, Id = id,
                 Revision = revision, Posture = posture, RequestId = pendingRequestId,
                 Session = clientSession, HostEpoch = seenHostEpoch,
-                StartX = sx, StartZ = sz, FixX = ox, FixZ = oz,
             });
             return true;
         }
@@ -260,14 +259,14 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             if (intent.Protocol != ProtocolVersion || owner?.Authoritative != true || sender == null ||
                 !sender.IsAuthenticated || !sender.TryGetPlayer<Player>(out Player player) ||
                 player?.HQ?.faction == null || intent.RequestId <= 0) return;
-            bool valid = ValidIntent(intent.Kind, intent.Id, intent.Revision, intent.Posture, intent.StartX, intent.StartZ, intent.FixX, intent.FixZ);
+            bool valid = ValidIntent(intent.Kind, intent.Id, intent.Revision, intent.Posture) &&
+                intent.StartX == 0f && intent.StartZ == 0f && intent.FixX == 0f && intent.FixZ == 0f;
             bool current = intent.HostEpoch == hostEpoch && intent.Session > 0 &&
                 clientSessions.TryGetValue(PlayerIdentity.Of(player), out var session) &&
                 session.Session == intent.Session && ReferenceEquals(session.HQ, player.HQ);
             bool allowed = valid && current && nextIntent.Allow(PlayerIdentity.Of(player), Time.unscaledTime, IntentInterval);
             IntentReply reply = allowed
-                ? owner.ApplyIntent(player.HQ, intent.Kind, intent.Id, intent.Revision, intent.Posture, LivingFrontService.ActorOf(player),
-                    intent.StartX, intent.StartZ, intent.FixX, intent.FixZ)
+                ? owner.ApplyIntent(player.HQ, intent.Kind, intent.Id, intent.Revision, intent.Posture, LivingFrontService.ActorOf(player))
                 : new IntentReply(!valid ? TheaterCommandCode.Invalid : !current ? TheaterCommandCode.SessionChanged : TheaterCommandCode.RateLimited);
             sender.Send(new LivingFrontResult
             {
@@ -309,9 +308,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             owner.ApplyRemote(snapshot.Body);
         }
 
-        private static bool ValidIntent(byte kind, int id, int revision, byte posture, float sx, float sz, float ox, float oz) =>
-            kind == 3 ? id == 0 && revision == 0 && posture == 0 && DrawnPlan.Valid(sx, sz, ox, oz)
-            : kind <= 2 && sx == 0f && sz == 0f && ox == 0f && oz == 0f && (kind == 2
+        private static bool ValidIntent(byte kind, int id, int revision, byte posture) =>
+            kind <= 2 && (kind == 2
                 ? id == 0 && revision == 0 && posture <= (byte)TheaterWarPosture.Bold
                 : id > 0 && revision > 0 && posture == 0);
 

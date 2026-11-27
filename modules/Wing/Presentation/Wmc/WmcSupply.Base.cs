@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildBase(AvFlow f)
         {
-            baseHead = f.Add(new WmcHeadBar(f.Content, AvIcon.BuildingBank, "4 · " + SupplyWords.BaseTitle));
+            baseHead = f.Add(new WmcHeadBar(f.Content, AvIcon.BuildingBank, SupplyWords.BaseTitle));
             modeRow = f.Add(new WmcTuneRow(f.Content, "LAUNCH FROM", new[] { "NEAREST", "ANY FIELD" },
                 i => SetMode(i == 0 ? LaunchMode.Nearest : LaunchMode.Any)));
             baseList = f.Add(new WmcStripBlock(f.Content, "Fields", BezelLayout.BaseRows, TurnBases, (row, k) => ToggleBase(row),

@@ -26,6 +26,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private sealed class MfdPagingGrid : AvPart
         {
             private readonly MfdIconCell[] cells;
+            private readonly float[] placedHeights;
             private readonly int columns, rows, perPage;
             private readonly bool readOnly, pagerEnabled;
             private readonly float rowHeight;
@@ -44,6 +45,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private Func<int, AvIcon> glyphFn;
             private readonly bool tile;
             private int lastSizeKey = -1;
+            private float placedColumn;
 
             /// <summary>Raised when the grid's measured height changes (rows shown, pager shown), so the
             /// owning <see cref="AvFlow"/> can relayout. Wired by <see cref="AddGrid"/>.</summary>
@@ -62,6 +64,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 Rect = AvLay.Child(parent, "Grid");
                 cells = new MfdIconCell[perPage];
+                placedHeights = new float[this.rows];
                 string onWord = readOnly || !words ? "" : "ON", offWord = readOnly || !words ? "" : "OFF";
                 for (int i = 0; i < perPage; i++)
                 {
@@ -124,7 +127,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             public void ResetPage() { page = 0; Refresh(); }
 
-            public void SetEmptyMessage(string message) { if (empty != null) empty.text = message ?? ""; }
+            public void SetEmptyMessage(string message)
+            {
+                if (AvText.Set(empty, message ?? "") && count == 0) Changed();
+            }
 
             /// <summary>Temporarily fence controls while a native model is still initializing.</summary>
             public void SetInteractable(bool on)
@@ -185,8 +191,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 // Wrapping changes with content even when the number of rows stays the same.
                 Changed();
 
-                int sizeKey = ShownRows() * 2 + (pager ? 1 : 0);
-                if (sizeKey != lastSizeKey)
+                int sizeKey = count == 0 ? 0 : ShownRows() * 2 + (pager ? 1 : 0);
+                bool changedRows = sizeKey != lastSizeKey;
+                for (int row = 0; !changedRows && placedColumn > 0f && count > 0 && row < ShownRows(); row++)
+                    changedRows = Mathf.Abs(placedHeights[row] - MeasuredRowHeight(row, placedColumn)) > .5f;
+                if (changedRows)
                 {
                     lastSizeKey = sizeKey;
                     SizeChanged?.Invoke();
@@ -195,32 +204,48 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             public override float Measure(float width)
             {
-                float h = MeasuredRowHeight(width) * ShownRows() + AvGridTokens.Gap * (ShownRows() - 1);
+                if (count == 0) return Mathf.Max(rowHeight, AvText.Height(empty, width) + 4f);
+                float h = 0f;
+                float column = AvFlowMath.ColumnWidth(width, columns, AvGridTokens.Gap);
+                for (int row = 0; row < ShownRows(); row++)
+                    h += (row > 0 ? AvGridTokens.Gap : 0f) + MeasuredRowHeight(row, column);
                 if (PagerShown) h += AvGridTokens.Gap + AvGridTokens.Row;
                 return h;
             }
 
-            private float MeasuredRowHeight(float width)
+            private float MeasuredRowHeight(int row, float column)
             {
                 float height = rowHeight;
-                float column = AvFlowMath.ColumnWidth(width, columns, AvGridTokens.Gap);
-                foreach (MfdIconCell cell in cells)
+                for (int i = row * columns; i < (row + 1) * columns; i++)
+                {
+                    MfdIconCell cell = cells[i];
                     if (cell.Rect.gameObject.activeSelf) height = Mathf.Max(height, cell.Measure(column));
+                }
                 return height;
             }
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                float colW = AvFlowMath.ColumnWidth(s.W, columns, AvGridTokens.Gap);
-                float height = MeasuredRowHeight(s.W);
-                for (int i = 0; i < cells.Length; i++)
+                placedColumn = AvFlowMath.ColumnWidth(s.W, columns, AvGridTokens.Gap);
+                if (count == 0)
                 {
-                    int row = i / columns, col = i % columns;
-                    cells[i].Place(new AvSlot(col * (colW + AvGridTokens.Gap), row * (height + AvGridTokens.Gap), colW, height));
+                    AvLay.Place(empty.rectTransform, 0f, 0f, s.W, s.H);
+                    return;
                 }
-                float gridH = height * ShownRows() + AvGridTokens.Gap * (ShownRows() - 1);
-                AvLay.Place(empty.rectTransform, 0f, 0f, s.W, gridH);
+                float gridH = 0f;
+                for (int row = 0; row < ShownRows(); row++)
+                {
+                    if (row > 0) gridH += AvGridTokens.Gap;
+                    float height = MeasuredRowHeight(row, placedColumn);
+                    placedHeights[row] = height;
+                    for (int col = 0; col < columns; col++)
+                    {
+                        var cell = cells[row * columns + col];
+                        cell.Place(new AvSlot(col * (placedColumn + AvGridTokens.Gap), gridH, placedColumn, height));
+                    }
+                    gridH += height;
+                }
                 if (PagerShown)
                 {
                     float y = gridH + AvGridTokens.Gap;

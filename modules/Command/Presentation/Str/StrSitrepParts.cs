@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
     /// <summary>A tug-of-war balance bar of the BOARD's FORCE BALANCE: own, middle (contested or neutral) and hostile parts of one track, the words under it. An unknown is the hatched track. The caption (LEAD, LAG, EVEN) shows only where it says something the label and the counts do not.</summary>
     internal sealed class StrBalanceBar : StrPart
     {
-        private const float BarH = 8f, Pitch = 8f, SegW = 6f;
+        private const float BarH = 5f;
 
         private readonly Func<StrViewModel, StrBalance> pick;
         private readonly bool showCaption;
@@ -34,9 +34,15 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             StrBalance b = pick(vm);
             AvText.Set(key, b.Key);
-            AvText.Set(caption, showCaption ? b.Caption : "");
+            AvText.Set(caption, showCaption && !string.Equals(b.Caption, b.Key, StringComparison.OrdinalIgnoreCase) ? b.Caption : "");
             AvText.Set(text, b.Text);
-            if (!own.Equals(b.Own) || !middle.Equals(b.Middle) || !hostile.Equals(b.Hostile)) { own = b.Own; middle = b.Middle; hostile = b.Hostile; drawnW = -1f; }
+            if (!own.Equals(b.Own) || !middle.Equals(b.Middle) || !hostile.Equals(b.Hostile))
+            {
+                own = b.Own;
+                middle = b.Middle;
+                hostile = b.Hostile;
+                if (drawnW > 0f) Draw(drawnW);
+            }
             Paint();
             Changed();
         }
@@ -58,27 +64,28 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvQuadBuffer b = bar.Buffer;
             b.Clear();
             Rgba track = AvInk.Hairline.ToRgba();
-            Seg(b, 0f, w, track);
+            Span(b, 0f, w, track);
             bool known = !float.IsNaN(own) || !float.IsNaN(hostile);
             if (!known) StrStrokes.HatchRect(b, 0f, 0f, w, BarH, 8f, 1.5f, AvInk.Dim.ToRgba());
             else
             {
                 float o = float.IsNaN(own) ? 0f : Mathf.Clamp01(own), m = float.IsNaN(middle) ? 0f : Mathf.Clamp01(middle), h = float.IsNaN(hostile) ? 0f : Mathf.Clamp01(hostile);
                 float x1 = o * w, x2 = Mathf.Min(w, x1 + m * w), x3 = Mathf.Min(w, x2 + h * w);
-                Rgba oc = AvInk.Friendly.WithAlpha(0.9f).ToRgba(), mc = AvInk.Ink.WithAlpha(0.45f).ToRgba(), hc = AvInk.Hostile.WithAlpha(0.9f).ToRgba();
-                Seg(b, 0f, x1, oc); Seg(b, x1, x2, mc); Seg(b, x2, x3, hc);
+                Span(b, 0f, x1, AvInk.Friendly.WithAlpha(.78f).ToRgba());
+                Span(b, x1, x2, AvInk.Ink.WithAlpha(.45f).ToRgba());
+                Span(b, x2, x3, AvInk.Hostile.WithAlpha(.78f).ToRgba());
+                for (int i = 1; i < 4; i++)
+                {
+                    float tick = w * i * .25f;
+                    Span(b, tick, tick + 1f, AvInk.Ground.ToRgba());
+                }
             }
             bar.Commit();
         }
 
-        // A meter of short lit segments, like the kit's gauges: each span lights the segments (or the part of one) it covers.
-        private static void Seg(AvQuadBuffer b, float from, float to, Rgba c)
+        private static void Span(AvQuadBuffer b, float from, float to, Rgba color)
         {
-            for (float x = Mathf.Floor(from / Pitch) * Pitch; x < to; x += Pitch)
-            {
-                float a = Mathf.Max(x, from), z = Mathf.Min(x + SegW, to);
-                if (z > a) b.Add(a, 0f, z, 0f, z, BarH, a, BarH, c, c, c, c);
-            }
+            if (to > from) b.Add(from, 0f, to, 0f, to, BarH, from, BarH, color, color, color, color);
         }
 
         private void Paint()
@@ -91,7 +98,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         public override void Restyle()
         {
             Paint();
-            drawnW = -1f;
+            if (drawnW > 0f) Draw(drawnW);
         }
     }
 

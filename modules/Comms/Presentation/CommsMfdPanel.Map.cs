@@ -105,8 +105,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             var clearRow = new AvButtons(p.Content,
                 new[]
                 {
-                    new AvControl.Spec("CLEAR", () => comms.ClearMine(), AvButtonStyle.Danger, AvIcon.Eraser),
-                    new AvControl.Spec("CLEAR", () => comms.ClearAll(), AvButtonStyle.Danger, AvIcon.Eraser),
+                    new AvControl.Spec("CLEAR MY MARKS", () => comms.ClearMine(), AvButtonStyle.Quiet, AvIcon.Eraser),
+                    new AvControl.Spec("CLEAR ALL MARKS", () => comms.ClearAll(), AvButtonStyle.Danger, AvIcon.Eraser),
                 });
             clearAllButton = clearRow.Controls[1];
             clearRow.Controls[0].Help = "Clear yours: remove everything you have put on the map.";

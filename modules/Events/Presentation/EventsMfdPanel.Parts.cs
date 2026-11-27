@@ -14,26 +14,22 @@ namespace BoscaliSummer.Modules.Events.Presentation
     internal sealed partial class EventsMfdPanel
     {
         /// <summary>
-        /// A drawer of the field archive, four to a row: the shelf glyph and name over the drawer number and the
-        /// real number of records it holds (a dash while it holds none). What is inside rides on the hover help.
+        /// Field archive directory entry with its current record count and a whole-row hit target.
         /// </summary>
         private sealed class ArchiveTilePart : AvPart
         {
             private readonly AvFrame frame;
-            private readonly Image rail;
-            private readonly TMP_Text glyph, title, drawer, count;
+            private readonly TMP_Text glyph, title, count;
             private bool hover;
 
-            public ArchiveTilePart(RectTransform parent, AvIcon icon, string titleText, string drawerText, Action onClick)
+            public ArchiveTilePart(RectTransform parent, AvIcon icon, string titleText, Action onClick)
             {
                 Rect = AvLay.Child(parent, "Tile " + titleText);
-                frame = AvFrame.Add(Rect, "Frame", new AvChamfer { TL = 6f, TR = 6f });
+                frame = AvFrame.Add(Rect, "Frame", default);
                 AvLay.Fill(frame.rectTransform);
-                rail = AvLay.Solid(Rect, "Rail", Color.clear);
                 glyph = AvIcons.Make(Rect, icon, AvGridTokens.IconHead, Color.white);
                 title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText, TextAlignmentOptions.MidlineLeft);
                 AvText.Fit(title, false);
-                drawer = AvText.Make(Rect, "Drawer", AvTextRole.Micro, drawerText, TextAlignmentOptions.MidlineLeft);
                 count = AvText.Make(Rect, "Count", AvTextRole.DataSmall, "—", TextAlignmentOptions.MidlineRight);
                 AvHit hit = AvHit.On(frame);
                 hit.Hover = h => { hover = h; Restyle(); };
@@ -49,27 +45,24 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 if (count.text != text) count.text = text;
             }
 
-            public override float Measure(float width) => 60f;
+            public override float Measure(float width) => 42f;
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                AvLay.Place(rail.rectTransform, 6f, 0f, s.W - 12f, 2f);
-                AvLay.Place(glyph.rectTransform, 8f, 10f, 18f, 18f);
-                AvLay.Place(title.rectTransform, 30f, 8f, s.W - 36f, 22f);
-                AvLay.Place(drawer.rectTransform, 8f, 36f, 52f, 16f);
-                AvLay.Place(count.rectTransform, s.W - 8f - 44f, 36f, 44f, 16f);
+                float countW = Mathf.Max(26f, AvText.Width(count));
+                AvLay.Place(glyph.rectTransform, 10f, 0f, 18f, s.H);
+                AvLay.Place(title.rectTransform, 38f, 0f, Mathf.Max(1f, s.W - 54f - countW), s.H);
+                AvLay.Place(count.rectTransform, s.W - 10f - countW, 0f, countW, s.H);
             }
 
             public override void Restyle()
             {
                 AvStyle c = AvStyleHost.FuiStyle(hover ? "card raised" : "card");
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-                rail.color = AvStyleHost.FuiColor(hover ? "select" : "info", AvTheme.RailInfo);
                 glyph.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
                 title.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-                drawer.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-                count.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+                count.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
             }
         }
 
