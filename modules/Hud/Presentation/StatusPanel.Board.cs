@@ -68,6 +68,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             pages = null;
             Array.Clear(slotPages, 0, slotPages.Length);
             Array.Clear(slotOpen, 0, slotOpen.Length);
+            Array.Clear(slotBeat, 0, slotBeat.Length);
+            rwrOpen = false;
             wingPainted = false;
             hasBoard = false;
             headerFault = false;
@@ -149,6 +151,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 PickPanels(frame.Threat.Missiles > 0);      // the count that raises AlertKind.Missile (CombatAlerts) and lights the MSL lamp (HudThreats.Fill)
                 PollStores();
                 MeasureScreen();      // after the header's read: where the board goes depends on what the header stands in for
+                boardStack = StackWanted;
 
                 PresentLamps(frame);
                 PresentGauges();
@@ -162,7 +165,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>
         /// Which panels are up and how tall (ScopePick, ScopeLayout): RWR always (its full scope while anything paints us or a missile is inbound, else its header line), FIRES while SHOT or STRIKE is live, WING while there
-        /// are wingmen and the spine has room for it. A panel that closes keeps its page until its slot has wiped shut. With the scope Off there are none.
+        /// are wingmen (docked beside the spine in WIDE when the spine overflows). A panel that closes keeps its page until its slot has wiped shut. With the scope Off there are none.
         /// </summary>
         private void PickPanels(bool missile)
         {
@@ -172,7 +175,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             rwrOpen = on && ScopePick.RwrOpen(liveMask, missile);
             bool fires = ScopePick.Fires(liveMask, out ScopePage host) && on;
             float rwrH = on ? ScopeLayout.RwrHeight(rwrOpen) : 0f, firesH = fires ? ScopeLayout.FiresHeight(host) : 0f;
-            bool wing = on && pageLive[(int)ScopePage.Wing] && ScopeLayout.WingFits(ScopeLayout.BarLinesH(StackWanted), rwrH, firesH, hasMission ? ScopeLayout.MissionRowsH : 0f);
+            bool wing = on && pageLive[(int)ScopePage.Wing];
             SetSlot(ScopeLayout.SlotRwr, on ? pages[(int)ScopePage.Threat] : null, rwrH);
             SetSlot(ScopeLayout.SlotFires, fires ? pages[(int)host] : null, firesH);
             SetSlot(ScopeLayout.SlotWing, wing ? pages[(int)ScopePage.Wing] : null, ScopeLayout.WingH);
@@ -195,6 +198,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>The board is drawn (its root is up: switched off, stale and torn down all take it down) and the WING panel is up. <c>IHudBoard.ShowsWing</c>.</summary>
         public bool ShowsWing => wingPainted && root != null && root.gameObject.activeInHierarchy;
+
+        internal bool RwrOpen => rwrOpen;
+        internal bool FiresOpen => slotOpen[ScopeLayout.SlotFires];
+        internal bool WingSide => paintedGeo.Slot2.Present && paintedGeo.Slot2.X < (paintedGeo.Sys.Present ? paintedGeo.Sys.X : paintedGeo.Width - ScopeLayout.WingW);
 
         /// <summary>The last <see cref="Repaint"/> painted the WING panel (cleared by every repaint and by hiding or destroying the board; an Animate that skips the repaint leaves the last paint, and this, standing).</summary>
         private bool wingPainted;
@@ -310,7 +317,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool boardStack;
 
         /// <summary>A screen narrower than 16:9 always gets the STACK layout (the stored option is kept): WIDE would reach into the left column.</summary>
-        private bool StackWanted => HudZones.Narrow(canvasRect.rect.width / baseUnit) || Options.Layout == BoardLayout.Stack;
+        private bool StackWanted => (canvasRect != null && baseUnit > 0f && HudZones.Narrow(canvasRect.rect.width / baseUnit)) || Options.Layout == BoardLayout.Stack;
 
         /// <summary>The geometry, and each slot's wipe state, of the last full <see cref="Repaint"/>: what a repaint that finds the wipes still reuses (nothing else moves the layout between presents).</summary>
         private BoardGeometry paintedGeo;
@@ -367,16 +374,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopePageBase systems = pages[(int)ScopePage.Systems];
             bool anyLamp = false;
             for (int i = 0; i < lamps.Length; i++) anyLamp |= lamps[i].Present;
+            float gaugesH = gaugeLines > 1 ? ScopeLayout.GaugeLine2 : gaugeLines > 0 ? ScopeLayout.GaugeLine1 : 0f;
+            bool wingSide = ScopeLayout.UseSideWing(boardStack, !allow.ShowStores, slotHeight[0], slotHeight[1], slotHeight[2], hasMission ? ScopeLayout.MissionRowsH : 0f, gaugesH);
             var blocks = new BoardBlocks
             {
                 Layout = boardStack ? BoardLayout.Stack : BoardLayout.Wide, Hero = header.HasWeapon, Exp = header.HasCm, StoresHidden = !allow.ShowStores,
                 Sys = (allow.ShowLamps && anyLamp) || (header.HasCap && allow.ShowStores), Info = allow.ShowSystems && systems.Ready && !allow.ThreatLampsOnly,
                 MissionH = hasMission ? ScopeLayout.MissionRowsH : 0f, RwrH = transitions[0].Height, FiresH = transitions[1].Height, WingH = transitions[2].Height, GaugeLines = gaugeLines,
+                WingSide = wingSide,
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);
             // Where the wipes are heading: the size, the anchor and the shade go by it, so panels coming in never pump the scale or move the box.
             BoardBlocks settled = blocks;
             settled.RwrH = slotHeight[0]; settled.FiresH = slotHeight[1]; settled.WingH = slotHeight[2];
+            settled.WingSide = wingSide;
             BoardGeometry end = ScopeLayout.Compute(settled);
             if (geo.Height <= 0f)
             {
@@ -399,7 +410,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (root.anchoredPosition != rootPosition) root.anchoredPosition = rootPosition;
             Vector2 rootSize = new Vector2(Whole(geo.Width * unit), Whole(geo.Height * unit));
             if (root.sizeDelta != rootSize) root.sizeDelta = rootSize;
-            BoardBox = ScopeLayout.Box(screenW, screenH, boxFromRight, fromTop, rootSize.x, rootSize.y);
+            float extraLeft = 0f;
+            if (allow.ShowSystems && !underNative && boardStack)
+            {
+                BoardRect airSlot = ScopeLayout.AirframeSlot(geo, true);
+                extraLeft = Mathf.Max(0f, -airSlot.X) * unit;
+            }
+            BoardBox = ScopeLayout.Box(screenW, screenH, boxFromRight, fromTop, rootSize.x + extraLeft, rootSize.y);
             PaintShade(end, fromTop);      // baked once for a page change, not on every frame of the wipe
 
             ScopePalette pal = Palette();

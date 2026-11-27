@@ -50,7 +50,7 @@ namespace BoscaliSummer.Core.Ui
                 case HudZone.Cue: side = Side.Left; x = 12; y = 299; w = 281; h = 96; break;
                 case HudZone.Notice: side = Side.Left; x = 12; y = 411; w = 562; h = 16; break;
                 case HudZone.Route: side = Side.Left; x = 12; y = 443; w = 281; h = 133; break;
-                case HudZone.TargetCam: side = Side.Left; x = 12; y = 592; w = 281; h = 200; break;
+                case HudZone.TargetCam: side = Side.Right; x = 1370; y = 889; w = 264; h = 167; break;
                 case HudZone.Map: side = Side.Left; x = 12; y = 808; w = 281; h = 260; break;
                 case HudZone.Lane: side = Side.Centre; x = 960f - TopCentre.Width * 0.5f; y = TopCentre.LineTop; w = TopCentre.Width; h = TopCentre.CardHeight; break;
                 case HudZone.Callout: side = Side.Centre; x = 890; y = 641; w = 140; h = 38; break;      // centred on x 960 and on CombatAlerts.CalloutDown (y 660)

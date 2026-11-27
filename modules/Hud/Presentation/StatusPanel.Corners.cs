@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 findTries++;
                 screenCorners.Find();
             }
-            bool feedUp = screenCorners.FeedUp, mapUp = screenCorners.MapUp;
+            bool feedUp = screenCorners.FeedUp, mapUp = screenCorners.MapUp && !BoscaliSummer.Core.Ui.MapTool.QuickMapActive;
             Vector2 feedSize = feedUp ? screenCorners.FeedBox.rect.size : default, mapSize = mapUp ? screenCorners.MapPlate.rect.size : default;
             Vector3 feedAt = feedUp ? screenCorners.FeedBox.position : default, mapAt = mapUp ? screenCorners.MapPlate.position : default;
             // The log's state is looked at every frame: a row wiping in or fading, the chat input opening, the capture going quiet are all noticed at once, not at the next tick.
@@ -276,11 +276,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (cornerShade != null) UnityEngine.Object.Destroy(cornerShade.gameObject);
             if (cornerFurniture != null) UnityEngine.Object.Destroy(cornerFurniture.gameObject);
             cornerShade = cornerFurniture = cornerSurface = null;
-            leftShadow = null;
+            leftShadow = mapShadow = null;
+            cornerGroup = null;
             cornerVector = null;
             cornerText = null;
             cornerCanvas = null;
-            feedLive = seenFeedUp = seenMapUp = false;
+            feedLive = seenFeedUp = seenMapUp = mapBoxed = false;
+            mapBox = default;
             mapFurniture = default;
             mapNorth = default;
         }

@@ -13,11 +13,11 @@ namespace BoscaliSummer.Modules.Command.Domain
     {
         /// <summary>Samples of shore glow falloff; beyond reads as open ground or sea.</summary>
         internal const int CoastReach = 6;
-        private const float Base = 164f;
-        private const float Gain = 72f;
-        private const float Minimum = 108f;
-        private const float Maximum = 242f;
-        private const float PeakLift = 10f;
+        private const float Base = 158f;
+        private const float Gain = 84f;
+        private const float Minimum = 96f;
+        private const float Maximum = 246f;
+        private const float PeakLift = 16f;
 
         /// <summary>
         /// Distance of every cell to the nearest cell of the opposite medium: 0 touches
@@ -79,12 +79,12 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (float.IsNaN(heightAboveSea)) heightAboveSea = 0f;
             if (float.IsNaN(peakHeight)) peakHeight = 1f;
             float light = Base + Gain * Scalar.Clamp(facing, -1f, 1f);
-            light *= 1f - Math.Min(Math.Max(slopeDrop, 0f) / 40f, 1f) * .12f;
             if (land)
             {
+                light *= 1f - Math.Min(Math.Max(slopeDrop, 0f) / 40f, 1f) * .16f;
                 light += PeakLift * Math.Min(Math.Max(heightAboveSea, 0f) /
                     Math.Max(peakHeight, 1f), 1f);
-                if (coast <= 0) light += 12f;
+                if (coast <= 0) light += 14f;
             }
             if (light < Minimum) return (byte)Minimum;
             if (light > Maximum) return (byte)Maximum;

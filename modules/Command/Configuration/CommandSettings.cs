@@ -68,6 +68,10 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<float> DisplayLife { get; }
         public ConfigEntry<float> TerrainGhost { get; }
         public ConfigEntry<KeyCode> MapHoldKey { get; }
+        public ConfigEntry<float> QuickMapSize { get; }
+        public ConfigEntry<float> QuickMapOpacity { get; }
+        public ConfigEntry<bool> QuickMapNorthUp { get; }
+        public ConfigEntry<bool> QuickMapOverlays { get; }
         public ConfigEntry<float> AvionicsCustomKeyHue { get; }
         public ConfigEntry<float> AvionicsCustomGlassHue { get; }
         public ConfigEntry<float> AvionicsCustomGlassTint { get; }
@@ -81,7 +85,15 @@ namespace BoscaliSummer.Modules.Command.Configuration
             TerrainGhost = config.Bind("Command", "TerrainGhost", 0f,
                 new ConfigDescription("Visor terrain ghost: a very faint wire relief of the real ground around and below your aircraft, drawn over the cockpit view in the HUD's green. Ground that can hit you glows brighter in the same green. 0 turns it off, 1 is clearly visible. Needs a map with baked terrain. Applies now; no restart.", new AcceptableValueRange<float>(0f, 1f)));
             MapHoldKey = config.Bind("Command", "MapHoldKey", KeyCode.V,
-                "Hold to open the game's full map while flying; let go to close it. None disables the key.");
+                "Hold while flying to enlarge a translucent tactical quick map over the cockpit (scroll or +/- to zoom, N to toggle North-Up). None disables the key.");
+            QuickMapSize = config.Bind("Command", "QuickMapSize", 0.70f,
+                new ConfigDescription("Quick map size as a share of screen height while holding MapHoldKey.", new AcceptableValueRange<float>(0.50f, 0.90f)));
+            QuickMapOpacity = config.Bind("Command", "QuickMapOpacity", 0.58f,
+                new ConfigDescription("Terrain and backdrop readability of the quick map while held.", new AcceptableValueRange<float>(0.20f, 0.90f)));
+            QuickMapNorthUp = config.Bind("Command", "QuickMapNorthUp", false,
+                "Start quick map North-Up instead of Heading-Up (can also toggle with N while held).");
+            QuickMapOverlays = config.Bind("Command", "QuickMapOverlays", true,
+                "Show airbases and the tactical frontline/control overlay on the quick map.");
             // 0.2.4 turned the terrain ghost off by default; a cfg saved by 0.2.3 still holds the old on values.
             ConfigEntry<int> quietDefaults = config.Bind("Command", "QuietVisorDefaults", 0,
                 new ConfigDescription("Internal marker, leave as it is: 1 once a config saved before 0.2.5 has had TerrainGhost set back to its off default.", new AcceptableValueRange<int>(0, 1)));

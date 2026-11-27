@@ -177,23 +177,16 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 Invalidate();
                 mapKey = field.Key;
                 mapOffset = mapOffsetNow;
-                if (near.Current == null)
-                {
-                    // Preload: the first map is built on this frame, so the mission opens on
-                    // its own sky instead of native clouds swapping out a moment later.
-                    var watch = System.Diagnostics.Stopwatch.StartNew();
-                    Accept(CloudMaps.Build(field.Key, missionTime, field.HalfX, field.HalfZ, field.HourOfDay,
-                        mapHalf, farHalf));
-                    uniforms.Settle(field);
-                    logger?.LogInfo("[Weather] Cloud maps preloaded in " + watch.ElapsedMilliseconds +
-                        " ms (near " + Mathf.RoundToInt(mapHalf / 1000f) + " km, far LOD " +
-                        Mathf.RoundToInt(farHalf / 1000f) + " km half-span).");
-                }
-                else QueueMap(field, missionTime);
+                QueueMap(field, missionTime);
             }
 
             CloudMaps ready = Interlocked.Exchange(ref readyMap, null);
-            if (ready != null && ready.Revision == Volatile.Read(ref mapRevision)) Accept(ready);
+            if (ready != null && ready.Revision == Volatile.Read(ref mapRevision))
+            {
+                if (near.Current == null) uniforms.Settle(field);
+                Accept(ready);
+            }
+            if (near.Current == null) { Hide("preparing cloud maps"); return; }
 
             GlobalPosition global = camera.transform.GlobalPosition();
             Vector3 local = camera.transform.position;
@@ -518,33 +511,21 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             }
             if (noise == null)
             {
-                // Normally warmed at the menu. A mission entered before the warm finished
-                // pays the generation once here rather than showing an empty sky.
+                WarmNoise();
                 byte[] ready = Volatile.Read(ref sharedNoise);
-                if (ready == null)
-                {
-                    try { ready = CloudNoise3D.Generate(NoiseSize, 47); }
-                    catch { ready = Array.Empty<byte>(); }
-                    Volatile.Write(ref sharedNoise, ready);
-                }
+                if (ready == null) return false;
                 if (ready.Length != NoiseSize * NoiseSize * NoiseSize * 4)
                 {
                     failed = true;
                     logger?.LogWarning("[Weather] Volume noise generation failed.");
                     return false;
                 }
-                var pixels = new Color32[NoiseSize * NoiseSize * NoiseSize];
-                for (int i = 0; i < pixels.Length; i++)
-                {
-                    int n = i * 4;
-                    pixels[i] = new Color32(ready[n], ready[n + 1], ready[n + 2], ready[n + 3]);
-                }
                 noise = new Texture3D(NoiseSize, NoiseSize, NoiseSize, TextureFormat.RGBA32, true)
                 {
                     name = "Boscali Weather Detail", filterMode = FilterMode.Trilinear,
                     wrapMode = TextureWrapMode.Repeat
                 };
-                noise.SetPixels32(pixels);
+                noise.SetPixelData(ready, 0);
                 noise.Apply(true, true);
             }
             if (root == null)

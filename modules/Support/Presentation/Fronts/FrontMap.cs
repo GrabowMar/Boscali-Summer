@@ -15,9 +15,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// </summary>
     internal sealed class FrontMapView
     {
-        public const int MaxZoom = 3;
+        public const float MinZoom = 1f;
+        public const float MaxZoom = 6f;
         public readonly float X, Y, W, H;
-        public int Zoom = 1;
+        public float Zoom = MinZoom;
         public Vector2 Center = new Vector2(0.5f, 0.5f);
         /// <summary>The operator moved or zoomed the view: automatic centring stops.</summary>
         public bool Touched;
@@ -34,6 +35,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public void Refresh()
         {
+            Zoom = Mathf.Clamp(Zoom, MinZoom, MaxZoom);
             float theatre = FrontMap.Aspect, plate = W / H;
             float bw = plate > theatre ? 1f : plate / theatre, bh = plate > theatre ? theatre / plate : 1f;
             VW = bw / Zoom; VH = bh / Zoom;
@@ -55,11 +57,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return new Rect(src.x + u0 * src.width, src.y + (1f - v0 - VH) * src.height, VW * src.width, VH * src.height);
         }
 
-        /// <summary>Wheel zoom: one step in or out, the theatre point under <paramref name="p"/> stays under it.</summary>
-        public bool ZoomAt(Vector2 p, int dir)
+        /// <summary>Wheel zoom: smooth exponential zoom around <paramref name="p"/>.</summary>
+        public bool ZoomAt(Vector2 p, float notches)
         {
-            int z = Mathf.Clamp(Zoom + dir, 1, MaxZoom);
-            if (z == Zoom) return false;
+            float z = Mathf.Clamp(Zoom * Mathf.Pow(1.35f, notches), MinZoom, MaxZoom);
+            if (Mathf.Abs(z - Zoom) < 1e-4f) return false;
+            Vector2 uv = UV(p);
+            Zoom = z;
+            Refresh();
+            Center = new Vector2(uv.x - ((p.x - X) / W - 0.5f) * VW, uv.y - ((p.y - Y) / H - 0.5f) * VH);
+            Refresh();
+            Touched = true;
+            return true;
+        }
+
+        public bool ZoomTo(Vector2 p, float target)
+        {
+            float z = Mathf.Clamp(target, MinZoom, MaxZoom);
+            if (Mathf.Abs(z - Zoom) < 1e-4f) return false;
             Vector2 uv = UV(p);
             Zoom = z;
             Refresh();
@@ -115,8 +130,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private readonly List<Vector2> dotPos = new List<Vector2>(16);
         private readonly List<Color> dotInk = new List<Color>(16);
         private bool dragging;
-        private Vector2 lastBox;
+        private int dragButton = -1;
+        private Vector2 dragStart, lastBox;
         private string idle;
+        private float lastLeftClick = -1f, lastInsetClick = -1f;
+        private Vector2 lastLeftAt, lastInsetAt;
 
         public FrontMapPlate(RectTransform body, FrontSkin skin, float boxW, float boxH, int cols, int rows)
         {
@@ -335,14 +353,17 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return true;
         }
 
-        /// <summary>Screen pixels a click may wander between press and release and still be a click (a mouse jitters a few pixels on a firm click).</summary>
-        public const float ClickSlop = 10f;
+        /// <summary>Screen pixels a click may wander between press and release and still be a click (standardized with <see cref="MapTool.ClickSlop"/>).</summary>
+        public const float ClickSlop = MapTool.ClickSlop;
         private Vector2 rightAt;
         private bool rightDown;
 
+        /// <summary>True while a left-button pan drag is active or on the frame it ended, so rooms do not treat pan releases as clicks.</summary>
+        public bool DraggedLeft { get; private set; }
+
         /// <summary>
         /// A right click that stayed put on the plate (outside the inset): an armed pick places with it too, as every armed tool on the big map does (rule B).
-        /// The right button also pans, so a click's few pixels of jitter may nudge the view; the point is read under the pointer after it. Call once a frame.
+        /// Right-drag also pans, so clicks only fire within <see cref="ClickSlop"/>. Call once a frame.
         /// </summary>
         public bool RightClick(Vector2 mouse, out Vector2 uv)
         {
@@ -366,29 +387,99 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         }
 
         /// <summary>One frame of pointer input; true when the view moved and the room must repaint.</summary>
-        public bool Tick(Vector2 mouse)
+        public bool Tick(Vector2 mouse, bool armed = false)
         {
-            if (!box.gameObject.activeInHierarchy || !ToBox(mouse, out Vector2 p)) return false;
+            DraggedLeft = false;
+            if (!box.gameObject.activeInHierarchy || !ToBox(mouse, out Vector2 p))
+            {
+                dragging = false;
+                dragButton = -1;
+                return false;
+            }
             FrontMapView v = View;
             bool inPlate = p.x >= v.X && p.x <= v.X + v.W && p.y >= v.Y && p.y <= v.Y + v.H;
             bool inMini = miniRect.Contains(p);
             bool changed = false;
             Hover(inPlate ? v.UV(p) : (Vector2?)null);
-            if (inMini && FrontPointer.Held(0))
+            if (inMini)
             {
-                Vector2 uv = new Vector2((p.x - miniRect.x) / miniRect.width, (p.y - miniRect.y) / miniRect.height);
-                v.CenterOn(uv);
-                return true;
+                if (FrontPointer.Down(0))
+                {
+                    if (Time.unscaledTime - lastInsetClick < .3f && (mouse - lastInsetAt).sqrMagnitude <= ClickSlop * ClickSlop)
+                    {
+                        lastInsetClick = -1f;
+                        v.Zoom = FrontMapView.MinZoom;
+                        v.Center = new Vector2(0.5f, 0.5f);
+                        v.Refresh();
+                        v.Touched = true;
+                        return true;
+                    }
+                    lastInsetClick = Time.unscaledTime;
+                    lastInsetAt = mouse;
+                }
+                if (FrontPointer.Held(0))
+                {
+                    Vector2 uv = new Vector2((p.x - miniRect.x) / miniRect.width, (p.y - miniRect.y) / miniRect.height);
+                    v.CenterOn(uv);
+                    return true;
+                }
             }
             float wheel = FrontPointer.Wheel;
-            if (inPlate && Mathf.Abs(wheel) > 0.01f) changed |= v.ZoomAt(p, wheel > 0f ? 1 : -1);
-            bool down = FrontPointer.Held(1) || FrontPointer.Held(2);
-            if (down && (dragging || inPlate))
+            if (inPlate && Mathf.Abs(wheel) > 0.01f) changed |= v.ZoomAt(p, wheel);
+
+            // Standardized pan: left, middle, or right drag past ClickSlop pans the map; clicks stay put.
+            if (dragButton < 0 && inPlate && !inMini)
             {
-                if (dragging && (p - lastBox).sqrMagnitude > 0.25f) { v.Pan(p - lastBox); changed = true; }
-                dragging = true; lastBox = p;
+                for (int btn = 0; btn <= 2; btn++)
+                {
+                    if (!FrontPointer.Down(btn)) continue;
+                    dragButton = btn;
+                    dragStart = mouse;
+                    lastBox = p;
+                    dragging = false;
+                    if (btn == 0 && !armed)
+                    {
+                        if (Time.unscaledTime - lastLeftClick < .3f && (mouse - lastLeftAt).sqrMagnitude <= ClickSlop * ClickSlop)
+                        {
+                            lastLeftClick = -1f;
+                            float target = v.Zoom >= 4.8f ? FrontMapView.MinZoom : v.Zoom * 1.8f;
+                            changed |= v.ZoomTo(p, target);
+                            DraggedLeft = true;
+                            dragButton = -1;
+                        }
+                        else
+                        {
+                            lastLeftClick = Time.unscaledTime;
+                            lastLeftAt = mouse;
+                        }
+                    }
+                    break;
+                }
             }
-            else dragging = false;
+            if (dragButton >= 0)
+            {
+                if (FrontPointer.Held(dragButton))
+                {
+                    if (!dragging && (mouse - dragStart).sqrMagnitude > ClickSlop * ClickSlop)
+                    {
+                        dragging = true;
+                        lastBox = p;
+                    }
+                    if (dragging && (p - lastBox).sqrMagnitude > 0.25f)
+                    {
+                        v.Pan(p - lastBox);
+                        changed = true;
+                        lastBox = p;
+                    }
+                    if (dragging && dragButton == 0) DraggedLeft = true;
+                }
+                else
+                {
+                    if (dragging && dragButton == 0) DraggedLeft = true;
+                    dragging = false;
+                    dragButton = -1;
+                }
+            }
             if (changed) Hover(inPlate ? v.UV(p) : (Vector2?)null);
             return changed;
         }
@@ -401,9 +492,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Vector2 span = BoscaliSummer.Core.Game.TheaterFrame.Resolve();
                 float xm = (uv.Value.x - 0.5f) * span.x, zm = (0.5f - uv.Value.y) * span.y;
                 string grid = FrontMap.GridSource(xm, zm);
-                text = View.Zoom + "X · GRID " + grid + " · " + Mathf.Abs(xm / 1000f).ToString("0.0") + " KM " + (xm >= 0f ? "E" : "W") + " " + Mathf.Abs(zm / 1000f).ToString("0.0") + " KM " + (zm >= 0f ? "N" : "S");
+                text = View.Zoom.ToString("0.0") + "X · GRID " + grid + " · " + Mathf.Abs(xm / 1000f).ToString("0.0") + " KM " + (xm >= 0f ? "E" : "W") + " " + Mathf.Abs(zm / 1000f).ToString("0.0") + " KM " + (zm >= 0f ? "N" : "S");
             }
-            else text = View.Zoom + "X · WHEEL ZOOM · RIGHT-DRAG PAN";
+            else text = View.Zoom.ToString("0.0") + "X · DRAG PAN · WHEEL ZOOM · DBL-CLICK ZOOM";
             if (text == idle) return;
             idle = text;
             FrontKit.Set(readout, text, uv.HasValue ? AvInk.Ink : AvInk.Dim);

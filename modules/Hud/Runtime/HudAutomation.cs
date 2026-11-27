@@ -399,7 +399,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (a.weaponStations != null)
                 foreach (WeaponStation s in a.weaponStations)
                 {
-                    if (s == null || s.WeaponInfo == null || !s.WeaponInfo.missile || s.WeaponInfo.bomb || s.Ammo <= 0)
+                    if (s == null || s.WeaponInfo == null || !s.WeaponInfo.missile || s.WeaponInfo.bomb || s.GetAmmoTotal() <= 0)
                         continue;
                     station = s;
                     break;
@@ -408,13 +408,24 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 return Failure("HudAutomation", "Fire", "no loaded missile station");
             Unit target = NearestEnemy(a, Number(args, "range", 15000f));
             int before = OwnMissiles(a);
-            try { station.Fire(a, target); }
+            try
+            {
+                if (station.WeaponInfo.fireInterval > 0f && !station.WeaponInfo.sling)
+                {
+                    GlobalPosition aimpoint = target != null ? target.GlobalPosition() : a.GlobalPosition() + a.transform.forward * 50000f;
+                    station.LaunchMount(a, target, aimpoint);
+                }
+                else
+                {
+                    station.Fire(a, target);
+                }
+            }
             catch (Exception e) { return Failure("HudAutomation", "Fire", "station threw: " + e.Message); }
             var result = new Dictionary<string, object>
             {
                 { "ok", true },
                 { "station", station.WeaponInfo.shortName ?? station.WeaponInfo.weaponName ?? "MSL" },
-                { "ammo_left", station.Ammo },
+                { "ammo_left", station.GetAmmoTotal() },
                 { "target", target != null && target.definition != null ? target.definition.unitName : target != null ? "TGT" : "BLIND" },
                 { "missiles_before", before },
                 { "missiles_after", OwnMissiles(a) },
@@ -553,6 +564,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 });
             ModuleServices.TryGet(out IMissileView view);
             CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
+            HudBoard board = HudBoard.Instance;
             var result = new Dictionary<string, object>
             {
                 { "ok", true },
@@ -563,6 +575,10 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 { "view_label", view?.CurrentLabel ?? "" },
                 { "view_status", view?.Status ?? "" },
                 { "following", cam != null && cam.followingUnit != null ? cam.followingUnit.GetType().Name : "none" },
+                { "shows_wing", board != null && board.ShowsWing },
+                { "rwr_open", board != null && board.RwrOpen },
+                { "fires_open", board != null && board.FiresOpen },
+                { "wing_side", board != null && board.WingSide },
             };
             Debug.Log("[HudAutomation] Missiles: " + Describe(result));
             return result;

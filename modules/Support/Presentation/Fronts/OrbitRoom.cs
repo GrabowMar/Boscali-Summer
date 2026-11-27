@@ -39,7 +39,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         // A map pick is a press and a release that stay together: a pan, a zoom or a drag in between places nothing.
         private bool pressed;
         private Vector2 pressAt, pressCenter;
-        private int pressZoom;
+        private float pressZoom;
 
         // DOWNLINK can take over the OPERATE column or enlarge over the map.
         private DownlinkPane docked, enlarged, shown;
@@ -589,9 +589,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 #endif
             FrontMapView mv = plate.View;
             Vector2 center = mv.Center;   // the view as the press found it: a press on the inset overview moves it, and that is no click on the map
-            int zoomStep = mv.Zoom;
+            float zoomStep = mv.Zoom;
             if (Enlarged) { pressed = false; return false; } // the camera covers the map: no pan, zoom or placement under it
-            bool changed = plate.Tick(mouse);
+            bool changed = plate.Tick(mouse, Picking);
             if (last == null) { pressed = false; return false; }
             if (Picking && plate.RightClick(mouse, out Vector2 ruv))
             {
@@ -603,11 +603,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 pressed = Local(mouse, out pressAt) && OnMap(pressAt);
                 pressCenter = center; pressZoom = zoomStep;
             }
-            if (pressed && (FrontPointer.Held(1) || FrontPointer.Held(2))) pressed = false;   // a pan gesture is no click
+            if (pressed && (plate.DraggedLeft || FrontPointer.Held(1) || FrontPointer.Held(2))) pressed = false;   // a pan gesture is no click
             if (!pressed || !FrontPointer.Up(0)) return MapOnly(changed);
             pressed = false;
             // Only a click that stayed put on an unmoved, unzoomed map picks anything.
-            if (!Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > FrontMapPlate.ClickSlop * FrontMapPlate.ClickSlop || mv.Zoom != pressZoom || (mv.Center - pressCenter).sqrMagnitude > 1e-8f) return MapOnly(changed);
+            if (!Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > FrontMapPlate.ClickSlop * FrontMapPlate.ClickSlop || Mathf.Abs(mv.Zoom - pressZoom) > 1e-4f || (mv.Center - pressCenter).sqrMagnitude > 1e-8f) return MapOnly(changed);
             if (Picking)
             {
                 PickPoint(mv.UV(p));
@@ -649,6 +649,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return false;
         }
 
-        public BoscaliSummer.Core.Ui.CursorShape Cursor(Vector2 mouse) => Enlarged ? BoscaliSummer.Core.Ui.CursorShape.None : plate.Cursor(mouse, Picking);
+        public BoscaliSummer.Core.Ui.CursorShape Cursor(Vector2 mouse) => Enlarged ? enlarged.Cursor(mouse) : plate.Cursor(mouse, Picking);
     }
 }

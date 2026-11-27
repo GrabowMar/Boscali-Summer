@@ -40,7 +40,7 @@ namespace BoscaliSummer.Modules.Hud
             context.AddService<IHudBoard>(board);
             context.AddService<IMissileView>(board);
             context.AddService<ITacBoardSettings>(context.Settings.TacBoard);
-            context.AddClientSetting("FLIGHT AIDS", "TARGET CAM", "The targeting pod's picture as a card in the left column. The cockpit tac screen keeps its own.",
+            context.AddClientSetting("FLIGHT AIDS", "TARGET CAM", "The targeting pod's picture as a card in the bottom-right corner. The cockpit tac screen keeps its own.",
                 context.Settings.TacBoard.TargetCam);
             context.AddClientSetting("FLIGHT AIDS", "MISSILE CAM", "A camera on the nose of your newest missile in the air, as a card bottom right. Off also stops that camera rendering.",
                 context.Settings.TacBoard.PageMissileCam);

@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The header words of the three slots: the panel's name, whatever page it hosts.</summary>
         private static readonly string[] SlotTitles = { "RWR", "FIRES", "WING" };
         private int wipeSoundKey = int.MinValue;
+        private readonly bool[] slotBeat = new bool[ScopeLayout.MaxSlots];
         private bool scopeBeat;
 
         /// <summary>The wipe's clip is the page's rectangle grown by this on every side (LAYOUT.md 10), so the brackets and the edge are inside it.</summary>
@@ -23,8 +24,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Every slot the layout placed (<see cref="BoardGeometry.Slot"/>) gets its panel: the hosted page's body while it has one, under the panel's header.</summary>
         private void PaintPages(in ScopePalette pal, in BoardGeometry geo, bool flashOn, int slotMask = -1)
         {
-            int all = (1 << pageSurfaces.Length) - 1;
-            if ((slotMask & all) == all) scopeBeat = false;      // a partial paint keeps the beat of the slots it leaves
             for (int i = 0; i < pageSurfaces.Length; i++)
             {
                 if ((slotMask & (1 << i)) == 0) continue;      // a slot that did not move keeps its last paint
@@ -32,15 +31,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ScopePageBase current = slotPages[i];
                 bool on = current != null && r.Present;
                 Show(pageSurfaces[i].Scope, on);
-                if (!on) continue;
+                if (!on) { slotBeat[i] = false; continue; }
                 bool content = pageLive[(int)current.Id];
-                PaintPage(pal, r, pageSurfaces[i], transitions[i], current, SlotTitles[i], slotFull[i], content, content && current.HasStrip, flashOn);
+                slotBeat[i] = PaintPage(pal, r, pageSurfaces[i], transitions[i], current, SlotTitles[i], slotFull[i], content, content && current.HasStrip, flashOn);
                 if (i == ScopeLayout.SlotWing && slotOpen[i]) wingPainted = true;
             }
+            scopeBeat = false;
+            for (int i = 0; i < slotBeat.Length; i++) scopeBeat |= slotBeat[i];
         }
 
         /// <summary><paramref name="full"/>: the height the panel's body is laid out for (the slot's rectangle <paramref name="r"/> is shorter while it wipes, and for RWR's header line alone).</summary>
-        private void PaintPage(in ScopePalette pal, in BoardRect r, PageSurface surface, ScopeTransition wipe, ScopePageBase current, string title, float full, bool content, bool strip, bool flashOn)
+        private bool PaintPage(in ScopePalette pal, in BoardRect r, PageSurface surface, ScopeTransition wipe, ScopePageBase current, string title, float full, bool content, bool strip, bool flashOn)
         {
             const bool compact = false;
             bool header = r.H <= ScopeLayout.RwrClear;      // RWR CLEAR: the shelf alone, no body and no brackets
@@ -78,8 +79,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Furniture = allow.Furniture;
             g.Open = true;
             g.Begin(pal, unit, hp, pixel, HudType.BoardBoost);
-            PaintHeader(g, current, title, content ? null : current.IdleWord, w, flashOn);
-            if (strip && content && !header)
+            bool beat = PaintHeader(g, current, title, content ? null : current.IdleWord, w, flashOn);
+            if (strip && content && !header && hS >= ScopeLayout.ShelfRow + ScopeLayout.Strip)
             {
                 g.Origin(0f, bodyH);
                 try { current.PaintStrip(g, new PagePaint(w, ScopeLayout.Strip, false, 0f, now, units)); }
@@ -95,14 +96,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (wipe.Wipe < 1f) g.Fill(wipeW - PageGrow - 1f, -PageGrow, 1f, hS + PageGrow * 2f, Hi, 0.9f);
             g.End();
             surface.FrameVector.Commit();
+            return beat;
         }
 
         /// <summary>The page's header (LAYOUT.md 3.5): the shelf with the page's title and its headline (<see cref="HeaderShelf"/>); a panel with nothing to draw says <paramref name="idle"/> there (RWR ... CLEAR).</summary>
-        private void PaintHeader(ScopeCanvas g, ScopePageBase p, string title, string idle, float w, bool flashOn)
+        private bool PaintHeader(ScopeCanvas g, ScopePageBase p, string title, string idle, float w, bool flashOn)
         {
             ScopeHeadline hl = HeadlineOf(p);
             if (string.IsNullOrEmpty(hl.Text)) hl.Text = idle;
-            if (HeaderShelf(g, w, title, hl.Text, hl.Tone, hl.Flash, flashOn)) scopeBeat = true;
+            return HeaderShelf(g, w, title, hl.Text, hl.Tone, hl.Flash, flashOn);
         }
 
         /// <summary>
@@ -171,7 +173,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Origin(PageGrow, PageGrow);
             g.Raise(0f);
             if (g.Furniture || flag != null) g.PageShelf(0f, 0f, slot.W, "AIRFRAME", flag, tone, HudType.Label, true, alpha);
-            g.Brackets(0f, topPad, slot.W, slot.H - topPad, 8f, tone, warn || caution ? 0.85f : 0.55f, BoscaliSummer.Core.Contracts.HudStroke.Hairline);
+            if (warn || caution) g.Brackets(0f, topPad, slot.W, slot.H - topPad, 8f, tone, 0.85f, BoscaliSummer.Core.Contracts.HudStroke.Hairline);
             g.End();
             airframeVector.Commit();
         }

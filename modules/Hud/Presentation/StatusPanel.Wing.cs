@@ -221,7 +221,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// One lamp: its word. Lit: role tone + solid bar beneath, bold only for caution/warning (HudType.Bold); dark: the word regular in DIM
         /// with no line (only drawn at Full). A warning or a lamp in transition dims with the beat. The spawn lamp test lights them in a sweep.
         /// </summary>
-        private void DrawLamp(ScopeCanvas g, float x, float cy, float w, in Lamp lamp, bool changed, int index, bool flashOn)
+        private void DrawLamp(ScopeCanvas g, float x, float cy, float w, in Lamp lamp, bool changed, int index, bool flashOn, float barDy = 6f)
         {
             bool lit, blink;
             ScopeTone tone = SystemsMath.ToneOf(lamp.State);
@@ -237,7 +237,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 if (tone == Ink) tone = Hi;
                 g.Text(lamp.Legend, x, cy - 1f, tone, 12f, ScopeAlign.Left, true, dip ? 0.55f : 1f);
-                g.Fill(x, cy + 6f, w, 2f, tone, dip ? 0.4f : 1f);      // the lit bar under the word
+                g.Fill(x, cy + barDy, w, 2f, tone, dip ? 0.4f : 1f);      // the lit bar under the word
             }
             else
             {
@@ -252,7 +252,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private void DrawGridLamp(ScopeCanvas g, int slot, float x, float cy, float w, in Lamp lamp, bool changed, int index, bool flashOn)
         {
-            if (!booting && lamp.State >= LampState.Caution) { DrawLamp(g, x, cy, LampLine.Width(lamp.Legend.Length), lamp, changed, index, flashOn); return; }
+            if (!booting && lamp.State >= LampState.Caution) { DrawLamp(g, x, cy, Math.Min(w, LampLine.Width(lamp.Legend.Length)), lamp, changed, index, flashOn, 8f); return; }
             bool lit = booting ? LampTest.Lit(index, bootAge) : lamp.State != LampState.Dark || changed;
             ScopeTone tone = lit ? Hi : Faint;
             float gx = x + 6f, wx = x + 16f;

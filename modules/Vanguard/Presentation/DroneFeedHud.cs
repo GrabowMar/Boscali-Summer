@@ -38,6 +38,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         public void ResetForScene()
         {
             FeedCorner.Uav = default;
+            feed?.Dispose();
             if (root != null) Destroy(root);
             root = null;
             feed = null;

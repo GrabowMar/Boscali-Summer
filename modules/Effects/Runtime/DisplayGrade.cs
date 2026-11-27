@@ -105,8 +105,8 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             Camera world = cameras != null ? cameras.mainCamera : null;
             postQuality.Apply(level != null ? world : null,
                 settings.Dithering.Value, settings.EdgeSmoothing.Value, logger);
-            CinematicAtmosphere atmos = default;
-            if (level != null)
+            CinematicSettings cinema = settings.Cinematic;
+            if (level != null && cinema.Enabled.Value && cinema.Strength.Value > 0f)
             {
                 float sunHeight = level.sun != null ? -level.sun.transform.forward.y : 1f;
                 float altitude = world != null ? world.transform.GlobalPosition().y : 0f;
@@ -117,11 +117,11 @@ namespace BoscaliSummer.Modules.Effects.Runtime
                     shade = snap.CloudShade01;
                     rain = snap.Precipitation01;
                 }
-                atmos = new CinematicAtmosphere(sunHeight, shade, rain, altitude);
+                Shader streak = world != null && cinema.Bloom.Value > 0f ? cinematicAssets.Streak(logger) : null;
+                cinematic.Apply(cinema, level, transform, world, streak,
+                    renderTuning?.OptimizeCinematicStreaks == true, new CinematicAtmosphere(sunHeight, shade, rain, altitude));
             }
-            cinematic.Apply(settings.Cinematic, level, transform, world,
-                settings.Cinematic.Enabled.Value ? cinematicAssets.Streak(logger) : null,
-                renderTuning?.OptimizeCinematicStreaks == true, atmos);
+            else cinematic.Release();
             if (!on || level == null || level.PostProcessing == null)
             {
                 Teardown();

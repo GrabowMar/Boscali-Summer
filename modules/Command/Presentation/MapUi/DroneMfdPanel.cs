@@ -4,6 +4,7 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
 using NOAvionics;
 using TMPro;
 using UnityEngine;
@@ -70,6 +71,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public void ResetForScene()
         {
             installer.Reset();
+            feed?.Dispose();
+            feed = null;
             console = null;
             lastSelection = -1;
             rosterTracks.Clear();
@@ -87,7 +90,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (!installer.Tick() || installer.Bezel == null) return;
             installer.Bezel.enabled = installer.Bezel.interactable = true;
             if (console != null && console.Root.gameObject.activeInHierarchy && feed.Shown)
-                feed.Show(drones.WantFeed());
+                feed.Show(drones.WantFeed(), drones.LookWord == "IR WHOT");
         }
 
         private RectTransform BuildScreen(RectTransform host, float height)
@@ -213,6 +216,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private sealed class FeedPicture : AvPart
         {
             private readonly RawImage picture;
+            private readonly CamFeedEffect effect = new CamFeedEffect(CamFeedMode.DroneEo);
             private readonly TMP_Text idle;
 
             internal FeedPicture(RectTransform parent)
@@ -223,17 +227,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 picture.rectTransform.SetParent(Rect, false);
                 picture.raycastTarget = false;
                 AvLay.Fill(picture.rectTransform);
+                effect.Bind(picture);
                 idle = AvText.Make(Rect, "Idle", AvTextRole.DataSmall, "NO SIGNAL", TextAlignmentOptions.Center);
                 AvLay.Fill(idle.rectTransform);
                 Restyle();
             }
 
-            internal void Show(Texture texture)
+            internal void Show(Texture texture, bool ir)
             {
+                effect.Bind(picture);
+                effect.SetMode(ir ? CamFeedMode.DroneIr : CamFeedMode.DroneEo);
+                effect.SetSignal(texture != null ? 1f : 0f);
                 if (picture.texture != texture) picture.texture = texture;
                 picture.enabled = texture != null;
                 idle.gameObject.SetActive(texture == null);
             }
+
+            internal void Dispose() => effect.Dispose();
 
             public override float Measure(float width) => Mathf.Round(width * 9f / 16f);
 

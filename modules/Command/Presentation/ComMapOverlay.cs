@@ -195,20 +195,25 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (dynamicMap == null) dynamicMap = SceneSingleton<DynamicMap>.i;
             if (dynamicMap == null) return;
             isMapMaximized = DynamicMap.mapMaximized;
+            bool quickMap = !isMapMaximized && Runtime.MapHoldKey.ShowOverlays;
+            bool showOverlay = isMapMaximized || quickMap;
 
-            // Build the raster and vector map surfaces only when the large map opens.
-            // The sector counts the board and the ticker read come from CommandManager's census, so nothing here needs to run while the map is closed.
-            if (isMapMaximized && !initialized) TryInitialize();
+            // Build the raster and vector map surfaces when the large map or held Quick Map opens.
+            if (showOverlay && !initialized) TryInitialize();
 
-            // Strict visibility control: Overlay is strictly for the Maximized Theater Map!
-            // When minimized (cockpit flight HUD), overlay MUST stay disabled so it never pollutes the cockpit MFD.
-            if (overlayObj != null && overlayObj.activeSelf != isMapMaximized)
+            if (overlayObj != null && overlayObj.activeSelf != showOverlay)
             {
-                SetOverlayVisible(isMapMaximized);
+                SetOverlayVisible(showOverlay);
+            }
+            if (overlayImage != null)
+            {
+                Color tint = Color.white;
+                if (quickMap) tint.a = 0.65f;
+                if (overlayImage.color != tint) overlayImage.color = tint;
             }
 
             // Ensure overlay stays parented to mapImage with stretch anchors
-            if (isMapMaximized && overlayObj != null && dynamicMap.mapImage != null && overlayObj.transform.parent != dynamicMap.mapImage.transform)
+            if (showOverlay && overlayObj != null && dynamicMap.mapImage != null && overlayObj.transform.parent != dynamicMap.mapImage.transform)
             {
                 overlayObj.transform.SetParent(dynamicMap.mapImage.transform, false);
                 RectTransform overlayRect = overlayObj.GetComponent<RectTransform>();
@@ -225,7 +230,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (now >= nextGridUpdate)
             {
                 nextGridUpdate = now + Math.Max(0.2f, settings.GridRefreshInterval.Value);
-                UpdateSectorGrid(isMapMaximized && initialized);
+                UpdateSectorGrid(showOverlay && initialized);
             }
         }
 

@@ -116,39 +116,93 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>A feed card's height: the header over a 16:9 picture.</summary>
         public const float CardHeight = TargetCardHeaderHeight + TargetCardWidth / TargetCardAspect;
 
-        // The bottom-right feed column (2026-10-20): the VANGUARD UAV card (another module's, passed in as `uav`, no size = none) holds the bottom and the missile card stands on it.
-        // The target card left it (2026-11-16 zones): it stands in the TARGET CAM zone of the left column.
+        // The bottom-right feed column (2026-10-20; TargetCam moved here 2026-11-27): UAV holds the bottom-right slot when up,
+        // TARGET CAM stacks on UAV (or takes the bottom-right floor when no UAV is up), and MISSILE CAM stacks on the one
+        // right-column card or steps left along the bottom-right floor so the column never grows past two cards tall.
 
-        /// <summary>Where the missile card stands: on the UAV card, else on the safe margin.</summary>
-        private static float Floor(float height, RectF uav) =>
-            uav.Height > 0f ? Math.Max(uav.Top + CardGap, -height * 0.5f + SafeMargin) : -height * 0.5f + SafeMargin;
+        private static float RightColumnX(float width) => width * 0.5f - HudZones.Margin - TargetCardWidth * 0.5f;
+
+        private static float FloorY(float height) => -height * 0.5f + SafeMargin;
+
+        private static bool InRightColumn(RectF card, float rightCx) =>
+            card.Height > 0f && Math.Abs(card.CenterX - rightCx) < TargetCardWidth * 0.5f;
 
         /// <summary>The smallest scale the target card's size follows (position keeps the true scale).</summary>
         public const float TargetCardMinScale = 0.5f;
 
-        /// <summary>The left-column target-camera card in the TARGET CAM zone (<see cref="HudZones"/>): position and total height scale with <paramref name="height"/> / 1080 (size floored at half scale); the header stays
-        /// <see cref="TargetCardHeaderHeight"/> and the 16:9 picture takes the rest; collapses (zero height) when there is nothing to show.</summary>
-        public static RectF TargetCard(float width, float height, bool visible)
+        /// <summary>
+        /// Bottom-right target-camera card: takes the bottom-right floor (or stacks on <paramref name="uav"/> when up),
+        /// stepping left along the bottom-right floor if <paramref name="board"/> or <paramref name="keepOff"/> blocks the column.
+        /// Collapses (zero height) when <paramref name="visible"/> is false.
+        /// </summary>
+        public static RectF TargetCard(float width, float height, bool visible, RectF uav = default, RectF board = default, RectF keepOff = default)
         {
-            ZoneRect z = HudZones.Ref(HudZone.TargetCam, width * HudZones.RefHeight / height);
-            float k = height / HudZones.RefHeight;
-            float full = CardHeight * Math.Max(TargetCardMinScale, k);
-            float w = (full - TargetCardHeaderHeight) * TargetCardAspect, h = visible ? full : 0f;
-            return new RectF(-width * 0.5f + z.X * k + w * 0.5f, height * 0.5f - z.Y * k - h * 0.5f, w, h);
+            if (!visible) return new RectF(RightColumnX(width), FloorY(height), TargetCardWidth, 0f);
+            return PlaceCornerCard(width, height, uav, default, board, keepOff);
         }
 
         /// <summary>
-        /// The missile feed card, bottom right: on the UAV card, else on the safe margin. A card that would run into <paramref name="board"/>
-        /// (the TAC BOARD's box; no size = none) goes left of the UAV card instead (no UAV card: stays), and drops below <paramref name="keepOff"/>
-        /// (<see cref="AltitudeBlock"/>) if it would cover it there.
+        /// The missile feed card, bottom right: stacks on <paramref name="uav"/> or <paramref name="target"/> when only one holds
+        /// the right column, takes the bottom-right floor when neither is up, or steps left along the bottom-right floor when two
+        /// cards already occupy the column or <paramref name="board"/> / <paramref name="keepOff"/> blocks it.
         /// </summary>
-        public static RectF MissileCard(float width, float height, RectF uav = default, RectF board = default, RectF keepOff = default)
+        public static RectF MissileCard(float width, float height, RectF uav = default, RectF board = default, RectF keepOff = default, RectF target = default) =>
+            PlaceCornerCard(width, height, uav, target, board, keepOff);
+
+        private static RectF PlaceCornerCard(float width, float height, RectF first, RectF second, RectF board, RectF keepOff)
         {
-            RectF card = new RectF(width * 0.5f - HudZones.Margin - TargetCardWidth * 0.5f, Floor(height, uav) + CardHeight * 0.5f, TargetCardWidth, CardHeight);
-            if (uav.Height <= 0f || board.Width <= 0f || board.Height <= 0f ||
-                !Overlaps(card, new RectF(board.CenterX, board.CenterY, board.Width + 2f * GuardMargin, board.Height + 2f * GuardMargin))) return card;
-            card = new RectF(uav.Left - CardGap - TargetCardWidth * 0.5f, uav.Bottom + CardHeight * 0.5f, TargetCardWidth, CardHeight);
-            if (keepOff.Height > 0f && Overlaps(card, keepOff)) card = card.WithCenter(card.CenterX, keepOff.Bottom - GuardMargin - CardHeight * 0.5f);
+            float rightCx = RightColumnX(width), floor = FloorY(height);
+            float minCx = -width * 0.5f + HudZones.Margin + TargetCardWidth * 0.5f;
+            RectF paddedBoard = board.Width > 0f && board.Height > 0f
+                ? new RectF(board.CenterX, board.CenterY, board.Width + 2f * GuardMargin, board.Height + 2f * GuardMargin)
+                : default;
+
+            bool firstRight = InRightColumn(first, rightCx), secondRight = InRightColumn(second, rightCx);
+            int rightCount = (firstRight ? 1 : 0) + (secondRight ? 1 : 0);
+
+            if (rightCount <= 1)
+            {
+                float bottom = rightCount == 0
+                    ? floor
+                    : Math.Max((firstRight ? first.Top : second.Top) + CardGap, floor);
+                RectF primary = new RectF(rightCx, bottom + CardHeight * 0.5f, TargetCardWidth, CardHeight);
+                if ((paddedBoard.Width <= 0f || !Overlaps(primary, paddedBoard)) &&
+                    (keepOff.Height <= 0f || !Overlaps(primary, keepOff)) &&
+                    (first.Height <= 0f || !Overlaps(primary, first)) &&
+                    (second.Height <= 0f || !Overlaps(primary, second)))
+                    return primary;
+            }
+
+            float cx = rightCx;
+            if (firstRight) cx = Math.Min(cx, first.Left - CardGap - TargetCardWidth * 0.5f);
+            if (secondRight) cx = Math.Min(cx, second.Left - CardGap - TargetCardWidth * 0.5f);
+            float stepBottom = firstRight ? Math.Max(first.Bottom, floor) : secondRight ? Math.Max(second.Bottom, floor) : floor;
+
+            RectF card = default;
+            for (int step = 0; step < 4; step++)
+            {
+                cx = Math.Max(minCx, cx);
+                card = new RectF(cx, stepBottom + CardHeight * 0.5f, TargetCardWidth, CardHeight);
+                if (cx <= minCx + 0.01f) break;
+                if (paddedBoard.Width > 0f && Overlaps(card, paddedBoard))
+                {
+                    cx = Math.Min(cx - CardGap - TargetCardWidth, board.Left - CardGap - TargetCardWidth * 0.5f);
+                    continue;
+                }
+                if (first.Height > 0f && Overlaps(card, first))
+                {
+                    cx = first.Left - CardGap - TargetCardWidth * 0.5f;
+                    continue;
+                }
+                if (second.Height > 0f && Overlaps(card, second))
+                {
+                    cx = second.Left - CardGap - TargetCardWidth * 0.5f;
+                    continue;
+                }
+                break;
+            }
+            if (keepOff.Height > 0f && Overlaps(card, keepOff))
+                card = card.WithCenter(card.CenterX, keepOff.Bottom - GuardMargin - CardHeight * 0.5f);
             return card;
         }
 

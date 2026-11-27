@@ -32,7 +32,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private VanguardNet net;
         private readonly List<DroneRoster.Entry> entries = new List<DroneRoster.Entry>(16);
         private readonly List<DroneView> views = new List<DroneView>(16);
-        private readonly FeedCamera feed = new FeedCamera("BoscaliDroneFeed", 480, 270, FeedLook.Seeker, pointFilter: false) { Fps = 20f, FieldOfView = 50f };
+        private readonly FeedCamera feed = new FeedCamera("BoscaliDroneFeed", 384, 216, FeedLook.Seeker, pointFilter: false) { Fps = 15f, FieldOfView = 50f };
         private Missile linked, lensOn;
         private string linkedName = "";
         private float nextRefresh, wantedUntil, switchedAt = -9f, lostAt = -9f, nextSpi;

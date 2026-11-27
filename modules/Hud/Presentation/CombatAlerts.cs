@@ -363,7 +363,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 AvStrokes.Chevron(b, cos * (r - size * 0.6f), sin * (r - size * 0.6f), size * 0.75f, angle, HudStroke.Hairline, c.WithAlpha(c.A * 0.55f));
                 float glow = ThreatRing.EdgeAlpha(tti);
                 if (glow > 0f) EdgeGlow(e, angle, w * 0.5f, h * 0.5f, palette.Alert.ToRgba().WithAlpha(glow));
-                int seconds = Mathf.Clamp(Mathf.CeilToInt(tti), 0, 999);
+                int seconds = float.IsFinite(tti) ? Mathf.Clamp(Mathf.CeilToInt(tti), 0, 999) : 0;
                 // Near twelve o'clock the label reads inward: outward it would sit on the banner's detail line; near six too: outward it would sit on the cockpit's rim.
                 bool inward = sin > 0.6f || sin < -0.6f;
                 RingLabel(used++, cos, sin, inward ? r - size * 1.1f - 4f : r + size * 0.5f + 6f, numbers[i] * 1000 + seconds, numbers[i], seconds, c, inward);

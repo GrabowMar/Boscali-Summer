@@ -175,6 +175,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
 
             float glow = Unit(settings.Bloom.Value) * strength;
             bloom.active = glow > 0f;
+            float exposure = bloom.active ? Exposure() : 0f;
             if (bloom.active)
             {
                 float original = nativeBloom != null && nativeBloom.active ? nativeBloom.intensity.value : 0f;
@@ -183,7 +184,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
                 bloom.intensity.Override(original + bloomGain * glow * nightDamp);
                 // URP thresholds the raw HDR frame before exposure and converts this parameter from gamma.
                 // A fixed threshold would make the whole daylight sky bloom at the game's usual negative EV.
-                float threshold = Mathf.LinearToGammaSpace(1.2f * Mathf.Pow(2f, -Exposure()));
+                float threshold = Mathf.LinearToGammaSpace(1.2f * Mathf.Pow(2f, -exposure));
                 bloom.threshold.Override(Mathf.Max(threshold, nativeBloom != null ? nativeBloom.threshold.value : 0f));
                 bloom.scatter.Override(Mathf.Lerp(nativeBloom != null ? nativeBloom.scatter.value : 0.7f, targetScatter, strength));
                 bloom.tint.Override(bloomTint);
@@ -209,7 +210,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
                 grain.response.Override(0.75f);
             }
 
-            ApplyStreak(world, streakShader, glow * streakScale, optimizeStreaks);
+            ApplyStreak(world, streakShader, glow * streakScale, exposure, optimizeStreaks);
         }
 
         private void Ensure(Volume native, Transform parent)
@@ -245,10 +246,8 @@ namespace BoscaliSummer.Modules.Effects.Runtime
         {
             if (lumVsSat == null || satVsSat == null) return;
             if (Mathf.Abs(amount - curveAmount) < 0.004f && Mathf.Abs(overcast - curveOvercast) < 0.004f) return;
-            curveAmount = amount;
-            curveOvercast = overcast;
 
-            SetKeys(lumVsSat, LumSatTimes, new[]
+            if (amount != curveAmount) SetKeys(lumVsSat, LumSatTimes, new[]
             {
                 Mathf.Lerp(0.5f, 0.34f, amount),
                 Mathf.Lerp(0.5f, 0.48f, amount),
@@ -263,6 +262,8 @@ namespace BoscaliSummer.Modules.Effects.Runtime
                 Mathf.Lerp(0.5f, 0.43f - 0.04f * overcast, amount),
                 Mathf.Lerp(0.5f, 0.38f - 0.04f * overcast, amount)
             });
+            curveAmount = amount;
+            curveOvercast = overcast;
         }
 
         private static TextureCurve CreateCurve(float[] times)
@@ -334,7 +335,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             curveAmount = curveOvercast = -1f;
         }
 
-        private void ApplyStreak(Camera world, Shader shader, float strength, bool optimize)
+        private void ApplyStreak(Camera world, Shader shader, float strength, float exposure, bool optimize)
         {
             if (world == null || shader == null || !shader.isSupported || strength <= 0f)
             {
@@ -345,7 +346,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             if (streakMaterial == null)
                 streakMaterial = new Material(shader) { name = "BoscaliSummer.CinematicStreak", hideFlags = HideFlags.HideAndDontSave };
             streak ??= new CinematicStreakPass();
-            streak.Bind(world, streakMaterial, strength, Exposure(), optimize);
+            streak.Bind(world, streakMaterial, strength, exposure, optimize);
         }
 
         private void ReleaseStreak()

@@ -113,12 +113,20 @@ Shader "Boscali/ReliefGround"
                 {
                     // Real depth or a near shore makes the shallows; a sea with no depth is deep away from the coast.
                     float shallow = max(h < 0.0 ? saturate(1.0 + h / _ShallowMeters) : 0.0, saturate(1.0 - i.data.y / _CoastCells));
-                    col = lerp(_Deep.rgb, _Shallow.rgb, shallow) * lerp(0.75, 1.2, i.shade.a);
+                    col = lerp(_Deep.rgb, _Shallow.rgb, shallow) * lerp(0.76, 1.18, i.shade.a);
+                    // Subtle bathymetric depth contours and a crisp coastal shelf edge.
+                    float bathy = h < -1.0 ? Contour(-h / 25.0, heightWidth / 25.0) : 0.0;
+                    float shelfBand = saturate(1.0 - i.data.y / max(_CoastCells, 1.0));
+                    col += _Coast.rgb * (bathy * 0.045 + shelfBand * 0.025);
+                    float undercut = saturate(1.0 - abs(s) / max(heightWidth * 2.2, 0.25));
+                    col *= 1.0 - undercut * 0.22;
                 }
                 else
                 {
                     col = tex2Dgrad(_MainTex, i.uv, uvDx, uvDy).rgb * i.shade.rgb * _Color.rgb;
-                    col *= lerp(0.99, 1.08, saturate(h / _PeakMeters));
+                    float altT = saturate(h / _PeakMeters);
+                    // Gentle hypsometric contrast: cool low basins, crisp sunlit highlands.
+                    col *= lerp(fixed3(0.95, 0.98, 1.01), fixed3(1.10, 1.09, 1.06), altT);
                     // Etched, not drawn: pale lines read as roads and grid (2026-10-29 captures).
                     float contourHeight = h / _ContourStep;
                     float contourWidth = heightWidth / _ContourStep;
@@ -127,7 +135,7 @@ Shader "Boscali/ReliefGround"
                     col *= 1.0 - max(_ContourInk * minor, _IndexInk * index);
                 }
                 float coast = 1.0 - smoothstep(0.0, heightWidth + 0.001, abs(s));
-                col = lerp(col, _Coast.rgb, coast * 0.18);
+                col = lerp(col, _Coast.rgb, coast * 0.32);
                 float haze = saturate(i.data.z) * _HazeRange.z;
                 col = lerp(col, _Haze.rgb, haze);
                 return fixed4(col, 1.0);

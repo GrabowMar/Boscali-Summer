@@ -85,11 +85,15 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool Ignition = true;
         public bool CanEject = true;
 
-        // LIGHTS
+        // COCKPIT (cabin & lights)
         public bool HasNav, NavOn;
         public bool HasLandingLight;
         /// <summary>0 OFF, 1 ON, 2 AUTO.</summary>
         public int LandingLight;
+        public bool KneeboardAvailable;
+        public string KneeboardCard = "";
+
+        // VIEW (camera & optics)
         public bool HasNvg, NvgOn;
         /// <summary>The goggles take a gain step (the mod's night-vision look is metering): 0 AUTO, 1 LOW, 2 MED, 3 HIGH.</summary>
         public bool HasNvgGain;
@@ -131,8 +135,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// launch order, the linked one (-1 none), whether it flies an order (HAND or WPT), whether the HUD feed card is on.</summary>
         public List<string> DroneNames = new List<string>(), DroneStates = new List<string>();
         public int DroneLinked = -1;
-        public bool DronePiloting, DroneFeed, DroneRamMode;
-        /// <summary>REMORA drones flying now.</summary>
+        public bool DronePiloting, DroneFeed, DroneRamMode, DroneCanPilot;
+        public string DroneLookWord = "", DroneZoomWord = "";
 
         // VIEW
         public bool CameraFollowing = true;
@@ -147,7 +151,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public int Missiles;
         public string MissileStatus = "";
         public string MissileCurrent = "";
-        /// <summary>The visor terrain options are installed: HUD lists the ground ghost row.</summary>
+        /// <summary>The visor terrain options are installed: HUD lists the terrain grid row.</summary>
         public bool TerrainAvailable;
         /// <summary>Index into <see cref="MenuCatalog.Ghosts"/>: OFF, FAINT, CLEAR.</summary>
         public int TerrainGhost;
@@ -165,10 +169,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public HashSet<string> BoardSwitches = new HashSet<string>();
         /// <summary>The AR overlays that are on, as "ar/slug" (<see cref="MenuCatalog.ArParts"/>).</summary>
         public HashSet<string> ArSwitches = new HashSet<string>();
-
-        // COCKPIT (cabin)
-        public bool KneeboardAvailable;
-        public string KneeboardCard = "";
 
         // SUPPORT
         public bool MarkAvailable;

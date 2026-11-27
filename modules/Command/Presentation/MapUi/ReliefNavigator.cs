@@ -2,6 +2,7 @@ using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
 using Rewired;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -19,7 +20,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// </summary>
     internal static class ReliefNavigator
     {
-        private const float MinimumSlop = 6f;
+        private const float MinimumSlop = MapTool.ClickSlop;
         private const float ZoomPerUnit = .2f;
         private const float ZoomTau = .06f;
         private const float AngleTau = .08f;
@@ -27,10 +28,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float CoastTau = .16f;
         private const float DoubleClickSeconds = .3f;
         private const float KeyPanViewsPerSecond = .6f;
+        private const float KeyTurnDegreesPerSecond = 75f;
+        private const float KeyTiltDegreesPerSecond = 45f;
         private const float OrbitYawPerPixel = .25f;
         private const float OrbitPitchPerPixel = .2f;
         private const float WheelTurnDegrees = 15f;
         private const float WheelTiltDegrees = 5f;
+        private const float FallbackWheelScale = .65f;
 
         private enum Drag { None, PendingGrab, Grab, PendingOrbit, Orbit }
 
@@ -60,10 +64,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         internal static bool Following => follow;
         internal static bool Flying => fly;
-        /// <summary>An orbit drag (held wheel, or Alt + left) is under way.</summary>
+        internal static bool IsTopDown => MfdTerrainRelief.Pitch >= 80f;
+        /// <summary>An orbit drag (held wheel, Alt + left, or right drag) is under way.</summary>
         internal static bool Turning => drag == Drag.Orbit;
         /// <summary>A grab-the-ground pan drag is under way.</summary>
         internal static bool Grabbing => drag == Drag.Grab;
+        /// <summary>Model-space pivot point held during an active orbit drag.</summary>
+        internal static Vector3 OrbitAnchor => anchor;
 
         /// <summary>A grab drag, or its release frame, must not also click the icon beneath it.</summary>
         internal static bool BlockIconClick() => drag == Drag.Grab || drag == Drag.Orbit ||
@@ -129,7 +136,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             anchor = Ground(rig, vx, vy);
             velocity = coast = Vector2.zero;
             if (orbit) return;
-            if (CommandSettingsScope.Current?.MapDoubleClickZoom?.Value != false &&
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            bool overContactOrBase = map != null &&
+                (MfdMapInteractions.HoverContact(map, mouse) != null ||
+                 MfdMapInteractions.HoverAirbase(map, mouse) != null);
+            if (!overContactOrBase &&
+                CommandSettingsScope.Current?.MapDoubleClickZoom?.Value != false &&
                 Time.unscaledTime - lastClickTime < DoubleClickSeconds &&
                 (mouse - lastClickScreen).sqrMagnitude < Slop * Slop)
             {
@@ -141,8 +153,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ZoomTo(rig, (zoomEasing ? targetZoom : rig.Zoom) * 2f, .5f, .5f, 0f);
                 return;
             }
-            lastClickTime = Time.unscaledTime;
-            lastClickScreen = mouse;
+            if (overContactOrBase) lastClickTime = -1f;
+            else
+            {
+                lastClickTime = Time.unscaledTime;
+                lastClickScreen = mouse;
+            }
         }
 
         private static void Hold(ReliefRig rig, Vector2 mouse, float vx, float vy, float dt)
@@ -194,8 +210,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static void ReadAxes(ReliefRig rig, bool free, float vx, float vy, float dt)
         {
-            if (MfdMapInteractions.Typing()) return;
+            if (MfdMapInteractions.Typing() || MapUiPointer.WindowHoldsMouse()) return;
             if (player == null && ReInput.isReady) player = ReInput.players.GetPlayer(0);
+
+            if (Input.GetKeyDown(KeyCode.Home)) Fit();
 
             float zoom = player != null ? player.GetAxis("Zoom View") : 0f;
             // Ctrl + wheel turns and Shift + wheel tilts, a notch at a time: the orbit without holding
@@ -206,6 +224,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (MfdMapInteractions.ControlHeld()) Turn(Mathf.Sign(wheel) * WheelTurnDegrees);
                 else Tilt(Mathf.Sign(wheel) * WheelTiltDegrees);
                 zoom = 0f;
+            }
+            else if (zoom == 0f && wheel != 0f && free)
+            {
+                zoom = wheel * FallbackWheelScale;
             }
             // Wheel over a panel scrolls the panel; a stick or key zoom off the map uses the centre.
             if (zoom != 0f && !MapUiPointer.OverControls())
@@ -229,6 +251,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     right = keysRight;
                     up = keysUp;
+                }
+                float keyTurn = (Input.GetKey(KeyCode.E) ? 1f : 0f) - (Input.GetKey(KeyCode.Q) ? 1f : 0f);
+                float keyTilt = (Input.GetKey(KeyCode.R) ? 1f : 0f) - (Input.GetKey(KeyCode.F) ? 1f : 0f);
+                if (keyTurn != 0f || keyTilt != 0f)
+                {
+                    Vector3 pivot = Ground(rig, .5f, .5f);
+                    rig.OrbitAbout(keyTurn * KeyTurnDegreesPerSecond * dt, keyTilt * KeyTiltDegreesPerSecond * dt,
+                        pivot.x, pivot.y, pivot.z);
+                    angleEasing = false;
                 }
             }
             if (right == 0f && up == 0f) return;
@@ -314,7 +345,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AngleTo(angleEasing ? targetYaw : rig.Yaw, (angleEasing ? targetPitch : rig.Pitch) + degrees);
         }
 
-        internal static void North() => AngleTo(0f, ReliefRig.DefaultPitch);
+        internal static void North()
+        {
+            ReliefRig rig = MfdTerrainRelief.Rig;
+            float pitch = Mathf.Abs(Mathf.DeltaAngle(rig.Yaw, 0f)) < 1f ? ReliefRig.DefaultPitch : rig.Pitch;
+            AngleTo(0f, pitch);
+        }
+
+        internal static void TogglePerspective()
+        {
+            ReliefRig rig = MfdTerrainRelief.Rig;
+            AngleTo(angleEasing ? targetYaw : rig.Yaw, IsTopDown ? ReliefRig.ObliquePitch : ReliefRig.DefaultPitch);
+        }
 
         internal static void Fit()
         {
@@ -402,6 +444,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Release();
             follow = false;
             targetZoom = ReliefRig.MinZoom;
+            targetYaw = 0f;
+            targetPitch = ReliefRig.DefaultPitch;
             player = null;
         }
     }

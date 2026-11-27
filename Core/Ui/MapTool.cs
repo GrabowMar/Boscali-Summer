@@ -17,6 +17,9 @@ namespace BoscaliSummer.Core.Ui
         /// <summary>The mouse button an armed tool places with: the right one.</summary>
         internal const int Button = 1;
 
+        /// <summary>True while the hold-key Quick Map overlay owns the minimised map square in flight.</summary>
+        internal static bool QuickMapActive;
+
         internal static bool Typing()
         {
             GameObject selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;

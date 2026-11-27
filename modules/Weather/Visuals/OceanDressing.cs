@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal static float ReflectionGain = 1f, ScatterGain = 0.6f, GustContrast = 0.45f;
         internal static float DisplaceStart = 900f, DisplaceEnd = 2200f;
         // Linear. Deep sea is dark blue (0.01, 0.16, 0.27 drew a swimming-pool cyan from altitude, live check 2026-10-19).
-        internal static Color CalmDeep = new Color(0.006f, 0.075f, 0.17f), StormDeep = new Color(0.03f, 0.065f, 0.08f);
+        internal static Color CalmDeep = new Color(0.0045f, 0.052f, 0.130f), StormDeep = new Color(0.03f, 0.065f, 0.08f);
         internal static Color ScatterColour = new Color(0.1f, 0.55f, 0.48f), FoamTint = new Color(0.93f, 0.96f, 0.98f);
 
         private const int Waves = SeaState.WaveCount, CalmSlots = 8;
@@ -39,8 +39,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly AccessTools.FieldRef<LevelInfo, ReflectionProbe> ProbeOf =
             AccessTools.FieldRefAccess<LevelInfo, ReflectionProbe>("reflectionProbe");
 
-        private static readonly Color CalmGrazing = new Color(0.014f, 0.145f, 0.24f, 1f), StormGrazing = new Color(0.036f, 0.082f, 0.095f, 1f);
-        private static readonly Color CalmShadow = new Color(0.003f, 0.032f, 0.085f, 1f), StormShadow = new Color(0.015f, 0.034f, 0.044f, 1f);
+        private static readonly Color CalmGrazing = new Color(0.007f, 0.072f, 0.155f, 1f), StormGrazing = new Color(0.026f, 0.062f, 0.078f, 1f);
+        private static readonly Color CalmShadow = new Color(0.002f, 0.024f, 0.068f, 1f), StormShadow = new Color(0.012f, 0.028f, 0.038f, 1f);
         private static readonly Color CalmShallow = new Color(0.04f, 0.34f, 0.36f, 1f), StormShallow = new Color(0.06f, 0.17f, 0.16f, 1f);
 
         private static readonly int WavesId = Shader.PropertyToID("_Waves"), PhaseId = Shader.PropertyToID("_WavePhase"),
@@ -66,8 +66,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             Shader.PropertyToID("_RippleA"), Shader.PropertyToID("_RippleB"), Shader.PropertyToID("_FoamUV"),
             Shader.PropertyToID("_StreakUV"), Shader.PropertyToID("_GustUV"), Shader.PropertyToID("_RippleC"),
         };
-        private static readonly float[] Tile = { 11f, 37f, 46f, 140f, 2400f, 170f };
-        private static readonly float[] Weight = { 1f, 0.6f, 1f, 1f, 1f, 0.8f };
+        private static readonly float[] Tile = { 11f, 37f, 46f, 140f, 2400f, 137f };
+        private static readonly float[] Weight = { 1f, 0.6f, 1f, 1f, 1f, 0.38f };
         private static readonly float[] Drift = { 0.9f, 1.6f, 1.2f, 3f, -1f, 2.5f };
         private static readonly float[] Turn = { 0f, 0.7f, 0f, 0f, 0f, -0.5f };
         private static readonly bool[] WindAligned = { true, true, false, true, false, true };

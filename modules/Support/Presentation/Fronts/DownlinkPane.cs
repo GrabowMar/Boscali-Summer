@@ -401,6 +401,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             /// <summary>The picture's centre in screen pixels (the in-game GUI check aims its wheel and drag there).</summary>
             public Vector2 ScreenCentre => RectTransformUtility.WorldToScreenPoint(null, pic.TransformPoint(pic.rect.center));
 
+            /// <summary>Grab hand while panning the downlink picture, crosshair over the live feed.</summary>
+            public BoscaliSummer.Core.Ui.CursorShape Cursor(Vector2 mouse)
+            {
+                if (dragging) return BoscaliSummer.Core.Ui.CursorShape.Grab;
+                if (Visible && live && Local(mouse, out Vector2 p) && p.x >= 0f && p.x <= pw && p.y >= 0f && p.y <= ph - Bar)
+                    return BoscaliSummer.Core.Ui.CursorShape.Ground;
+                return BoscaliSummer.Core.Ui.CursorShape.None;
+            }
+
             private static AvControl Tool(RectTransform p, string label, AvIcon icon, float x, float y, float w, float h, Action click, string help)
             {
                 AvControl c = AvControl.Make(p, new AvControl.Spec(label, click, AvButtonStyle.Default, icon));

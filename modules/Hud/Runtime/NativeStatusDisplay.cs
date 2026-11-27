@@ -254,7 +254,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         {
             if (bg != null)
             {
-                Rgba bgInk = pal.Of(damaged ? ScopeTone.Ink : ScopeTone.Dim, damaged ? 0.92f : 0.72f);
+                Rgba bgInk = pal.Of(ScopeTone.Ink, damaged ? 1f : 0.85f);
                 bg.color = new Color(bgInk.R, bgInk.G, bgInk.B, bgInk.A);
             }
 

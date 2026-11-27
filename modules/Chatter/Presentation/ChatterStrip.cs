@@ -101,21 +101,53 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
 
         private void SetVisible(bool visible)
         {
-            if (host != null) host.SetVisible(visible);
+            if (host != null && host.Canvas != null) host.SetVisible(visible);
             else if (holderCanvas != null && holderCanvas.enabled != visible) holderCanvas.enabled = visible;
         }
 
         private float Alpha { set { CanvasGroup g = host != null ? host.Group : holderGroup; if (g != null && g.alpha != value) g.alpha = value; } }
 
+        private bool HasWidgets()
+        {
+            if (shelf == null || channel == null || prompt == null || shelfLine == null || promptTrack == null || promptBar == null) return false;
+            for (int i = 0; i < Rows; i++)
+                if (rows[i].Text == null || ticks[i] == null) return false;
+            return true;
+        }
+
+        private void DestroyLooseWidgets()
+        {
+            DestroyWidget(shelf); shelf = null;
+            DestroyWidget(channel); channel = null;
+            DestroyWidget(prompt); prompt = null;
+            DestroyWidget(shelfLine); shelfLine = null;
+            DestroyWidget(promptTrack); promptTrack = null;
+            DestroyWidget(promptBar); promptBar = null;
+            for (int i = 0; i < Rows; i++)
+            {
+                DestroyWidget(rows[i].Text); rows[i].Text = null;
+                DestroyWidget(ticks[i]); ticks[i] = null;
+            }
+        }
+
+        private static void DestroyWidget(Component component)
+        {
+            if (component != null) Object.Destroy(component.gameObject);
+        }
+
         /// <summary>Keeps the surface in the mode the A/B switch wants; on a change the labels and bars move to the new one.</summary>
         private void Mount()
         {
             bool want = HudLayer.Enabled && HudLayer.Ensure();
-            if (want == inLayer && (host != null || holder != null)) return;
+            bool containerAlive = want
+                ? holderGo != null && holder != null && dataRoot != null && staticRoot != null && holder.parent == HudLayer.Data
+                : host != null && host.Root != null && host.Canvas != null;
+            if (want == inLayer && containerAlive && HasWidgets()) return;
+
+            AvHudHost oldHost = host;
+            GameObject oldHolder = holderGo;
             inLayer = want;
-            host?.Destroy();
             host = null;
-            if (holderGo != null) Object.Destroy(holderGo);
             holderGo = null; holder = dataRoot = staticRoot = null;
             holderCanvas = null; holderGroup = null;
             if (want)
@@ -133,12 +165,23 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 dataRoot = Layer("Data");
             }
             else host = AvHudHost.Create("Boscali / Chatter", parent, 3);
-            // Unity null: the first mount, or the old canvas took the labels down with it.
-            if (shelf == null || shelfLine == null) { Build(); SetVisible(false); return; }
-            Move(shelf); Move(channel); Move(prompt);
-            for (int i = 0; i < Rows; i++) Move(rows[i].Text);
-            Move(shelfLine, true); Move(promptTrack, true); Move(promptBar, true);
-            for (int i = 0; i < Rows; i++) Move(ticks[i], true);
+
+            // Move surviving widgets before destroying the old container (Object.Destroy on a parent schedules its current children too).
+            if (HasWidgets())
+            {
+                Move(shelf); Move(channel); Move(prompt);
+                for (int i = 0; i < Rows; i++) Move(rows[i].Text);
+                Move(shelfLine, true); Move(promptTrack, true); Move(promptBar, true);
+                for (int i = 0; i < Rows; i++) Move(ticks[i], true);
+            }
+            else
+            {
+                DestroyLooseWidgets();
+                Build();
+            }
+
+            oldHost?.Destroy();
+            if (oldHolder != null) Object.Destroy(oldHolder);
             SetVisible(false);
         }
 
@@ -185,6 +228,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
 
         public void Show(in ChatterAired line)
         {
+            Mount();
+            if (!HasWidgets()) return;
             RefreshFace();
             if (used == Rows)
             {
@@ -226,7 +271,9 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
         public void Question(bool open, float left, float window, string yesKey, string noKey, string echo)
         {
             promptOn = open || !string.IsNullOrEmpty(echo);
-            if (!promptOn) { prompt.text = ""; return; }
+            if (!promptOn) { if (prompt != null) prompt.text = ""; return; }
+            Mount();
+            if (!HasWidgets()) return;
             promptFill = open && window > 0f ? Mathf.Clamp01(left / window) : 0f;
             while (used > 1 && Height() > MaxHeight) DropOldest();      // the prompt row counts against the zone too: the oldest lines make room for it
             sb.Clear();
@@ -277,7 +324,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
 
         private void OnPaint(HudView view)
         {
-            if (!inLayer || !HudLayer.Enabled || !shown || holder == null || !view.Valid) return;
+            if (!inLayer || !HudLayer.Enabled || !shown || used <= 0 || holder == null || !HasWidgets() || !view.Valid) return;
             Layout(view);
         }
 
@@ -393,6 +440,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
 
         private void RefreshFace()
         {
+            if (!HasWidgets()) return;
             TMP_FontAsset next = LeftHudStack.Font != null ? LeftHudStack.Font : AvType.Face(AvFace.Mono);
             Material material = LeftHudStack.FontMaterial;
             if (face == next && faceMaterial == material) return;
@@ -419,7 +467,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             for (int i = 0; i < Rows; i++) if (rows[i].Text != null) rows[i].Text.text = "";
             used = 0;
             promptOn = false;
-            prompt.text = "";
+            if (prompt != null) prompt.text = "";
             LeftHudStack.CommsBottom = 0f;
             shown = false;      // the Paint subscription outlives a clear (host disabled, scene reset): it must not lay out an empty block again
             SetVisible(false);
@@ -438,6 +486,9 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             Clear();
             host?.Destroy();
             if (holderGo != null) Object.Destroy(holderGo);
+            host = null;
+            holderGo = null; holder = dataRoot = staticRoot = null;
+            holderCanvas = null; holderGroup = null;
         }
 
         public static string Tag(ChatterNet net)

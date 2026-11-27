@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         // A map pick is a press and a release that stay together: a pan, a zoom or a drag in between places nothing.
         private bool pressed;
         private Vector2 pressAt, pressCenter;
-        private int pressZoom;
+        private float pressZoom;
         // RELOCATE memory per truck slot (the mirror says only PACKING): when this room first saw it packing, when it sent the move and where to.
         private readonly float[] packSince = { -1f, -1f, -1f, -1f }, movedAt = { -100f, -100f, -100f, -100f };
         private readonly Vector2[] packTo = new Vector2[4];
@@ -679,8 +679,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (last == null) { pressed = false; return false; }
             FrontMapView mv = plate.View;
             Vector2 center = mv.Center;   // the view as the press found it: a press on the inset overview moves it, and that is no click on the map
-            int zoomStep = mv.Zoom;
-            bool changed = plate.Tick(mouse);
+            float zoomStep = mv.Zoom;
+            bool changed = plate.Tick(mouse, pick != PickMode.None);
             if (plate.RightClick(mouse, out Vector2 ruv) && pick != PickMode.None) { PickAt(ruv); return true; } // an armed pick places with either button
             float wheel = FrontPointer.Wheel;
             if (Mathf.Abs(wheel) > 0.01f && nodesBox.Rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(nodesBox.Rect, mouse, null))
@@ -693,11 +693,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 pressed = pick != PickMode.None && Local(mouse, out pressAt) && OnMap(pressAt);
                 pressCenter = center; pressZoom = zoomStep;
             }
-            if (pressed && (FrontPointer.Held(1) || FrontPointer.Held(2))) pressed = false;   // a pan gesture is no click
+            if (pressed && (plate.DraggedLeft || FrontPointer.Held(1) || FrontPointer.Held(2))) pressed = false;   // a pan gesture is no click
             if (!pressed || !FrontPointer.Up(0)) return MapOnly(changed);
             pressed = false;
             // Only a click that stayed put on an unmoved, unzoomed map picks anything.
-            if (pick == PickMode.None || !Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > FrontMapPlate.ClickSlop * FrontMapPlate.ClickSlop || mv.Zoom != pressZoom ||
+            if (pick == PickMode.None || !Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > FrontMapPlate.ClickSlop * FrontMapPlate.ClickSlop || Mathf.Abs(mv.Zoom - pressZoom) > 1e-4f ||
                 (mv.Center - pressCenter).sqrMagnitude > 1e-8f) return MapOnly(changed);
             PickAt(mv.UV(p));
             return true;

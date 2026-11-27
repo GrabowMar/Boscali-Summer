@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         // A map click is a press and a release that stay together: a pan, a zoom or a drag in between does nothing.
         private bool pressed;
         private Vector2 pressAt, pressCenter;
-        private int pressZoom;
+        private float pressZoom;
         private const float MarkerClear = 22f; // 22 covers the corners of the 34x26 team and 30x30 target hit boxes, so one click never selects a marker and sets a point
 
         public ShadowRoom(IFrontActions actions, FrontSkin skin)
@@ -523,8 +523,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (last == null) { pressed = false; return false; }
             FrontMapView mv = plate.View;
             Vector2 center = mv.Center;   // the view as the press found it: a press on the inset overview moves it, and that is no click on the map
-            int zoomStep = mv.Zoom;
-            bool changed = plate.Tick(mouse);
+            float zoomStep = mv.Zoom;
+            bool changed = plate.Tick(mouse, pick != PickMode.None);
             if (plate.RightClick(mouse, out Vector2 ruv) && pick != PickMode.None) { PickAt(ruv); return true; } // an armed pick places with either button
             float wheel = FrontPointer.Wheel;
             if (Mathf.Abs(wheel) > 0.01f && targets.Rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(targets.Rect, mouse, null))
@@ -533,10 +533,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (to != listScroll && (wheel > 0f || listBelow)) { listScroll = to; PaintTargets(last); }
             }
             if (FrontPointer.Down(0)) { pressed = ToBox(mouse, out pressAt); pressCenter = center; pressZoom = zoomStep; }
-            if (pressed && (FrontPointer.Held(1) || FrontPointer.Held(2))) pressed = false;   // a pan gesture is no click
+            if (pressed && (plate.DraggedLeft || FrontPointer.Held(1) || FrontPointer.Held(2))) pressed = false;   // a pan gesture is no click
             if (!pressed || !FrontPointer.Up(0)) return MapOnly(changed);
             pressed = false;
-            if (!ToBox(mouse, out Vector2 p) || (p - pressAt).sqrMagnitude > FrontMapPlate.ClickSlop * FrontMapPlate.ClickSlop || mv.Zoom != pressZoom || (mv.Center - pressCenter).sqrMagnitude > 1e-8f)
+            if (!ToBox(mouse, out Vector2 p) || (p - pressAt).sqrMagnitude > FrontMapPlate.ClickSlop * FrontMapPlate.ClickSlop || Mathf.Abs(mv.Zoom - pressZoom) > 1e-4f || (mv.Center - pressCenter).sqrMagnitude > 1e-8f)
                 return MapOnly(changed);
             if (pick != PickMode.None)
             {

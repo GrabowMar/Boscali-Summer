@@ -411,7 +411,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             while (size > minSize && TextW(s, size) > maxW) size -= 1f;
             if (TextW(s, size) > maxW)
             {
-                int keep = Math.Max(1, (int)(maxW / (ScopeText.DesignAdvance * HudType.Snap(size) * TextBoost)) - 3);
+                int keep = Math.Max(1, (int)(maxW / (ScopeText.DesignAdvance * HudType.Snap(size) * TextBoost)) - 1);
                 if (keep < s.Length)
                 {
                     Span<char> cut = stackalloc char[keep + 1];

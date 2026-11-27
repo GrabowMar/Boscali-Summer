@@ -31,6 +31,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The three panels' current heights in board units, header included (animated by each slot's wipe), in the spine's fixed order RWR, FIRES, WING; 0: that panel is not drawn.</summary>
         public float RwrH, FiresH, WingH;
 
+        /// <summary>True when the WING panel is docked beside the spine under the stores cells (WIDE only, when the spine would overflow).</summary>
+        public bool WingSide;
+
         public readonly float SlotH(int i) => i == 0 ? RwrH : i == 1 ? FiresH : i == 2 ? WingH : 0f;
         /// <summary>0: no gauge is live; else the lines the live gauges pack into, 1 or 2 (<see cref="GaugeRow.Lay"/>).</summary>
         public int GaugeLines;
@@ -128,16 +131,21 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         // ---- The panels' heights (2026-11-16, four panels): each takes what it needs. RWR its full scope, or its header line alone while nothing paints us; FIRES the SHOT plan, or a full page for STRIKE (its
         // tracks and SAT / CYBER blocks do not fold yet); WING a small plot and two full rows.
-        public const float RwrClear = ShelfRow, ShotH = 150f, WingH = 168f;
+        public const float RwrClear = ShelfRow, ShotH = 160f, WingH = 168f;
         /// <summary>The board's room in board units from the box's top: the BOARD TOP zone's top (12) to the BOARD SPINE zone's bottom (666 reference px) at the default Scale 0.85.</summary>
         public const float SpineH = (666f - 12f) / 0.85f;
         /// <summary>Compact AIRFRAME schematic slot: tucked under CM in WIDE and to the left of the bars in STACK so it never overlaps SYS or ACE.</summary>
         public const float AirframeW = 150f, AirframeStackW = 140f, AirframeH = 156f;
 
         /// <summary>Slot rect for the docked native aircraft schematic in board units (top-left origin).</summary>
-        public static BoardRect AirframeSlot(in BoardGeometry geo, bool stack) => stack
-            ? new BoardRect(StackX - CellGap - AirframeStackW, 0f, AirframeStackW, AirframeH)
-            : new BoardRect((geo.Sys.Present ? geo.Sys.X : geo.Width - WingW) - CellGap - AirframeW, BarH + PageGap, AirframeW, AirframeH);
+        public static BoardRect AirframeSlot(in BoardGeometry geo, bool stack)
+        {
+            if (stack) return new BoardRect(StackX - CellGap - AirframeStackW, 0f, AirframeStackW, AirframeH);
+            float sysLeft = geo.Sys.Present ? geo.Sys.X : geo.Width - WingW;
+            bool wingBeside = geo.Slot2.Present && geo.Slot2.X < sysLeft;
+            float y = wingBeside ? BarH + PageGap + WingH + PageGap : BarH + PageGap;
+            return new BoardRect(sysLeft - CellGap - AirframeW, y, AirframeW, AirframeH);
+        }
 
         /// <summary>The bar's height: one line WIDE; two lines and their gap STACK.</summary>
         public static float BarLinesH(bool stack) => stack ? BarH * 2f + StackLineGap : BarH;
@@ -146,13 +154,18 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static float FiresHeight(ScopePage host) => host == ScopePage.Strike ? Full : ShotH;
 
-        /// <summary>WING is the first to go when the bar (<paramref name="barH"/>, <see cref="BarLinesH"/>), the mission rows and the three panels would pass <see cref="SpineH"/> (a full RWR over a STRIKE): the Wing module's strip stands in for it (<c>IHudBoard.ShowsWing</c>).</summary>
-        public static bool WingFits(float barH, float rwrH, float firesH, float missionH = 0f) =>
-            barH + PageGap + (missionH > 0f ? missionH + PageGap : 0f) + rwrH + PageGap + (firesH > 0f ? firesH + PageGap : 0f) + WingH <= SpineH;
+        /// <summary>Whether the bar (<paramref name="barH"/>, <see cref="BarLinesH"/>), the mission rows, the three panels and any gauge lines fit inside <see cref="SpineH"/>.</summary>
+        public static bool WingFits(float barH, float rwrH, float firesH, float missionH = 0f, float gaugesH = 0f) =>
+            barH + PageGap + (missionH > 0f ? missionH + PageGap : 0f) + rwrH + PageGap + (firesH > 0f ? firesH + PageGap : 0f) + WingH + (gaugesH > 0f ? PageGap + gaugesH : 0f) <= SpineH;
+
+        /// <summary>Dock WING beside the spine under WPN/CM in WIDE whenever stacking it under RWR and FIRES would overflow <see cref="SpineH"/>.</summary>
+        public static bool UseSideWing(bool stack, bool storesHidden, float rwrH, float firesH, float wingH, float missionH = 0f, float gaugesH = 0f) =>
+            !stack && !storesHidden && wingH > 0f && !WingFits(BarLinesH(false), rwrH, firesH, missionH, gaugesH);
 
         /// <summary>
         /// The blocks of a board. The bar's cells at their fixed slots (WIDE one line; STACK WPN | CM over SYS | INFO), each line's frame starting at its first present cell. The spine hangs <see cref="PageGap"/> under the
         /// last bar line in the right-hand 440 column: the mission rows, then the panels in slot order (each as tall as its own height says and only while that is not 0), then the gauge line.
+        /// When <see cref="BoardBlocks.WingSide"/> is set in WIDE with stores visible, WING docks beside the spine under WPN/CM so both missiles and wingmen stay on screen.
         /// </summary>
         public static BoardGeometry Compute(in BoardBlocks b)
         {
@@ -187,15 +200,31 @@ namespace BoscaliSummer.Modules.Hud.Domain
             }
             float y = g.Bar1.Present ? g.Bar1.Bottom + PageGap : g.Bar0.Present ? g.Bar0.Bottom + PageGap : 0f;
             if (b.MissionH > 0f) { g.Mission = new BoardRect(spineX, y, WingW, b.MissionH); y = g.Mission.Bottom + PageGap; }
-            float pagesTop = y;
+            bool sideWing = b.WingSide && !stack && !b.StoresHidden && b.WingH > 0f;
+            float sideY = g.Bar0.Present ? g.Bar0.Bottom + PageGap : 0f;
             for (int i = 0; i < MaxSlots; i++)
             {
                 float h = b.SlotH(i);
                 if (h <= 0f) continue;
+                if (i == SlotWing && sideWing)
+                {
+                    g.SetSlot(i, new BoardRect(SysX - CellGap - WingW, sideY, WingW, h));
+                    continue;
+                }
                 g.SetSlot(i, new BoardRect(spineX, y, WingW, h));
                 y += h + PageGap;
             }
-            if (y > pagesTop) g.Page = new BoardRect(spineX, pagesTop, WingW, y - PageGap - pagesTop);
+            float px0 = float.MaxValue, py0 = float.MaxValue, px1 = float.MinValue, py1 = float.MinValue;
+            for (int i = 0; i < MaxSlots; i++)
+            {
+                BoardRect s = g.Slot(i);
+                if (!s.Present) continue;
+                if (s.X < px0) px0 = s.X;
+                if (s.Y < py0) py0 = s.Y;
+                if (s.Right > px1) px1 = s.Right;
+                if (s.Bottom > py1) py1 = s.Bottom;
+            }
+            if (px0 < px1) g.Page = new BoardRect(px0, py0, px1 - px0, py1 - py0);
             if (b.GaugeLines > 0) g.Gauges = new BoardRect(spineX, y, WingW, b.GaugeLines > 1 ? GaugeLine2 : GaugeLine1);
 
             if (g.Mission.Present) g.Height = g.Mission.Bottom;
@@ -220,7 +249,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         /// <summary>Keep all selected columns inside the viewport, preserving the requested size whenever it fits.</summary>
         public static float FitUnit(float requested, float pixel, float screenW, float screenH, float boxW, float boxH) =>
-            Math.Max(pixel * 0.1f, Math.Min(requested, Math.Min((screenW - pixel * 2f) / boxW, (screenH - pixel * 2f) / boxH)));
+            boxW <= 0f || boxH <= 0f ? requested : Math.Max(pixel * 0.1f, Math.Min(requested, Math.Min((screenW - pixel * 2f) / boxW, (screenH - pixel * 2f) / boxH)));
 
         /// <summary>
         /// The box as a rectangle of the screen, centre-origin with y up (what <c>ThirdPersonHudLayout</c> works in): <paramref name="fromRight"/> and <paramref name="fromTop"/> are <see cref="Anchor"/>'s, the box

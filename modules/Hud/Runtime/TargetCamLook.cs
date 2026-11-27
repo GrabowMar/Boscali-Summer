@@ -7,9 +7,10 @@ using UnityEngine.Rendering.Universal;
 namespace BoscaliSummer.Modules.Hud.Runtime
 {
     /// <summary>
-    /// The targeting-pod look (2026-10-14): grain, a lens vignette, a white-hot bloom and a hint of colour fringe added once to vanilla's own target-camera
-    /// post volume (<c>TargetCam.screenVolume</c>, a per-instance profile only that camera sees), so the cockpit tac screen and the third-person TGT card both
-    /// read as a sensor feed. Vanilla keeps its own colour adjustments (IR desaturation, exposure). Client-local, idempotent per target camera.
+    /// The targeting-pod look (remade 2026-11-27): keeps vanilla's lightweight <c>ColorAdjustments</c> (auto-exposure and IR desaturation)
+    /// and disables any heavy multi-pass post effects (<c>FilmGrain</c>, <c>Vignette</c>, <c>Bloom</c>, <c>ChromaticAberration</c>) on
+    /// <c>TargetCam.screenVolume</c>; all lens/sensor effects run in one UI shader pass (<c>NOA/UI/CamFeed</c>) on the HUD card.
+    /// Client-local, idempotent per target camera.
     /// </summary>
     internal static class TargetCamLook
     {
@@ -29,27 +30,14 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (volume == null) return;      // not initialised yet (no authority, or before OnStartClient)
             styled = cam;
             VolumeProfile profile = volume.profile;
-            Set(profile.TryGet(out FilmGrain grain) ? grain : profile.Add<FilmGrain>(true), g =>
-            {
-                // The game ships without URP's built-in grain textures: any preset lookup NREs in PostProcessPass.SetupGrain every frame and smears the screen.
-                g.type.value = FilmGrainLookup.Custom;
-                g.texture.value = FeedCamera.Noise();
-                g.intensity.value = 0.55f;
-                g.response.value = 0.55f;
-            });
-            Set(profile.TryGet(out Vignette vig) ? vig : profile.Add<Vignette>(true), v =>
-            {
-                v.intensity.value = 0.42f;
-                v.smoothness.value = 0.35f;
-            });
-            Set(profile.TryGet(out Bloom bloom) ? bloom : profile.Add<Bloom>(true), b =>
-            {
-                b.threshold.value = 0.85f;
-                b.intensity.value = 0.9f;
-                b.scatter.value = 0.55f;
-            });
-            Set(profile.TryGet(out ChromaticAberration ca) ? ca : profile.Add<ChromaticAberration>(true), c => c.intensity.value = 0.3f);
+            if (profile == null) return;
+            if (profile.TryGet(out FilmGrain grain)) grain.active = false;
+            if (profile.TryGet(out Vignette vig)) vig.active = false;
+            if (profile.TryGet(out Bloom bloom)) bloom.active = false;
+            if (profile.TryGet(out ChromaticAberration ca)) ca.active = false;
         }
+
+        public static bool IsIr(TargetCam cam) => cam != null && cam.UsingIR();
 
         private static readonly AccessTools.FieldRef<TargetCam, TargetScreenUI> ScreenUiRef = Field<TargetCam, TargetScreenUI>("targetScreenUI");
         private static readonly AccessTools.FieldRef<TargetScreenUI, Canvas> CanvasRef = Field<TargetScreenUI, Canvas>("displayCanvas");
@@ -70,13 +58,6 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             TargetScreenUI ui = ScreenUiRef(cam);
             Canvas canvas = ui != null ? CanvasRef(ui) : null;
             if (canvas != null && canvas.enabled != shown) canvas.enabled = shown;
-        }
-
-        private static void Set<T>(T component, System.Action<T> write) where T : VolumeComponent
-        {
-            component.active = true;
-            component.SetAllOverridesTo(true);
-            write(component);
         }
     }
 }

@@ -233,7 +233,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float cy = y + 6f, capW = furniture ? Mathf.Ceil(ScopeCanvas.TextW("NOTICE", HudType.Label)) : 0f;
             bool bold = line.Tone != HudTone.Info;      // the words are bold from a caution up
             if (furniture) g.Text("NOTICE", x, cy, Dim, HudType.Label, ScopeAlign.Left, true);      // one line, so no hairline: the caption is the shelf
-            float tx = furniture ? x + capW + 21f : x + 12f, room = x + w - tx - 4f;
+            float tx = furniture ? x + capW + 15f : x + 12f, room = x + w - tx - 4f;
             g.ToneTick(tx - 9f, cy - 6f, tone, dip ? 0.8f : 1f);      // the column's tick, 3 x 12, 9 before the words
             if (tickerCount != null)
             {
@@ -298,6 +298,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cueCanvas = null;
             cueCount = cueCharge = cueSig = 0;
             noticeHas = noticeOn = false;
+            tickerWords = tickerCount = tickerSourceText = null;
             seenCueCanvas = default;
             Array.Clear(cueSpots, 0, cueSpots.Length);
         }

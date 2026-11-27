@@ -194,6 +194,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         // View-space depth row of the same pose (in front of the camera is negative), and whether the camera holds that pose now.
         private static Vector4 modelDepth;
         private static bool poseExact;
+        private static bool cursorSampleValid;
+        private static Vector2 cursorSampleViewport;
+        private static GlobalPosition cursorSamplePosition;
+        private static bool cursorSampleHit;
         private sealed class MarkerLabels
         {
             internal TMP_Text[] Text;
@@ -215,6 +219,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static Material gridMaterial;
         private static readonly Color32 MinorGrid = new Color32(88, 125, 132, 36);
         private static readonly Color32 MajorGrid = new Color32(112, 150, 158, 72);
+        private static readonly Color32 BorderGrid = new Color32(138, 196, 206, 135);
         private static Material waterMaterial;
         private static Texture2D styleTexture;
         private static Camera camera;
@@ -323,11 +328,35 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             if (camera == null || sceneRoot == null) return;
             float angle = rig.Pitch * Mathf.Deg2Rad;
+            Quaternion turn = Quaternion.Euler(0f, rig.Yaw, 0f);
             Vector3 focus = new Vector3(rig.FocusX, 0f, rig.FocusZ);
-            camera.transform.localPosition = focus + Quaternion.Euler(0f, rig.Yaw, 0f) *
+            camera.transform.localPosition = focus + turn *
                 new Vector3(0f, Mathf.Sin(angle) * CameraRadius, -Mathf.Cos(angle) * CameraRadius);
-            camera.transform.LookAt(sceneRoot.transform.position + focus);
+            camera.transform.LookAt(sceneRoot.transform.position + focus,
+                turn * new Vector3(0f, Mathf.Cos(angle), Mathf.Sin(angle)));
             camera.orthographicSize = rig.Size;
+        }
+
+        /// <summary>Ground metres per viewport UI pixel at the current zoom, or 0 while the relief is not drawing.</summary>
+        internal static float MetresPerViewportPixel()
+        {
+            if (!IsDrawing || owner?.mapBackground == null || source == null || ModelSpanX <= 0f) return 0f;
+            float height = owner.mapBackground.rectTransform.rect.height;
+            if (height <= 0f) return 0f;
+            return 2f * camera.orthographicSize / height * source.MapSize.x / ModelSpanX;
+        }
+
+        /// <summary>Projects a relief model-space point into the map viewport's local UI space.</summary>
+        internal static bool TryProjectModel(Vector3 modelPoint, out Vector2 viewportLocal)
+        {
+            viewportLocal = default;
+            if (!IsDrawing || owner?.mapBackground == null) return false;
+            Vector3 screen = camera.WorldToViewportPoint(sceneRoot.transform.position + modelPoint);
+            if (screen.z <= 0f) return false;
+            Rect bounds = owner.mapBackground.rectTransform.rect;
+            viewportLocal = new Vector2(bounds.xMin + screen.x * bounds.width,
+                bounds.yMin + screen.y * bounds.height);
+            return true;
         }
 
         /// <summary>Screen point to the expanded map viewport's 0..1 coordinates; false outside it.</summary>
@@ -472,6 +501,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             cameraWasMoving = cameraMoved;
             if (renderNow)
             {
+                cursorSampleValid = false;
                 UpdateMinis();
                 if (!RenderTerrain())
                 {
@@ -915,11 +945,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 groundMaterial.SetFloat("_MetersPerUnit", 81920f / (VerticalScale * ModelWidth));
                 groundMaterial.SetFloat("_SeaLevel", seaLevel);
                 groundMaterial.SetFloat("_PeakMeters", Mathf.Max(200f, peakMeters));
+                groundMaterial.SetFloat("_ContourInk", .12f);
+                groundMaterial.SetFloat("_IndexInk", .24f);
                 // Reuse the shader's depth/coast ramp: teal water separates from blue friendly control
                 // without another layer, texture read or redraw while the map rests.
-                groundMaterial.SetColor("_Deep", new Color(.07f, .17f, .21f, 1f));
-                groundMaterial.SetColor("_Shallow", new Color(.17f, .37f, .37f, 1f));
-                groundMaterial.SetColor("_Coast", new Color(.46f, .65f, .61f, 1f));
+                groundMaterial.SetColor("_Deep", new Color(.055f, .145f, .195f, 1f));
+                groundMaterial.SetColor("_Shallow", new Color(.14f, .34f, .36f, 1f));
+                groundMaterial.SetColor("_Coast", new Color(.50f, .76f, .72f, 1f));
                 // The shallows reach the same ground distance on every map: 4 samples at Heartland's 160 m a sample, 2 on
                 // Archipelago's 320 m, where 4 drew a blocky 1.3 km halo.
                 float sampleMeters = Mathf.Max(source.MapSize.x, source.MapSize.y) / (Samples - 1);
@@ -942,7 +974,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // The relief harness measured the sweep .32 / .60 / .80 / 1 and gates the contrast.
             seaControlMaterial = FieldMaterial(shader, 1f, 3101);
             gridMaterial = new Material(shader) { mainTexture = Texture2D.whiteTexture,
-                color = Color.white };
+                color = Color.Lerp(Color.white, AvStyleHost.FuiColor("select", AvTheme.Accent), .35f).WithAlpha(1f) };
 
             Mesh grid = MakeGroundGrid();
             meshes.Add(grid);
@@ -1217,6 +1249,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Add(i, fixedSample, i + 1, fixedSample);
                 }
             }
+            // Crisp chart boundary around the outer edge of the relief sheet.
+            tone = BorderGrid;
+            for (int i = 0; i < Samples - 1; i++)
+            {
+                Add(0, i, 0, i + 1);
+                Add(Samples - 1, i, Samples - 1, i + 1);
+                Add(i, 0, i + 1, 0);
+                Add(i, Samples - 1, i + 1, Samples - 1);
+            }
             var mesh = new Mesh { name = "NOAvionics.TerrainGrid" };
             mesh.SetVertices(vertices);
             var paint = new Color32[vertices.Count];
@@ -1380,7 +1421,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             // The game's own per-icon update lands here a fifth of the roster a frame: once the pose is final it is one multiply,
             // as the bulk reprojection already does (the per-point path was 0.4 ms a frame, 2026-10-29 profile).
-            PlaceProjectedIcon(icon, fix, MapImageRect(owner.mapImage).rect, poseExact);
+            PlaceProjectedIcon(icon, fix, poseExact);
         }
 
         private static void ReprojectCachedIcons()
@@ -1388,7 +1429,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (owner?.mapImage == null) return;
             RectTransform imageRect = MapImageRect(owner.mapImage);
             if (imageRect == null) return;
-            Rect rect = imageRect.rect;
             bool fast = poseExact;
             staleIconFixes.Clear();
             foreach (KeyValuePair<MapIcon, IconFix> entry in iconFixes)
@@ -1398,7 +1438,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     if (staleIconFixes.Count < 64) staleIconFixes.Add(entry.Key);
                     continue;
                 }
-                PlaceProjectedIcon(entry.Key, entry.Value, rect, fast, bulk: true);
+                PlaceProjectedIcon(entry.Key, entry.Value, fast, bulk: true);
             }
             foreach (MapIcon icon in staleIconFixes)
             {
@@ -1607,7 +1647,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// </summary>
         /// <param name="bulk">The whole-roster reprojection: only it may skip a folded icon's sizing. The game's own per-icon update
         /// rewrites scale and heading on every call, so that path sizes folded icons too, or a stack opening flashes them native.</param>
-        private static void PlaceProjectedIcon(MapIcon icon, IconFix fix, Rect rect, bool fast = false, bool bulk = false)
+        private static void PlaceProjectedIcon(MapIcon icon, IconFix fix, bool fast, bool bulk = false)
         {
             float groundHeight = GroundHeight(fix.X, fix.Z);
             Transform symbol = icon.iconImage.transform;
@@ -1645,7 +1685,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return;
             }
             bool selected = selectedForClusters.Contains(icon);
-            symbol.localScale = fix.NativeScale;
+            if (bulk) symbol.localScale = fix.NativeScale;
             // Framed contacts size themselves on the shared symbol grid; anything else keeps the old cap.
             if (!(icon is UnitMapIcon framed && MapSymbology.Fit(framed, selected)))
             {
@@ -1666,7 +1706,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (fast)
                     direction = modelToImage.MultiplyVector(new Vector3(-Mathf.Sin(heading), 0f, Mathf.Cos(heading)) * 10f);
                 else if (TryProject(fix.X - Mathf.Sin(heading) * 1000f,
-                        fix.Z + Mathf.Cos(heading) * 1000f, rect, out Vector2 ahead))
+                        fix.Z + Mathf.Cos(heading) * 1000f, default, out Vector2 ahead))
                     direction = ahead - point;
                 if (direction.sqrMagnitude > .01f)
                 {
@@ -1925,11 +1965,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             position = default;
             if (!IsDrawing || map != owner) return false;
-            if (!ViewportPoint(Input.mousePosition, out float u, out float v) ||
-                !TryGround(u, v, out Vector3 point)) return false;
-            position = new GlobalPosition(point.x / ModelSpanX * source.MapSize.x, 0f,
-                point.z / ModelSpanZ * source.MapSize.y);
-            return true;
+            if (!ViewportPoint(Input.mousePosition, out float u, out float v)) return false;
+            // Native bounds and coordinates use the same terrain ray while the rendered pose is held.
+            if (!poseExact || !cursorSampleValid || cursorSampleViewport.x != u || cursorSampleViewport.y != v)
+            {
+                cursorSampleHit = TryGround(u, v, out Vector3 point);
+                cursorSamplePosition = cursorSampleHit
+                    ? new GlobalPosition(point.x / ModelSpanX * source.MapSize.x, 0f,
+                        point.z / ModelSpanZ * source.MapSize.y)
+                    : default;
+                cursorSampleViewport = new Vector2(u, v);
+                cursorSampleValid = poseExact;
+            }
+            position = cursorSamplePosition;
+            return cursorSampleHit;
         }
 
         internal static bool CursorInTerrain(DynamicMap map) => TryCursor(map, out _);
@@ -2272,6 +2321,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             if (view != null) view.enabled = false;
             drawingFrame = -1;
+            cursorSampleValid = false;
             MfdMapOrbitControls.Restore();
             // Do not leave relief coordinates behind while native icons return in batches.
             if (owner != null)
@@ -2499,9 +2549,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     [HarmonyPatch(typeof(AirbaseMapIcon), nameof(AirbaseMapIcon.UpdateIcon))]
     internal static class MfdReliefAirbaseIconPatch
     {
+        // This argument controls visibility in the native airbase update. Set it before the refresh to avoid toggling the icon off and on.
+        [HarmonyPrefix]
+        private static void Prefix(ref bool mapMaximized) => mapMaximized |= Runtime.MapHoldKey.ShowOverlays;
+
         [HarmonyPostfix]
-        private static void Postfix(AirbaseMapIcon __instance, float mapDisplayFactor) =>
+        private static void Postfix(AirbaseMapIcon __instance, float mapDisplayFactor)
+        {
+            if (!DynamicMap.mapMaximized && Runtime.MapHoldKey.ShowOverlays &&
+                SceneSingleton<MapOptions>.i != null && SceneSingleton<MapOptions>.i.showAirbaseIcon)
+            {
+                if (__instance.iconImage != null && !__instance.iconImage.enabled) __instance.iconImage.enabled = true;
+            }
             MfdTerrainRelief.ProjectIcon(__instance, mapDisplayFactor);
+        }
     }
 
     [HarmonyPatch(typeof(ObjectiveMarker), nameof(ObjectiveMarker.UpdateMarker))]

@@ -148,8 +148,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => settings.MapCursor.Value, v => settings.MapCursor.Value = v);
             ToggleCell(flow, page, "RIGHT-DRAG TURNS", "Hold the right button and drag to turn and tilt the relief. A plain right click still opens the menu.",
                 () => settings.MapRightDragTurns.Value, v => settings.MapRightDragTurns.Value = v, relief, needRelief);
-            ToggleCell(flow, page, "DOUBLE-CLICK ZOOM", "A double click on the ground centres and zooms in there.",
-                () => settings.MapDoubleClickZoom.Value, v => settings.MapDoubleClickZoom.Value = v, relief, needRelief);
+            ToggleCell(flow, page, "DOUBLE-CLICK ZOOM", "A double click on empty ground centres and zooms in there (relief and flat map).",
+                () => settings.MapDoubleClickZoom.Value, v => settings.MapDoubleClickZoom.Value = v);
             var mouse = flow.Add(new SetRingRow(flow.Content));
             EntryRing(flow, mouse, page, "TURN SPEED", settings.MapTurnSensitivity, .25f, 4f, .25f, v => AvNum.Fixed(v, 2) + "x",
                 "How fast a held-button drag turns and tilts the relief.", relief, needRelief);
@@ -169,6 +169,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ToggleCell(flow, page, "RADIAL PRESETS",
                 "Offer the TGT quick slots as a page in the native cockpit radial menu.",
                 () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
+            flow.Section(AvIcon.Map2, "QUICK MAP", "MAP HOLD KEY IN FLIGHT");
+            var qm = flow.Add(new SetRingRow(flow.Content));
+            PercentRing(flow, qm, page, "QUICK MAP SIZE", settings.QuickMapSize, .5f, .9f, .04f,
+                "Quick map size as a share of screen height while holding MAP HOLD KEY.");
+            PercentRing(flow, qm, page, "QUICK MAP OPACITY", settings.QuickMapOpacity, .2f, .9f, .05f,
+                "Terrain and backdrop readability of the quick map while held.");
+            ToggleCell(flow, page, "QUICK MAP NORTH-UP",
+                "Start quick map North-Up instead of Heading-Up (can also toggle with N while held).",
+                () => settings.QuickMapNorthUp.Value, v => settings.QuickMapNorthUp.Value = v);
+            ToggleCell(flow, page, "QUICK MAP OVERLAYS",
+                "Show airbases and the tactical frontline/control overlay on the quick map.",
+                () => settings.QuickMapOverlays.Value, v => settings.QuickMapOverlays.Value = v);
             BuildKeyRows(flow);
         }
 

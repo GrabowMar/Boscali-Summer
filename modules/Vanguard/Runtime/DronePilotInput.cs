@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
-    /// <summary>Samples the drone seat's own bindings without running any aircraft input readers.</summary>
+    /// <summary>Reads drone keys and the player's mapped hardware actions without running the aircraft pilot.</summary>
     internal sealed class DronePilotInput
     {
         internal struct Frame
@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private readonly DroneControlSettings settings;
         private Joystick lastJoystick;
         private Vector2 mouseStick;
-        private float throttle, lastJoystickThrottle;
+        private float throttle, lastHardwareThrottle;
         private bool fireArmed;
 
         internal DronePilotInput(DroneControlSettings settings) => this.settings = settings;
@@ -43,7 +43,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         internal static bool TestPointer { get; set; }
 #endif
 
-        internal bool ReturnPressed => Application.isFocused && Pressed(settings.Release.Value);
+        internal bool ReturnPressed => Application.isFocused && (Pressed(settings.Release.Value) ||
+            CanRead && ButtonDown(MappedPlayer(), "Cancel"));
 
         internal void Reset(float initialThrottle)
         {
@@ -60,10 +61,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
 
             Joystick joystick = FindJoystick();
+            Player mapped = MappedPlayer();
             if (lastJoystick != joystick)
             {
                 lastJoystick = joystick;
-                lastJoystickThrottle = float.NaN;
+                lastHardwareThrottle = float.NaN;
                 fireArmed = false;
             }
 
@@ -74,17 +76,27 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 ? Vector2.ClampMagnitude(mouseStick + mouseDelta / 35f, 1f)
                 : Vector2.zero;
 
-            float pitch = Steer(joystick, settings.JoystickPitch.Value, settings.PitchDown.Value, settings.PitchUp.Value, mouseStick.y);
-            float yaw = Steer(joystick, settings.JoystickYaw.Value, settings.YawRight.Value, settings.YawLeft.Value);
-            float roll = Steer(joystick, settings.JoystickRoll.Value, settings.RollRight.Value, settings.RollLeft.Value, mouseStick.x);
-            UpdateThrottle(joystick, dt);
+            float pitch = Steer(joystick, settings.JoystickPitch.Value, settings.PitchDown.Value, settings.PitchUp.Value,
+                Axis(mapped, "Pitch"), mouseStick.y);
+            float yaw = Steer(joystick, settings.JoystickYaw.Value, settings.YawRight.Value, settings.YawLeft.Value, Axis(mapped, "Yaw"));
+            float roll = Steer(joystick, settings.JoystickRoll.Value, settings.RollRight.Value, settings.RollLeft.Value,
+                Axis(mapped, "Roll"), mouseStick.x);
+            UpdateThrottle(joystick, mapped, dt);
 
             int fireButton = settings.JoystickFire.Value;
-            bool fireHeld = Held(settings.Fire.Value) || (joystick != null && fireButton > 0 &&
+            bool fireHeld = Held(settings.Fire.Value) || Button(mapped, "Fire") || (joystick != null && fireButton > 0 &&
                 fireButton <= joystick.buttonCount && joystick.GetButton(fireButton - 1));
-            bool cycle = Pressed(settings.CycleWeapon.Value);
+            bool cycle = Pressed(settings.CycleWeapon.Value) || ButtonDown(mapped, "Next Weapon") || ButtonDown(mapped, "Previous Weapon");
             if (cycle) fireArmed = false;
             if (!fireHeld) fireArmed = true;
+            Vector2 orbit = Vector2.zero;
+            float zoom = 0f;
+            if (thirdPerson)
+            {
+                float tilt = PlayerSettings.viewInvertPitch ? -1f : 1f;
+                orbit = mouseDelta + new Vector2(Axis(mapped, "Pan View"), Axis(mapped, "Tilt View") * tilt) * (90f * dt);
+                zoom = Mathf.Clamp(Input.mouseScrollDelta.y, -4f, 4f) + Axis(mapped, "Zoom View") * (8f * dt);
+            }
             return new Frame
             {
                 Enabled = true,
@@ -92,38 +104,89 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 Throttle = throttle,
                 Fire = fireHeld && fireArmed,
                 CycleWeapon = cycle,
-                ToggleView = Pressed(settings.View.Value),
-                GunView = !thirdPerson && Held(settings.GunView.Value),
-                LookDelta = thirdPerson ? mouseDelta : Vector2.zero,
-                Center = Pressed(settings.Center.Value),
-                Zoom = thirdPerson ? Mathf.Clamp(Input.mouseScrollDelta.y, -4f, 4f) : 0f
+                ToggleView = Pressed(settings.View.Value) || ButtonDown(mapped, "Switch View"),
+                GunView = !thirdPerson && (Held(settings.GunView.Value) || Button(mapped, "Cycle Look At")),
+                LookDelta = orbit,
+                Center = Pressed(settings.Center.Value) || ButtonDown(mapped, "Center"),
+                Zoom = zoom
             };
         }
 
         private void Suspend()
         {
             lastJoystick = null;
-            lastJoystickThrottle = float.NaN;
+            lastHardwareThrottle = float.NaN;
             mouseStick = Vector2.zero;
             fireArmed = false;
         }
 
-        private void UpdateThrottle(Joystick joystick, float dt)
+        private void UpdateThrottle(Joystick joystick, Player mapped, float dt)
         {
+            float change = KeyAxis(settings.ThrottleUp.Value, settings.ThrottleDown.Value);
             if (TryAxis(joystick, settings.JoystickThrottle.Value, out float analog))
+                TrackAbsoluteThrottle(analog, signed: true);
+            else if (mapped != null && !mapped.GetButton("Axis Modifier"))
             {
-                // A lever left at the aircraft's setting must move before it takes over the drone throttle.
-                if (float.IsNaN(lastJoystickThrottle)) lastJoystickThrottle = analog;
-                else if (Mathf.Abs(analog - lastJoystickThrottle) >= 0.035f)
+                analog = mapped.GetAxisRaw("Throttle");
+                bool fromHardware = ThrottleSource(mapped, out bool button);
+                if (PlayerSettings.throttleUseRelative || button)
                 {
-                    throttle = (analog + 1f) * 0.5f;
-                    lastJoystickThrottle = analog;
+                    lastHardwareThrottle = float.NaN;
+                    if (fromHardware && Mathf.Abs(analog) > 0.1f) change += Mathf.Sign(analog);
                 }
+                // A centered lever may stop appearing as a current input source. Preserve the transition to zero.
+                else if (fromHardware || analog == 0f) TrackAbsoluteThrottle(fromHardware ? analog : 0f, PlayerSettings.throttleUseNegative);
             }
-            else lastJoystickThrottle = float.NaN;
+            else lastHardwareThrottle = float.NaN;
 
-            throttle = Mathf.Clamp01(throttle + KeyAxis(settings.ThrottleUp.Value, settings.ThrottleDown.Value) * dt * 0.6f);
+            throttle = Mathf.Clamp01(throttle + Mathf.Clamp(change, -1f, 1f) * dt * 0.6f);
         }
+
+        private void TrackAbsoluteThrottle(float analog, bool signed)
+        {
+            // A lever left at the aircraft's setting must move before taking over the drone throttle.
+            if (float.IsNaN(lastHardwareThrottle)) lastHardwareThrottle = analog;
+            else if (Mathf.Abs(analog - lastHardwareThrottle) >= 0.035f)
+            {
+                throttle = Mathf.Clamp01(signed ? (analog + 1f) * 0.5f : analog);
+                lastHardwareThrottle = analog;
+            }
+        }
+
+        private static Player MappedPlayer()
+        {
+            Player player = GameManager.playerInput;
+            return player != null && ReInput.isReady && (player.controllers.joystickCount > 0 || player.controllers.customControllerCount > 0)
+                ? player : null;
+        }
+
+        private static bool HardwareSource(Player player, string action) =>
+            player.IsCurrentInputSource(action, ControllerType.Joystick) || player.IsCurrentInputSource(action, ControllerType.Custom);
+
+        private static bool ThrottleSource(Player player, out bool button)
+        {
+            button = false;
+            var sources = player.GetCurrentInputSources("Throttle");
+            if (sources == null) return false;
+            for (int i = 0; i < sources.Count; i++)
+            {
+                InputActionSourceData source = sources[i];
+                if (source.controllerType != ControllerType.Joystick && source.controllerType != ControllerType.Custom) continue;
+                button = source.actionElementMap.elementType == ControllerElementType.Button;
+                return true;
+            }
+            return false;
+        }
+
+        private static float Axis(Player player, string action)
+        {
+            if (player == null) return 0f;
+            float value = player.GetAxis(action);
+            return Mathf.Abs(value) > 0.001f && HardwareSource(player, action) ? Mathf.Clamp(value, -1f, 1f) : 0f;
+        }
+
+        private static bool Button(Player player, string action) => player != null && player.GetButton(action) && HardwareSource(player, action);
+        private static bool ButtonDown(Player player, string action) => player != null && player.GetButtonDown(action) && HardwareSource(player, action);
 
         private Joystick FindJoystick()
         {
@@ -146,11 +209,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return Vector2.ClampMagnitude(delta * 0.45f, 25f);
         }
 
-        private static float Steer(Joystick stick, int axis, KeyCode positive, KeyCode negative, float mouse = 0f)
+        private static float Steer(Joystick stick, int axis, KeyCode positive, KeyCode negative, float mapped, float mouse = 0f)
         {
             if (Held(positive) || Held(negative)) return KeyAxis(positive, negative);
-            if (TryAxis(stick, axis, out float value) && Mathf.Abs(value) > 0.06f) return value;
-            return mouse;
+            if (TryAxis(stick, axis, out float value)) return Mathf.Abs(value) > 0.06f ? value : mouse;
+            return mapped != 0f ? mapped : mouse;
         }
 
         private static bool TryAxis(Joystick joystick, int binding, out float value)

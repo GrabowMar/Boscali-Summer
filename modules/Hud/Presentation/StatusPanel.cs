@@ -238,7 +238,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private static void Show(Component c, bool on)
         {
-            if (c != null && c.gameObject.activeSelf != on) c.gameObject.SetActive(on);
+            GameObject target = c != null ? c.gameObject : null;
+            if (target != null && target.activeSelf != on) target.SetActive(on);
         }
 
         /// <summary>
@@ -301,6 +302,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             nativeStatus?.Release();
             Show(airframeRect, false);
             BoardBox = default;
+            rwrOpen = false;
             wingPainted = false;
             paintedValid = false;
             ClearHeader();

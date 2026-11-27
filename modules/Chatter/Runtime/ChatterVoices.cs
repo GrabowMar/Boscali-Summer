@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using BepInEx;
 using BepInEx.Logging;
 using BoscaliSummer.Core.Chatter;
@@ -20,6 +22,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private const int MaxPacks = 8, MaxClipsPerPack = 256;
         /// <summary>The built-in station packs (2026-11-15, ElevenLabs; words in modules/Chatter/Assets/Voices/voices.tsv), embedded and unpacked to the BepInEx cache.</summary>
         private const string BuiltInPrefix = "BoscaliSummer.ChatterVoices.";
+        private static readonly object BuiltInFoldersGate = new object();
         private static List<string> builtInFolders;
         private const long MaxFileBytes = 16L * 1024 * 1024, MaxDecodedBytes = 128L * 1024 * 1024;
         private const float MaxClipSeconds = 20f;
@@ -40,11 +43,12 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private readonly List<Pack> packs = new List<Pack>();
         private readonly Dictionary<string, Pack> assigned = new Dictionary<string, Pack>(StringComparer.Ordinal);
         private readonly List<Pack> scratch = new List<Pack>();
-        private readonly List<string> exact = new List<string>(), fallback = new List<string>();
         private readonly ManualLogSource log;
         private readonly string dataRoot;
         private AudioSource source;
         private UnityWebRequest request;
+        private Task<List<Pack>> preparation;
+        private CancellationTokenSource preparationCancellation;
         private int loadingPack, loadingFile;
         private long decodedBytes;
 
@@ -71,32 +75,47 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         public void Activate(string selected, ChatterLibrary library)
         {
             Deactivate();
+            preparationCancellation = new CancellationTokenSource();
+            CancellationToken cancellation = preparationCancellation.Token;
+            preparation = Task.Run(() => Prepare(selected, library, cancellation), cancellation);
+        }
+
+        private List<Pack> Prepare(string selected, ChatterLibrary library, CancellationToken cancellation)
+        {
+            var prepared = new List<Pack>();
             foreach (string folder in BuiltInFolders())
             {
-                try { Load(folder, Path.GetFileName(folder), library, true); }
+                if (cancellation.IsCancellationRequested) return prepared;
+                try { Load(prepared, folder, Path.GetFileName(folder), library, true); }
                 catch (Exception e) { log?.LogWarning("[Chatter] built-in voices unavailable: " + e.Message); }
             }
-            int builtIn = packs.Count;
+            int builtIn = prepared.Count;
             foreach (string raw in (selected ?? "").Split(','))
             {
+                if (cancellation.IsCancellationRequested) return prepared;
                 string name = raw.Trim();
-                if (name.Length == 0 || packs.Count - builtIn >= MaxPacks) continue;
+                if (name.Length == 0 || prepared.Count - builtIn >= MaxPacks) continue;
                 try
                 {
                     string folder = Find(name);
                     if (folder == null) log?.LogWarning("[Chatter] voice pack not found: " + name);
-                    else Load(folder, name, library, false);
+                    else Load(prepared, folder, name, library, false);
                 }
                 catch (Exception e) { log?.LogWarning("[Chatter] voice pack unavailable: " + name + ": " + e.Message); }
             }
+            return prepared;
         }
 
         /// <summary>The built-in packs as folders in the BepInEx cache. One folder for every build: a new build rewrites only the clips whose bytes changed
         /// (and drops clips it no longer ships); the same build only checks sizes.</summary>
         private List<string> BuiltInFolders()
         {
-            if (builtInFolders != null) return builtInFolders;
-            builtInFolders = new List<string>();
+            lock (BuiltInFoldersGate) return builtInFolders ??= UnpackBuiltIn();
+        }
+
+        private List<string> UnpackBuiltIn()
+        {
+            var foldersToLoad = new List<string>();
             try
             {
                 var assembly = typeof(ChatterVoices).Assembly;
@@ -141,21 +160,25 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                         if (!shipped.Contains(file)) File.Delete(file);
                     File.WriteAllText(stamp, build);
                 }
-                builtInFolders.AddRange(folders);
+                foldersToLoad.AddRange(folders);
             }
             catch (Exception e) { log?.LogWarning("[Chatter] could not unpack the built-in voices: " + e.Message); }
-            return builtInFolders;
+            return foldersToLoad;
         }
 
         /// <summary>A radio voice line is sounding now: the visor's chatter keeps quiet under it (Core/Fx/VisorSound).</summary>
         internal bool Sounding => source != null && source.isPlaying && source.volume > 0f;
-        internal bool Loading => decodedBytes < MaxDecodedBytes && (request != null || loadingPack < packs.Count);
+        internal bool Loading => preparation != null || decodedBytes < MaxDecodedBytes && (request != null || loadingPack < packs.Count);
 
         public void Stop() { if (source != null) source.Stop(); }
         public void Volume(float value) { if (source != null) source.volume = Mathf.Clamp01(value); }
 
         public void Deactivate()
         {
+            preparationCancellation?.Cancel();
+            preparationCancellation?.Dispose();
+            preparationCancellation = null;
+            preparation = null;
             if (request != null) { request.Abort(); request.Dispose(); request = null; }
             if (source != null) source.Stop();
             foreach (Pack pack in packs)
@@ -181,7 +204,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             return null;
         }
 
-        private void Load(string folder, string name, ChatterLibrary library, bool builtIn)
+        private void Load(List<Pack> prepared, string folder, string name, ChatterLibrary library, bool builtIn)
         {
             var pack = new Pack { Name = name, BuiltIn = builtIn };
             string manifest = Path.Combine(folder, "pack.txt");
@@ -196,6 +219,9 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                     else if (key == "persona")
                         foreach (string p in value.Split(',')) if (p.Trim().Length > 0) pack.Personas.Add(p.Trim());
                 }
+            var exact = new List<string>();
+            var fallback = new List<string>();
+            Func<string, bool> known = library.Events.ContainsKey;
             int inspected = 0;
             foreach (string file in Directory.EnumerateFiles(folder))
             {
@@ -204,15 +230,14 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 if (TypeOf(file) == AudioType.UNKNOWN || (info.Attributes & FileAttributes.ReparsePoint) != 0 || info.Length <= 0 || info.Length > MaxFileBytes) continue;
                 exact.Clear();
                 fallback.Clear();
-                ChatterVoiceKeys.Of(Path.GetFileNameWithoutExtension(file), pack.Net, library.Events.ContainsKey, exact, fallback);
+                ChatterVoiceKeys.Of(Path.GetFileNameWithoutExtension(file), pack.Net, known, exact, fallback);
                 if (exact.Count == 0 && fallback.Count == 0) continue;
                 int index = pack.Files.Count;
                 pack.Files.Add(file);
                 foreach (string key in exact) Index(pack.Exact, key, index);
                 foreach (string key in fallback) Index(pack.Fallback, key, index);
             }
-            pack.Clips = new AudioClip[pack.Files.Count];
-            packs.Add(pack);
+            prepared.Add(pack);
             log?.LogInfo("[Chatter] voice pack " + name + ": " + pack.Files.Count + " clips (" + pack.Net +
                 (pack.Character != null ? ", character " + pack.Character : pack.Personas.Count > 0 ? ", " + string.Join("/", pack.Personas) : "") + ")");
         }
@@ -237,6 +262,20 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         /// <summary>Once a frame: take the clip that finished decoding and start the next.</summary>
         public void Tick()
         {
+            if (preparation != null)
+            {
+                if (!preparation.IsCompleted) return;
+                if (preparation.Status == TaskStatus.RanToCompletion)
+                    foreach (Pack pack in preparation.Result)
+                    {
+                        pack.Clips = new AudioClip[pack.Files.Count];
+                        packs.Add(pack);
+                    }
+                else log?.LogWarning("[Chatter] could not prepare the voice packs: " + preparation.Exception?.GetBaseException().Message);
+                preparation = null;
+                preparationCancellation.Dispose();
+                preparationCancellation = null;
+            }
             if (packs.Count == 0) return;
             if (request != null)
             {

@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             foreach (KeyValuePair<string, Flag<ITacBoardSettings>> flag in ArFlags) if (flag.Value.Get(board)) w.ArSwitches.Add(flag.Key);
         }
 
-        /// <summary>The cabin: the kneeboard card, and the visor's terrain pictures (listed under VIEW).</summary>
+        /// <summary>The cabin: the kneeboard card, and the visor's terrain grid (listed under HUD).</summary>
         private static void ReadCabin(MenuWorld w)
         {
             IKneeboardGallery cards = Service<IKneeboardGallery>();
@@ -206,7 +206,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "cockpit/receiver": return () => Service<IRadioRemote>()?.ReceiverToggle();
                 case "cockpit/seek": return () => Service<IRadioRemote>()?.ReceiverSeek(1);
                 case "cockpit/kneeboard": return () => { IKneeboardGallery cards = Service<IKneeboardGallery>(); if (cards != null) cards.Selected = cards.Selected + 1; };
-                case "view/grid": return () => { IVisorTerrainSettings t = Service<IVisorTerrainSettings>(); if (t != null) t.TerrainGhost = Next(MenuCatalog.GhostSteps, t.TerrainGhost); };
+                case "hud/grid": return () => { IVisorTerrainSettings t = Service<IVisorTerrainSettings>(); if (t != null) t.TerrainGhost = Next(MenuCatalog.GhostSteps, t.TerrainGhost); };
                 case "support/mark": return () => Service<ICameraTargetService>()?.Capture();
                 case "support/callmark": return () => Service<ICameraTargetService>()?.CallAtMark();
                 case "support/clearmark": return () => Service<ICameraTargetService>()?.Clear();
@@ -230,18 +230,21 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "hud/sway": return OnBoard(board => board.Sway = !board.Sway);
                 case "hud/reset": return OnBoard(board => board.ResetToDefaults());
                 case "weapons/drones/attack": return StrikeOrScreen;
+                case "weapons/drones/pilot": return () => { IDroneCommand d = Service<IDroneCommand>(); if (d != null && d.LinkedIndex >= 0) d.Pilot(d.LinkedIndex); };
                 case "weapons/drones/ram": return () => Service<IDroneCommand>()?.ToggleRamMode();
                 case "weapons/drones/return": return () => Service<IDroneCommand>()?.StopPiloting();
                 case "weapons/drones/feed": return () => Service<IDroneCommand>()?.ToggleFeed();
+                case "weapons/drones/look": return () => Service<IDroneCommand>()?.ToggleLook();
+                case "weapons/drones/zoom": return () => Service<IDroneCommand>()?.CycleZoom();
+                case "weapons/drones/next": return () => { IDroneCommand d = Service<IDroneCommand>(); if (d != null && d.Linkable > 0) d.Link((d.LinkedIndex + 1 + d.Linkable) % d.Linkable); };
                 case "weapons/drones/map": return () => { OpenMap(); NOAvionics.AvConsole.Open(MfdSlots.Drones, "DRONES"); };
             }
             if (row.Id.StartsWith("comms/c", StringComparison.Ordinal)) return () => Service<IQuickCalls>()?.Call(index);
-            if (row.Id.StartsWith("weapons/drones/pick/", StringComparison.Ordinal)) return () => Service<IDroneCommand>()?.Link(index);
             if (row.Id.StartsWith("support/pit/station/", StringComparison.Ordinal)) return () => Service<ISkywellControl>()?.PrioritiseStation(index);
             const string Parts = "hud/parts/";
             if (row.Id.StartsWith(Parts, StringComparison.Ordinal) && BoardFlags.TryGetValue(row.Id.Substring(4), out Flag<ITacBoardSettings> part))
                 return OnBoard(board => part.Set(board, !part.Get(board)));
-            if (row.Id.StartsWith("view/ar/", StringComparison.Ordinal) && ArFlags.TryGetValue(row.Id.Substring(5), out Flag<ITacBoardSettings> overlay))
+            if (row.Id.StartsWith("hud/ar/", StringComparison.Ordinal) && ArFlags.TryGetValue(row.Id.Substring(4), out Flag<ITacBoardSettings> overlay))
                 return OnBoard(board => overlay.Set(board, !overlay.Get(board)));
             const string Perks = "support/perks/", Filters = "targets/filters/", Shapes = "wing/shape/";
             if (row.Id.StartsWith(Perks, StringComparison.Ordinal)) return BySlug<IOpsPerks>(row.Id, Perks, p => p.PerkCount, (p, i) => p.PerkLabel(i), (p, i) => p.PerkPress(i));

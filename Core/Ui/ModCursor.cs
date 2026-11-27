@@ -5,7 +5,7 @@ using UnityEngine;
 namespace BoscaliSummer.Core.Ui
 {
     /// <summary>The mod's cursor glyphs. <see cref="None"/> is the OS arrow; <see cref="Blank"/> an empty image (a pad-driven menu).</summary>
-    internal enum CursorShape { None, Blank, Arrow, Ground, Select, Drop, BoxAdd, BoxDrop, Grab, Orbit, Place, Move }
+    internal enum CursorShape { None, Blank, Arrow, Ground, Select, Drop, BoxAdd, BoxDrop, Grab, Orbit, Place, Move, Stack }
 
     /// <summary>
     /// The one writer of <c>Cursor.SetCursor</c>: every glyph is painted in code (outlined, theme-tinted, sized for the screen),
@@ -63,55 +63,66 @@ namespace BoscaliSummer.Core.Ui
                     poly = new[] { V(2, 2), V(2, 24), V(7.5f, 18.6f), V(11.8f, 27.6f), V(15.4f, 26f), V(11.2f, 17.2f), V(18.6f, 17.2f) };
                     break;
                 case CursorShape.Ground:
-                    Cross(segs, c, 3.5f, 11f);
-                    Dot(segs, c);
+                    Cross(segs, c, 4f, 11.5f, .85f);
+                    Brackets(segs, c, 12.5f, 2.5f, .75f);
+                    Dot(segs, c, 1.25f);
                     break;
                 case CursorShape.Select:
-                    Brackets(segs, c, 9f, 4.5f);
-                    Dot(segs, c);
+                    Brackets(segs, c, 9.5f, 5f, .95f);
+                    Dot(segs, c, 1.4f);
                     break;
                 case CursorShape.Drop:
                     ink = AvTheme.Warning;
-                    Brackets(segs, c, 9f, 4.5f);
-                    Line(segs, V(12, 16), V(20, 16));
+                    Brackets(segs, c, 9.5f, 5f, .95f);
+                    Line(segs, V(11.5f, 16), V(20.5f, 16), 1.05f);
                     break;
                 case CursorShape.BoxAdd:
                 case CursorShape.BoxDrop:
                     if (shape == CursorShape.BoxDrop) ink = AvTheme.Warning;
-                    Cross(segs, c, 2f, 8f);
-                    Line(segs, V(21, 27), V(29, 27));
-                    if (shape == CursorShape.BoxAdd) Line(segs, V(25, 23), V(25, 31));
+                    Cross(segs, c, 2.5f, 8.5f, .9f);
+                    Line(segs, V(21, 27), V(29, 27), .95f);
+                    if (shape == CursorShape.BoxAdd) Line(segs, V(25, 23), V(25, 31), .95f);
                     break;
                 case CursorShape.Grab:
-                    Line(segs, V(16, 4), V(16, 28)); Line(segs, V(4, 16), V(28, 16));
+                    Arc(segs, c, 3.2f, 0f, 360f, .85f);
+                    Line(segs, V(16, 4), V(16, 12)); Line(segs, V(16, 20), V(16, 28));
+                    Line(segs, V(4, 16), V(12, 16)); Line(segs, V(20, 16), V(28, 16));
                     Head(segs, V(16, 4), V(0, -1)); Head(segs, V(16, 28), V(0, 1));
                     Head(segs, V(4, 16), V(-1, 0)); Head(segs, V(28, 16), V(1, 0));
                     break;
                 case CursorShape.Orbit:
-                    Arc(segs, c, 9f, 40f, 320f);
-                    Head(segs, c + Polar(320f, 9f), Polar(320f + 90f, 1f));
-                    Dot(segs, c);
+                    Arc(segs, c, 9.5f, 25f, 160f, .95f);
+                    Head(segs, c + Polar(160f, 9.5f), Polar(160f + 90f, 1f));
+                    Arc(segs, c, 9.5f, 205f, 340f, .95f);
+                    Head(segs, c + Polar(340f, 9.5f), Polar(340f + 90f, 1f));
+                    Dot(segs, c, 1.4f);
                     break;
                 case CursorShape.Place:
                     ink = AvTheme.Warning;
-                    Arc(segs, c, 8f, 0f, 360f);
-                    Line(segs, V(16, 2), V(16, 9)); Line(segs, V(16, 23), V(16, 30));
-                    Line(segs, V(2, 16), V(9, 16)); Line(segs, V(23, 16), V(30, 16));
-                    Dot(segs, c);
+                    Arc(segs, c, 8.5f, 0f, 360f, .95f);
+                    Line(segs, V(16, 2), V(16, 8.5f)); Line(segs, V(16, 23.5f), V(16, 30));
+                    Line(segs, V(2, 16), V(8.5f, 16)); Line(segs, V(23.5f, 16), V(30, 16));
+                    Dot(segs, c, 1.45f);
                     break;
                 case CursorShape.Move:
                     ink = AvTheme.Friendly;
-                    Line(segs, V(16, 7), V(25, 16)); Line(segs, V(25, 16), V(16, 25));
-                    Line(segs, V(16, 25), V(7, 16)); Line(segs, V(7, 16), V(16, 7));
-                    Dot(segs, c);
+                    Line(segs, V(16, 5.5f), V(26.5f, 16)); Line(segs, V(26.5f, 16), V(16, 26.5f));
+                    Line(segs, V(16, 26.5f), V(5.5f, 16)); Line(segs, V(5.5f, 16), V(16, 5.5f));
+                    Line(segs, V(13, 17.5f), V(16, 13.5f), .85f); Line(segs, V(16, 13.5f), V(19, 17.5f), .85f);
+                    break;
+                case CursorShape.Stack:
+                    Brackets(segs, c, 10.5f, 4.5f, .9f);
+                    Line(segs, V(16, 10.5f), V(21.5f, 16), .85f); Line(segs, V(21.5f, 16), V(16, 21.5f), .85f);
+                    Line(segs, V(16, 21.5f), V(10.5f, 16), .85f); Line(segs, V(10.5f, 16), V(16, 10.5f), .85f);
+                    Dot(segs, c, 1.15f);
                     break;
             }
 
             var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
-                { hideFlags = HideFlags.HideAndDontSave, filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                { hideFlags = HideFlags.HideAndDontSave, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
             var pixels = new Color32[size * size];
             float k = size / Unit;
-            Color edge = new Color(0f, 0f, 0f, .85f);
+            Color edge = new Color(0f, 0f, 0f, .9f);
             ink.a = 1f;
             if (shape != CursorShape.Blank)
             {
@@ -120,7 +131,7 @@ namespace BoscaliSummer.Core.Ui
                 {
                     float d = Distance(new Vector2((x + .5f) / k, (y + .5f) / k), segs, poly);
                     float inkA = Mathf.Clamp01(.5f - d * k);
-                    float a = Mathf.Max(inkA, Mathf.Clamp01(.5f - (d - 1.25f) * k) * edge.a);
+                    float a = Mathf.Max(inkA, Mathf.Clamp01(.5f - (d - 1.35f) * k) * edge.a);
                     if (a <= 0f) continue;
                     Color col = Color.Lerp(edge, ink, inkA);
                     col.a = a;
@@ -159,22 +170,22 @@ namespace BoscaliSummer.Core.Ui
         private static Vector2 V(float x, float y) => new Vector2(x, y);
         private static Vector2 Polar(float degrees, float r) => new Vector2(Mathf.Cos(degrees * Mathf.Deg2Rad), Mathf.Sin(degrees * Mathf.Deg2Rad)) * r;
         private static void Line(List<Seg> s, Vector2 a, Vector2 b, float w = .9f) => s.Add(new Seg { A = a, B = b, W = w });
-        private static void Dot(List<Seg> s, Vector2 c) => Line(s, c, c, 1.3f);
+        private static void Dot(List<Seg> s, Vector2 c, float r = 1.3f) => Line(s, c, c, r);
 
-        private static void Cross(List<Seg> s, Vector2 c, float gap, float reach)
+        private static void Cross(List<Seg> s, Vector2 c, float gap, float reach, float w = .9f)
         {
-            Line(s, c + V(0, -reach), c + V(0, -gap)); Line(s, c + V(0, gap), c + V(0, reach));
-            Line(s, c + V(-reach, 0), c + V(-gap, 0)); Line(s, c + V(gap, 0), c + V(reach, 0));
+            Line(s, c + V(0, -reach), c + V(0, -gap), w); Line(s, c + V(0, gap), c + V(0, reach), w);
+            Line(s, c + V(-reach, 0), c + V(-gap, 0), w); Line(s, c + V(gap, 0), c + V(reach, 0), w);
         }
 
-        private static void Brackets(List<Seg> s, Vector2 c, float r, float arm)
+        private static void Brackets(List<Seg> s, Vector2 c, float r, float arm, float w = .9f)
         {
             for (int i = 0; i < 4; i++)
             {
                 Vector2 dir = new Vector2(i % 2 == 0 ? -1 : 1, i < 2 ? -1 : 1);
                 Vector2 corner = c + dir * r;
-                Line(s, corner, corner - new Vector2(dir.x * arm, 0));
-                Line(s, corner, corner - new Vector2(0, dir.y * arm));
+                Line(s, corner, corner - new Vector2(dir.x * arm, 0), w);
+                Line(s, corner, corner - new Vector2(0, dir.y * arm), w);
             }
         }
 
@@ -186,11 +197,11 @@ namespace BoscaliSummer.Core.Ui
             Line(s, tip, tip - dir * 4f - side * 3.5f);
         }
 
-        private static void Arc(List<Seg> s, Vector2 c, float r, float from, float to)
+        private static void Arc(List<Seg> s, Vector2 c, float r, float from, float to, float w = .9f)
         {
             const int Steps = 20;
             for (int i = 0; i < Steps; i++)
-                Line(s, c + Polar(Mathf.Lerp(from, to, i / (float)Steps), r), c + Polar(Mathf.Lerp(from, to, (i + 1) / (float)Steps), r));
+                Line(s, c + Polar(Mathf.Lerp(from, to, i / (float)Steps), r), c + Polar(Mathf.Lerp(from, to, (i + 1) / (float)Steps), r), w);
         }
     }
 }

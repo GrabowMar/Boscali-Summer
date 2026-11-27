@@ -224,6 +224,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         public bool ShowsWing => panel != null && panel.ShowsWing;
+        internal bool RwrOpen => panel != null && panel.RwrOpen;
+        internal bool FiresOpen => panel != null && panel.FiresOpen;
+        internal bool WingSide => panel != null && panel.WingSide;
 
         /// <summary>The board's 10 Hz readers, in order (the stores and threat feeds read the frame the watchers before them filled): the sites a reader that throws is reported under.</summary>
         private static readonly string[] ReadSites =
@@ -658,6 +661,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cluster.SetMissileFeed(missileFeed.Texture, missileFeed.Name, feedRange, missileFeed.Lost, feedClosure, feedTti);
             cluster.CardNativeText = !viewingOwnExternally;      // the cockpit's tac screen prints its own text on the picture
             cluster.CardAspectDeg = aspect;
+            cluster.CardIr = camOwner != null && TargetCamLook.IsIr(camOwner.targetCam);
             if (thirdPerson && ownAircraft != null)
             {
                 Rigidbody rb = ownAircraft.rb;

@@ -173,11 +173,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool flash = false;
             if (near >= 0)
             {
-                int s = (int)Math.Ceiling(Math.Max(0f, d.Missiles[near].TtiS));
-                key = 1000 + s;
-                text = key == headlineKey ? headlineText : ScopeStr.Cat("", s, "S").ToString();
+                float tti = d.Missiles[near].TtiS;
+                if (float.IsFinite(tti))
+                {
+                    int s = (int)Math.Ceiling(Math.Max(0f, tti));
+                    key = 1000 + s;
+                    text = key == headlineKey ? headlineText : ScopeStr.Cat("", s, "S").ToString();
+                }
+                else { key = 1999; text = "MSL"; }
                 tone = Red;
-                flash = ThreatMath.Warn(d.Missiles[near].TtiS);
+                flash = ThreatMath.Warn(tti);
             }
             else if (recentDefeat) { key = 1; text = "DEFEATED"; }
             else if (cue == ThreatCue.Lock) { key = 2; text = "LOCK"; tone = Red; flash = true; }

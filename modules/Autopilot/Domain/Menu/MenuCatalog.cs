@@ -5,9 +5,12 @@ using BoscaliSummer.Core.Contracts;
 namespace BoscaliSummer.Modules.Autopilot.Domain
 {
     /// <summary>
-    /// The catalog as a pure function of a <see cref="MenuWorld"/> snapshot: ten categories at fixed angles, each one job
-    /// (WEAPONS what you fire, HUD the AR visor in the top right, FLIGHT the airframe and its lights, WING / COMMS / SUPPORT the team,
-    /// COCKPIT the radio and the cabin, VIEW what you look through, DEFENCE staying alive, TARGETS the selection), verb-first labels that state the outcome of a press (LOWER GEAR flips to RAISE GEAR),
+    /// The catalog as a pure function of a <see cref="MenuWorld"/> snapshot: ten categories at fixed angles, each one job and every
+    /// control in exactly one place. Combat sits on the right half in priority order (1 WEAPONS what you fire, 2 TARGETS the selection,
+    /// 3 DEFENCE staying alive, 4 WING the wingmen, 5 SUPPORT ops and the camera mark); the aircraft and its comfort on the left
+    /// (6 COMMS team calls, 7 COCKPIT the radio and the cabin, 8 VIEW the camera, 9 HUD everything the visor draws, 0 FLIGHT the airframe),
+    /// so WEAPONS and FLIGHT flank the top. Inside a category the rows a fight needs come first (the controller wheel shows nine
+    /// before it pages). Verb-first labels state the outcome of a press (LOWER GEAR flips to RAISE GEAR),
     /// NOUN: VALUE state lines, hybrid availability (a category that has nothing dims in place with a reason; inside a
     /// category a row that cannot exist right now is absent, one that is only blocked for a moment stays dimmed with
     /// its reason) and a ring badge per category. <c>Build</c>'s bind callback attaches the game call to each runnable row.
@@ -26,11 +29,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public static readonly MenuSwitch[] BoardParts =
         {
             new MenuSwitch("stores", "STORES + POWER", "WEAPON, POWER AND COUNTERMEASURE PANELS"),
-            new MenuSwitch("status", "LAMPS + GAUGES", "STATUS LAMPS AND GAUGE ROW; SYSTEMS ALWAYS SHOWS"),
-            new MenuSwitch("notices", "NOTICES", "THE NOTICE LINE IN THE LEFT COLUMN; NEEDS MAP + FEED ON"),
+            new MenuSwitch("status", "LAMPS + GAUGES", "STATUS LAMPS AND GAUGE ROW; SYSTEMS ALWAYS ON"),
+            new MenuSwitch("notices", "NOTICES", "LEFT NOTICE LINE; NEEDS MAP + FEED ON"),
             new MenuSwitch("corners", "MAP + FEED", "MAP FRAME AND KILL FEED, ALSO WITH BOARD OFF"),
         };
-        /// <summary>VIEW > AR OVERLAYS (2026-11-14): what the helmet draws on the world and how the HUD reacts; each stays with the board off.</summary>
+        /// <summary>HUD > AR OVERLAYS: what the helmet draws on the world and how the HUD reacts; each stays with the board off.</summary>
         public static readonly MenuSwitch[] ArParts =
         {
             new MenuSwitch("alerts", "COMBAT ALERTS", "WARNING BANNER, THREAT RING, HIT CALLOUTS"),
@@ -58,16 +61,17 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         {
             var b = new Builder(bind);
             var model = new MenuModel { AircraftName = MenuText.Upper(w.Aircraft, MaxLabel) };
+            // ring order, clockwise from the top: the list order is the order the ring rotates through
             model.Categories.Add(Weapons(w, b));
-            model.Categories.Add(Hud(w, b));
-            model.Categories.Add(Flight(w, b));
+            model.Categories.Add(Targets(w, b));
+            model.Categories.Add(Defence(w, b));
             model.Categories.Add(Wing(w, b));
+            model.Categories.Add(Support(w, b));
             model.Categories.Add(Comms(w, b));
             model.Categories.Add(Cockpit(w, b));
-            model.Categories.Add(Support(w, b));
             model.Categories.Add(View(w, b));
-            model.Categories.Add(Defence(w, b));
-            model.Categories.Add(Targets(w, b));
+            model.Categories.Add(Hud(w, b));
+            model.Categories.Add(Flight(w, b));
             foreach (MenuCategory c in model.Categories)
                 if (c.Rows.Count == 0)
                 {
@@ -148,9 +152,15 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         {
             int n = w.Stations.Count;
             var c = Cat("weapons", "WEAPONS", 18f, "1", "LOADOUT" + D + MenuText.Plural(n, "STATION", "STATIONS"));
+            if (w.DronePiloting)
+                c.Rows.Add(b.Reg(MenuRow.Action("weapons/drones/return", "drone-screen", "RETURN TO AIRCRAFT", "REMOTE PILOT",
+                    "HAND THE DRONE BACK TO AUTONOMOUS FLIGHT", "AIRCRAFT CONTROL", MenuTone.Caution)));
             if (n == 0)
             {
+                MenuRow emptyDrones = DroneLink(w);
+                if (emptyDrones != null) c.Rows.Add(b.Reg(emptyDrones));
                 if (w.HasFighterBay) c.Rows.Add(b.Reg(FighterBay(w)));
+                if (w.DronePiloting) Badge(c, "DRONE", show: true, alert: true);
                 return c;
             }
             int active = Math.Max(0, Math.Min(n - 1, w.ActiveStation));
@@ -161,22 +171,24 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(MenuRow.Action("weapons/next", "station-next", "NEXT STATION", "NEXT: STA " + (next + 1) + D + StationName(w.Stations[next]) + " " + StationAmmo(w.Stations[next]),
                     "STEP FORWARD THROUGH THE LOADOUT", "STA " + (next + 1) + D + StationName(w.Stations[next]))));
             }
-            var picks = new List<MenuRow>(n);
-            for (int i = 0; i < n; i++)
+            if (n > 2)
             {
-                WorldStation s = w.Stations[i];
-                bool empty = s.Ammo <= 0;
-                MenuRow pick = MenuRow.Pick("weapons/select/st" + (i + 1), StationIcon(s), "STA " + (i + 1) + D + StationName(s),
-                    empty ? "AMMO: EMPTY" : "AMMO: " + StationAmmo(s), empty ? "ACTIVE" + D + "EMPTY" : "ACTIVE" + D + StationAmmo(s),
-                    i == active, empty ? "STATION EMPTY, NOTHING TO FIRE" : "MAKE THIS THE ACTIVE WEAPON",
-                    "STA " + (i + 1) + D + StationName(s), empty ? MenuTone.Dim : MenuTone.Normal, hatched: empty);
-                pick.Index = i;
-                picks.Add(pick);
+                var picks = new List<MenuRow>(n);
+                for (int i = 0; i < n; i++)
+                {
+                    WorldStation s = w.Stations[i];
+                    bool empty = s.Ammo <= 0;
+                    MenuRow pick = MenuRow.Pick("weapons/select/st" + (i + 1), StationIcon(s), "STA " + (i + 1) + D + StationName(s),
+                        empty ? "AMMO: EMPTY" : "AMMO: " + StationAmmo(s), empty ? "ACTIVE" + D + "EMPTY" : "ACTIVE" + D + StationAmmo(s),
+                        i == active, empty ? "STATION EMPTY, NOTHING TO FIRE" : "MAKE THIS THE ACTIVE WEAPON",
+                        "STA " + (i + 1) + D + StationName(s), empty ? MenuTone.Dim : MenuTone.Normal, hatched: empty);
+                    pick.Index = i;
+                    picks.Add(pick);
+                }
+                c.Rows.Add(b.Reg(MenuRow.Submenu("weapons/select", "station-select", "SELECT STATION",
+                    "ACTIVE: " + StationName(now) + " " + StationAmmo(now), "CHOOSE A HARDPOINT", Cut(w.Aircraft, 14) + D + MenuText.Plural(n, "STATION", "STATIONS"), "STATIONS", picks)));
             }
-            c.Rows.Add(b.Reg(MenuRow.Submenu("weapons/select", "station-select", "SELECT STATION",
-                "ACTIVE: " + StationName(now) + " " + StationAmmo(now), "CHOOSE A HARDPOINT", Cut(w.Aircraft, 14) + D + MenuText.Plural(n, "STATION", "STATIONS"), "STATIONS", picks)));
-            MenuRow cargo = Cargo(w);
-            if (cargo != null) c.Rows.Add(b.Reg(cargo));
+            // drone strike orders are fire control too: straight after the stations, before the gun and bay switches
             MenuRow drones = DroneLink(w);
             if (drones != null) c.Rows.Add(b.Reg(drones));
             if (w.HasMultipleGuns)
@@ -191,10 +203,22 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(MenuRow.Toggle("weapons/bay", "bay-doors", w.BayDoorsOpen,
                     F("OPEN BAY DOORS", "BAY DOORS: AUTO", "HOLD THE WEAPON BAY OPEN", "BAY DOORS OPEN"),
                     F("CLOSE BAY DOORS", "BAY DOORS: HELD OPEN", "LET THE BAY CLOSE AND WORK ON ITS OWN", "BAY DOORS CLOSING", MenuTone.Active), checkbox: false)));
+            MenuRow cargo = Cargo(w);
+            if (cargo != null) c.Rows.Add(b.Reg(cargo));
             if (w.HasFighterBay) c.Rows.Add(b.Reg(FighterBay(w)));
+            if (n == 1 && c.Rows.Count == 0)
+            {
+                c.Reason = "1 STATION";
+                c.EmptyTitle = "SINGLE STATION";
+                c.EmptyBody = "ONLY ONE WEAPON STATION IS FITTED";
+            }
 
-            string tail = X + MenuText.Ammo(now.Ammo);
-            Badge(c, StationTag(now, MenuModel.BadgeChars - 1 - tail.Length) + " " + tail, show: now.Ammo <= 0, alert: now.Ammo <= 0);
+            if (w.DronePiloting) Badge(c, "DRONE", show: true, alert: true);
+            else
+            {
+                string tail = X + MenuText.Ammo(now.Ammo);
+                Badge(c, StationTag(now, MenuModel.BadgeChars - 1 - tail.Length) + " " + tail, show: now.Ammo <= 0, alert: now.Ammo <= 0);
+            }
             return c;
         }
 
@@ -215,34 +239,30 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         private static MenuRow Cargo(MenuWorld w)
         {
-            // the loads themselves are picked in SELECT STATION; this branch is only the cycle and the drop zone
-            var kids = new List<MenuRow>();
+            // loads themselves are selected via NEXT STATION / SELECT STATION; this branch owns only the drop zone
             int loads = 0;
             foreach (WorldStation station in w.Stations) if (station.Cargo != CargoKind.None) loads++;
-            if (loads == 0) return null;
-            kids.Add(MenuRow.Action("weapons/cargo/next", "station-next", "NEXT CARGO LOAD", "LOADS: " + loads,
-                "SELECT THE NEXT CARGO, TROOP OR GLIDER STATION", "CARGO LOAD SELECTED"));
-            if (w.CargoZoneAvailable && w.CargoZoneCapable)
-            {
-                MenuRow set = MenuRow.Action("weapons/cargo/setzone", "camera-mark", "SET DZ AT TARGET",
-                    w.CargoFixAvailable ? "FIX: " + Cut(w.CargoFixName, 25) : "FIX: NO GROUND TARGET",
-                    "AIM FUTURE DROPS AT THE DESIGNATED GROUND FIX", "DROP ZONE SET");
-                if (!w.CargoFixAvailable) set.Blocked = "DESIGNATE A GROUND TARGET";
-                kids.Add(set);
-                MenuRow clear = MenuRow.Action("weapons/cargo/clearzone", "mark-clear", "CLEAR DROP ZONE",
-                    w.CargoZoneSet ? "DZ: " + Cut(w.CargoZoneLeg, 26) : "DZ: NONE",
-                    "FUTURE DROPS FOLLOW THEIR DESIGNATION", "DROP ZONE CLEARED");
-                if (!w.CargoZoneSet) clear.Blocked = "NO DROP ZONE SET";
-                kids.Add(clear);
-            }
-            if (w.MapAvailable && w.CargoZoneAvailable && w.CargoZoneCapable) kids.Add(MenuRow.Action("weapons/cargo/map", "map", "OPEN DROP ZONE MAP",
-                "MAP TOOLS · LANDING ZONE", "ARM LANDING ZONE ON MAP TOOLS, THEN RIGHT-CLICK THE GROUND", "MAP OPEN"));
-            return MenuRow.Submenu("weapons/cargo", "hardpoint", "CARGO / AIRDROP",
-                w.CargoZoneSet ? "DZ: " + Cut(w.CargoZoneLeg, 26) : "LOADS: " + loads,
-                "LOAD SELECTION AND DROP-ZONE CONTROLS", "CARGO / AIRDROP", "LOADS", kids);
+            if (loads == 0 || !w.CargoZoneAvailable || !w.CargoZoneCapable) return null;
+            var kids = new List<MenuRow>(3);
+            MenuRow set = MenuRow.Action("weapons/cargo/setzone", "camera-mark", "SET DZ AT TARGET",
+                w.CargoFixAvailable ? "FIX: " + Cut(w.CargoFixName, 25) : "FIX: NO GROUND TARGET",
+                "AIM FUTURE DROPS AT THE DESIGNATED GROUND FIX", "DROP ZONE SET");
+            if (!w.CargoFixAvailable) set.Blocked = "DESIGNATE A GROUND TARGET";
+            kids.Add(set);
+            MenuRow clear = MenuRow.Action("weapons/cargo/clearzone", "mark-clear", "CLEAR DROP ZONE",
+                w.CargoZoneSet ? "DZ: " + Cut(w.CargoZoneLeg, 26) : "DZ: NONE",
+                "FUTURE DROPS FOLLOW THEIR DESIGNATION", "DROP ZONE CLEARED");
+            if (!w.CargoZoneSet) clear.Blocked = "NO DROP ZONE SET";
+            kids.Add(clear);
+            if (w.MapAvailable)
+                kids.Add(MenuRow.Action("weapons/cargo/map", "map", "OPEN DROP ZONE MAP",
+                    "MAP TOOLS" + D + "LANDING ZONE", "OPEN MAP TOOLS TO PLACE A LANDING ZONE", "MAP OPEN"));
+            return MenuRow.Submenu("weapons/cargo", "hardpoint", "DROP ZONE",
+                w.CargoZoneSet ? "DZ: " + Cut(w.CargoZoneLeg, 26) : "DZ: NOT SET",
+                "SET OR CLEAR THE AIRDROP LANDING ZONE", "DROP ZONE", "DROP ZONE", kids);
         }
 
-        /// <summary>Shortcuts for drone orders, the HUD feed and the map roster.</summary>
+        /// <summary>Shortcuts for drone orders, pilot link, sensor feed and the map roster (flat depth-3 submenu).</summary>
         private static MenuRow DroneLink(MenuWorld w)
         {
             int n = w.DroneNames.Count;
@@ -259,31 +279,32 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 if (!w.DronesStriking && !w.DronesCanStrike) attack.Blocked = "NO TARGET SELECTED";
                 kids.Add(attack);
             }
-            if (w.DroneRamMode || w.OwnRemora)
-                kids.Add(MenuRow.Toggle("weapons/drones/ram", "drone-strike", w.DroneRamMode,
-                    F("REMORA RAM MODE", "REMORAS: MISSILES", "REMORAS KEEP THEIR AAMS AND RAM AIRCRAFT AND INBOUND MISSILES WITH THE AIRFRAME", "REMORAS RAMMING"),
-                    F("REMORA MISSILE MODE", "REMORAS: RAMMING", "REMORAS GO BACK TO FIRING THEIR AAMS FIRST", "REMORAS ON MISSILES", MenuTone.Caution), checkbox: false));
-            if (w.DronePiloting)
-                kids.Add(MenuRow.Action("weapons/drones/return", "drone-screen", "RETURN TO AIRCRAFT", "REMOTE PILOT",
-                    "HAND THE DRONE BACK TO AUTONOMOUS FLIGHT", "AIRCRAFT CONTROL", MenuTone.Caution));
+            if (!w.DronePiloting && linked >= 0 && w.DroneCanPilot)
+                kids.Add(MenuRow.Action("weapons/drones/pilot", "drone-screen", "PILOT LINKED DRONE", "LINK: " + Cut(name, 24),
+                    "TAKE REMOTE CONTROL OF THE LINKED DRONE", "PILOTING " + Cut(name, 13)));
             kids.Add(MenuRow.Toggle("weapons/drones/feed", "missile-view", w.DroneFeed,
                 F("SHOW DRONE FEED", "HUD FEED: OFF", "THE LINKED DRONE'S CAMERA ON YOUR HUD", "DRONE FEED ON"),
                 F("HIDE DRONE FEED", "HUD FEED: ON", "HIDE THE FEED CARD", "DRONE FEED OFF")));
-            kids.Add(MenuRow.Action("weapons/drones/map", "map", "OPEN DRONES PANEL", MenuText.Plural(n, "DRONE", "DRONES"),
-                "LOCATE, PILOT AND SHARE DRONES ON THE TACTICAL MAP", "DRONES"));
+            if (w.DroneFeed && w.DroneLookWord.Length > 0)
+                kids.Add(MenuRow.Action("weapons/drones/look", "night-vision", "SWITCH DRONE SENSOR", "SENSOR: " + Cut(w.DroneLookWord, 22),
+                    "TOGGLE DRONE CAMERA VIEW MODE", "SENSOR SWITCHED"));
+            if (w.DroneFeed && w.DroneZoomWord.Length > 0)
+                kids.Add(MenuRow.Action("weapons/drones/zoom", "resize", "CYCLE DRONE ZOOM", "ZOOM: " + Cut(w.DroneZoomWord, 24),
+                    "STEP THE DRONE CAMERA MAGNIFICATION", "ZOOM CHANGED"));
             if (n > 1)
             {
-                var picks = new List<MenuRow>(n);
-                for (int i = 0; i < n; i++)
-                {
-                    MenuRow pick = MenuRow.Pick("weapons/drones/pick/d" + (i + 1), "drone-strike", w.DroneNames[i], w.DroneStates[i], "LINKED" + D + w.DroneStates[i],
-                        i == linked, "WATCH THIS DRONE'S FEED", "LINK: " + w.DroneNames[i]);
-                    pick.Index = i;
-                    picks.Add(pick);
-                }
-                kids.Add(MenuRow.Submenu("weapons/drones/pick", "station-select", "SELECT DRONE", linked >= 0 ? "LINK: " + name : "LINK: NONE",
-                    "PICK THE DRONE THE LINK FOLLOWS", "DRONES" + D + MenuText.Plural(n, "DRONE", "DRONES"), "DRONES", picks));
+                int nextIdx = linked >= 0 ? (linked + 1) % n : 0;
+                string nextName = w.DroneNames[nextIdx];
+                kids.Add(MenuRow.Action("weapons/drones/next", "station-select", "LINK " + Cut(nextName, 17),
+                    linked >= 0 ? "DRONE: " + Cut(name, 23) : "DRONE: NONE",
+                    "SWITCH THE ACTIVE DRONE LINK", "LINK: " + Cut(nextName, 22)));
             }
+            if (w.DroneRamMode || w.OwnRemora)
+                kids.Add(MenuRow.Toggle("weapons/drones/ram", "drone-strike", w.DroneRamMode,
+                    F("REMORA RAM MODE", "REMORAS: MISSILES", "RAM AIRCRAFT AND MISSILES, SAVE AAMS", "REMORAS RAMMING"),
+                    F("REMORA MISSILE MODE", "REMORAS: RAMMING", "FIRE AAMS FIRST, NORMAL INTERCEPT", "REMORAS ON MISSILES", MenuTone.Caution), checkbox: false));
+            kids.Add(MenuRow.Action("weapons/drones/map", "map", "OPEN DRONES PANEL", MenuText.Plural(n, "DRONE", "DRONES"),
+                "LOCATE, PILOT AND SHARE DRONES ON MAP", "DRONES"));
             return MenuRow.Submenu("weapons/drones", "drone-strike", "DRONES",
                 w.DronesStriking ? "ATTACKING" + D + MenuText.Plural(n, "DRONE", "DRONES")
                     : linked >= 0 && linked < w.DroneStates.Count ? name + D + w.DroneStates[linked] : "ON LINK: " + n,
@@ -321,32 +342,43 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         private static MenuCategory Hud(MenuWorld w, Builder b)
         {
-            var c = Cat("hud", "HUD", 54f, "2", "AR VISOR" + D + "TAC BOARD");
+            var c = Cat("hud", "HUD", 306f, "9", "VISOR" + D + "AR");
             c.Reason = "NO VISOR"; c.EmptyTitle = "NO AR VISOR"; c.EmptyBody = "THE TAC BOARD IS NOT INSTALLED IN THIS COCKPIT";
-            if (!w.BoardAvailable) return c;
-            c.Rows.Add(b.Reg(MenuRow.Toggle("hud/board", "hud", w.BoardOn,
-                F("SHOW TAC BOARD", "CURRENT: OFF", "RESTORE THE TAC BOARD", "TAC BOARD ON"),
-                F("HIDE TAC BOARD", "CURRENT: ON", "GO BACK TO STOCK PANELS", "TAC BOARD OFF"), checkbox: false)));
-            // One SCOPE row (2026-11-16): ON shows the board's panels (RWR, FIRES, WING) while each has something to say, OFF shows none. There is nothing to pick.
-            MenuRow scope = MenuRow.Cycle("hud/scope", "station-select", "SET SCOPE", "SCOPE: ", BoardScopes, Clamp(w.BoardScope, BoardScopes), "SCOPE: ");
-            if (!w.BoardOn) scope.Blocked = "TAC BOARD: OFF";
-            c.Rows.Add(b.Reg(scope));
+            if (w.BoardAvailable)
+            {
+                c.Rows.Add(b.Reg(MenuRow.Toggle("hud/board", "hud", w.BoardOn,
+                    F("SHOW TAC BOARD", "CURRENT: OFF", "RESTORE THE TAC BOARD", "TAC BOARD ON"),
+                    F("HIDE TAC BOARD", "CURRENT: ON", "GO BACK TO STOCK PANELS", "TAC BOARD OFF"), checkbox: false)));
+                // One SCOPE row (2026-11-16): ON shows the board's panels (RWR, FIRES, WING) while each has something to say, OFF shows none.
+                MenuRow scope = MenuRow.Cycle("hud/scope", "station-select", "SET SCOPE", "SCOPE: ", BoardScopes, Clamp(w.BoardScope, BoardScopes), "SCOPE: ");
+                if (!w.BoardOn) scope.Blocked = "TAC BOARD: OFF";
+                c.Rows.Add(b.Reg(scope));
+            }
+            // world-locked AR overlays and terrain grid stay active even when TAC BOARD is OFF
+            if (w.TerrainAvailable)
+                c.Rows.Add(b.Reg(MenuRow.Cycle("hud/grid", "shape", "SET TERRAIN GRID", "TERRAIN GRID: ", Ghosts, Clamp(w.TerrainGhost, Ghosts), "TERRAIN GRID: ")));
+            if (w.BoardAvailable)
+            {
+                List<MenuRow> ar = Switches("hud/ar/", "ar/", ArParts, w.ArSwitches, out int arOn);
+                c.Rows.Add(b.Reg(MenuRow.Submenu("hud/ar", "warning", "AR OVERLAYS",
+                    arOn + " OF " + ArParts.Length + " ON", "WORLD SYMBOLS, ALERTS AND HUD REACTIONS", "AR", "OVERLAYS", ar, iconless: true)));
+                List<MenuRow> parts = Switches("hud/parts/", "parts/", BoardParts, w.BoardSwitches, out int partsOn);
+                c.Rows.Add(b.Reg(MenuRow.Submenu("hud/parts", "hardpoint", "BOARD PARTS",
+                    partsOn + " OF " + BoardParts.Length + " ON", "SHOW OR HIDE WHOLE ELEMENTS OF THE VISOR", "VISOR", "PARTS", parts, iconless: true)));
+                MenuRow shade = MenuRow.Cycle("hud/shade", "lights", "SET SHADE", "SHADE: ", BoardShades, Clamp(w.BoardShade, BoardShades), "SHADE: ");
+                MenuRow size = MenuRow.Cycle("hud/size", "resize", "SET BOARD SIZE", "BOARD SIZE: ", BoardSizes, Clamp(w.BoardSize, BoardSizes), "BOARD SIZE: ");
+                MenuRow sway = Switch("hud/", new MenuSwitch("sway", "VISOR SWAY", "SYMBOLS HANG IN THE AIR OFF THE GLASS", enable: true), w.BoardSway);
+                var display = new List<MenuRow> { size, shade, sway };
+                if (!w.BoardOn) foreach (MenuRow row in display) row.Blocked = "TAC BOARD: OFF";
+                c.Rows.Add(b.Reg(MenuRow.Submenu("hud/display", "shape", "DISPLAY OPTIONS",
+                    "SIZE: " + BoardSizes[Clamp(w.BoardSize, BoardSizes)] + D + "SHADE: " + BoardShades[Clamp(w.BoardShade, BoardShades)], "SIZE, SHADE, SWAY", "DISPLAY", "OPTIONS", display)));
+                MenuRow reset = MenuRow.Action("hud/reset", "countermeasure-cycle", "RESET HUD", "EVERY OPTION TO DEFAULT", "PUT THE WHOLE VISOR BACK AS IT SHIPPED", "HUD RESET");
+                reset.HoldLabel = "HOLD TO RESET";
+                c.Rows.Add(b.Reg(reset));
+            }
 
-            MenuRow shade = MenuRow.Cycle("hud/shade", "lights", "SET SHADE", "SHADE: ", BoardShades, Clamp(w.BoardShade, BoardShades), "SHADE: ");
-            MenuRow size = MenuRow.Cycle("hud/size", "resize", "SET BOARD SIZE", "BOARD SIZE: ", BoardSizes, Clamp(w.BoardSize, BoardSizes), "BOARD SIZE: ");
-            MenuRow sway = Switch("hud/", new MenuSwitch("sway", "VISOR SWAY", "SYMBOLS HANG IN THE AIR OFF THE GLASS", enable: true), w.BoardSway);
-            var display = new List<MenuRow> { size, shade, sway };
-            if (!w.BoardOn) foreach (MenuRow row in display) row.Blocked = "TAC BOARD: OFF";
-            c.Rows.Add(b.Reg(MenuRow.Submenu("hud/display", "shape", "DISPLAY OPTIONS",
-                "SIZE: " + BoardSizes[Clamp(w.BoardSize, BoardSizes)] + D + "SHADE: " + BoardShades[Clamp(w.BoardShade, BoardShades)], "SIZE, SHADE, SWAY", "DISPLAY", "OPTIONS", display)));
-            List<MenuRow> parts = Switches("hud/parts/", "parts/", BoardParts, w.BoardSwitches, out int partsOn);
-            c.Rows.Add(b.Reg(MenuRow.Submenu("hud/parts", "hardpoint", "BOARD PARTS",
-                partsOn + " OF " + BoardParts.Length + " ON", "SHOW OR HIDE WHOLE ELEMENTS OF THE VISOR", "VISOR", "PARTS", parts, iconless: true)));
-            MenuRow reset = MenuRow.Action("hud/reset", "countermeasure-cycle", "RESET HUD", "EVERY OPTION TO DEFAULT", "PUT THE WHOLE VISOR BACK AS IT SHIPPED", "HUD RESET");
-            reset.HoldLabel = "HOLD TO RESET";
-            c.Rows.Add(b.Reg(reset));
-
-            if (!w.BoardOn) Badge(c, "OFF", show: true, alert: true);
+            if (w.BoardAvailable && !w.BoardOn) Badge(c, "OFF", show: true, alert: true);
+            else if (w.TerrainAvailable && w.TerrainGhost > 0) Badge(c, "GRID", show: true);
             return c;
         }
 
@@ -354,7 +386,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         private static MenuCategory Flight(MenuWorld w, Builder b)
         {
-            var c = Cat("flight", "FLIGHT", 90f, "3", "OWN AIRCRAFT");
+            var c = Cat("flight", "FLIGHT", 342f, "0", "OWN AIRCRAFT");
             bool moving = w.Gear == GearPhase.Extending || w.Gear == GearPhase.Retracting;
             if (w.Airborne && w.Gear != GearPhase.None)
             {
@@ -363,28 +395,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     F("RAISE GEAR", "CURRENT: DOWN", "RETRACT LANDING GEAR", "GEAR RETRACTING"), checkbox: false);
                 if (moving) gear.Blocked = w.Gear == GearPhase.Extending ? "GEAR: EXTENDING" : "GEAR: RETRACTING";
                 c.Rows.Add(b.Reg(gear));
-            }
-            if (w.HasAssist)
-                c.Rows.Add(b.Reg(MenuRow.Toggle("flight/assist", "flight-assist", w.Assist,
-                    F("ENABLE ASSIST", "FLIGHT ASSIST: OFF", "LIMIT PITCH TO PREVENT STALLS", "FLIGHT ASSIST ON"),
-                    F("DISABLE ASSIST", "FLIGHT ASSIST: ON", "REMOVE THE PITCH LIMITER", "FLIGHT ASSIST OFF"))));
-            if (w.HasHover)
-            {
-                MenuRow hover = MenuRow.Toggle("flight/hover", "auto-hover", w.Hover,
-                    F("ENABLE AUTO-HOVER", "AUTO-HOVER: OFF", "HOLD POSITION AND ALTITUDE", "AUTO-HOVER ON"),
-                    F("DISABLE AUTO-HOVER", "AUTO-HOVER: ON", "RETURN VTOL CONTROL TO THE STICK", "AUTO-HOVER OFF"));
-                // SkylarkFlightMode disables auto-hover in PLANE, where the pilot flies the wing and approach vectoring.
-                if (w.SkylarkActive && w.SkylarkVector == SkylarkPlane && !w.Hover) hover.Blocked = "VS-4 PLANE: SWITCH TO DRONE MODE";
-                c.Rows.Add(b.Reg(hover));
-            }
-            if (w.SkylarkActive)
-            {
-                string battery = string.IsNullOrEmpty(w.SkylarkBattery) ? "DRIVE: " : w.SkylarkBattery + D + "DRIVE: ";
-                c.Rows.Add(b.Reg(MenuRow.Cycle("flight/sk/drive", "engine", "SET DRIVE", battery, SkylarkDrives, Clamp(w.SkylarkDrive, SkylarkDrives), "DRIVE: ")));
-                c.Rows.Add(b.Reg(MenuRow.Cycle("flight/sk/vector", "auto-hover", "FLIGHT MODE", "MODE: ", SkylarkVectors, Clamp(w.SkylarkVector, SkylarkVectors), "MODE: ")));
-                c.Rows.Add(b.Reg(MenuRow.Toggle("flight/sk/mast", "radar", w.SkylarkMast,
-                    F("DEPLOY C2 MAST", "C2: OFFLINE", "STRIKE REACH X1.5 AND CHEAPER CALLS, BIGGER RADAR RETURN", "C2 MAST OUT"),
-                    F("STOW C2 MAST", "C2: ONLINE" + D + "REACH X1.5", "FOLD THE MAST AWAY: STEALTHIER, NO C2 BONUS", "C2 MAST STOWED", MenuTone.Active), checkbox: false)));
             }
             if (w.Airborne || w.AutolandEngaged)
             {
@@ -396,30 +406,38 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 if (!w.AutolandEngaged) land.Blocked = w.SkylarkActive ? "VS-4: DESCEND IN DRONE HOVER" : w.AutolandBlock;
                 c.Rows.Add(b.Reg(land));
             }
+            if (w.SkylarkActive)
+            {
+                c.Rows.Add(b.Reg(MenuRow.Cycle("flight/sk/vector", "auto-hover", "FLIGHT MODE", "MODE: ", SkylarkVectors, Clamp(w.SkylarkVector, SkylarkVectors), "MODE: ")));
+                string battery = string.IsNullOrEmpty(w.SkylarkBattery) ? "DRIVE: " : w.SkylarkBattery + D + "DRIVE: ";
+                c.Rows.Add(b.Reg(MenuRow.Cycle("flight/sk/drive", "engine", "SET DRIVE", battery, SkylarkDrives, Clamp(w.SkylarkDrive, SkylarkDrives), "DRIVE: ")));
+                c.Rows.Add(b.Reg(MenuRow.Toggle("flight/sk/mast", "radar", w.SkylarkMast,
+                    F("DEPLOY C2 MAST", "C2: OFFLINE", "REACH X1.5 AND CHEAPER CALLS, BIGGER RCS", "C2 MAST OUT"),
+                    F("STOW C2 MAST", "C2: ONLINE" + D + "REACH X1.5", "FOLD THE MAST AWAY: STEALTHIER, NO C2 BONUS", "C2 MAST STOWED", MenuTone.Active), checkbox: false)));
+            }
+            if (w.HasHover)
+            {
+                MenuRow hover = MenuRow.Toggle("flight/hover", "auto-hover", w.Hover,
+                    F("ENABLE AUTO-HOVER", "AUTO-HOVER: OFF", "HOLD POSITION AND ALTITUDE", "AUTO-HOVER ON"),
+                    F("DISABLE AUTO-HOVER", "AUTO-HOVER: ON", "RETURN VTOL CONTROL TO THE STICK", "AUTO-HOVER OFF"));
+                // SkylarkFlightMode disables auto-hover in PLANE, where the pilot flies the wing and approach vectoring.
+                if (w.SkylarkActive && w.SkylarkVector == SkylarkPlane && !w.Hover) hover.Blocked = "VS-4 PLANE: SWITCH TO DRONE MODE";
+                c.Rows.Add(b.Reg(hover));
+            }
+            if (w.HasAssist)
+                c.Rows.Add(b.Reg(MenuRow.Toggle("flight/assist", "flight-assist", w.Assist,
+                    F("ENABLE ASSIST", "FLIGHT ASSIST: OFF", "LIMIT PITCH TO PREVENT STALLS", "FLIGHT ASSIST ON"),
+                    F("DISABLE ASSIST", "FLIGHT ASSIST: ON", "REMOVE THE PITCH LIMITER", "FLIGHT ASSIST OFF"))));
             MenuRow engine = MenuRow.Toggle("flight/engine", "engine", w.Ignition,
                 F("START ENGINE", "ENGINE: SHUT DOWN", "RELIGHT THE ENGINE", "ENGINE STARTING", MenuTone.Caution),
                 F("STOP ENGINE", "ENGINE: RUNNING", "CUTS FUEL IN FLIGHT", "ENGINE STOPPED"), checkbox: false);
             if (w.Ignition && w.Airborne) engine.HoldLabel = "HOLD TO STOP";
             c.Rows.Add(b.Reg(engine));
-            if (w.HasNav || w.HasLandingLight)
-            {
-                // one row for the exterior lights, so the list stays short and EJECT stays in sight
-                string[] modes = { "OFF", "ON", "AUTO" };
-                int mode = Math.Clamp(w.LandingLight, 0, 2);
-                var kids = new List<MenuRow>(2);
-                if (w.HasNav)
-                    kids.Add(MenuRow.Toggle("flight/lights/nav", "nav-lights", w.NavOn,
-                        F("TURN NAV LIGHTS ON", "NAV LIGHTS: OFF", "SHOW POSITION LIGHTS TO FRIENDLIES", "NAV LIGHTS ON"),
-                        F("TURN NAV LIGHTS OFF", "NAV LIGHTS: ON", "GO DARK, HARDER TO SPOT AT NIGHT", "NAV LIGHTS OFF")));
-                if (w.HasLandingLight)
-                    kids.Add(MenuRow.Cycle("flight/lights/light", "landing-light", "SET LANDING LIGHT", "LANDING LIGHT: ", modes, mode, "LANDING LIGHT: "));
-                string state = (w.HasNav ? "NAV " + (w.NavOn ? "ON" : "OFF") : "") + (w.HasNav && w.HasLandingLight ? D : "") + (w.HasLandingLight ? "LANDING " + modes[mode] : "");
-                c.Rows.Add(b.Reg(MenuRow.Submenu("flight/lights", "lights", "EXTERIOR LIGHTS", state, "NAV LIGHTS AND THE LANDING LIGHT", "EXTERIOR", "LIGHTS", kids)));
-            }
             if (w.CanEject)
                 c.Rows.Add(b.Reg(MenuRow.Danger("flight/eject", "eject", "warning", "EJECT", "CONFIRM REQUIRED", "EJECT NOW, NO UNDO", "HOLD TO EJECT", "EJECTING")));
 
             if (!w.Airborne) Badge(c, "GROUND", show: true);
+            else if (w.AutolandEngaged) Badge(c, "AUTOLAND", show: true);
             else if (w.HasHover && w.Hover) Badge(c, "HOVER ON", show: true);
             else if (w.HasAssist) Badge(c, w.Assist ? "ASSIST" : "FA OFF", show: !w.Assist, alert: !w.Assist);
             else Badge(c, w.HasHover ? "HOVER OFF" : "");
@@ -434,12 +452,12 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             c.Reason = "NO WING"; c.EmptyTitle = "NO WINGMEN"; c.EmptyBody = "ORDERS APPEAR WHEN AI WINGMEN JOIN YOUR FLIGHT";
             if (w.Wingmen <= 0) return c;
             string to = "TO: WING" + D + MenuText.Plural(w.Wingmen, "SHIP", "SHIPS");
-            c.Rows.Add(b.Reg(MenuRow.Action("wing/formup", "form-up", "FORM UP ON ME", to, "ALL WINGMEN JOIN FORMATION ON YOU", "ORDER: FORM UP")));
             c.Rows.Add(b.Reg(MenuRow.Action("wing/engage", "engage", "ENGAGE TARGETS", w.Targets > 0 ? to + D + w.Targets + " TGT" : to, "WING ATTACKS YOUR SELECTED TARGETS", "ORDER: ENGAGE")));
-            c.Rows.Add(b.Reg(MenuRow.Action("wing/breakoff", "break-off", "BREAK OFF ATTACK", to, "WING DISENGAGES AND REJOINS YOU", "ORDER: BREAK OFF")));
             c.Rows.Add(b.Reg(MenuRow.Action("wing/six", "clear-six", "CLEAR MY SIX", "TO: WINGMAN", "WINGMAN CHASES BOGEYS OFF YOUR TAIL", "ORDER: CLEAR SIX")));
-            c.Rows.Add(b.Reg(MenuRow.Action("wing/dope", "bogey-dope", "ASK FOR BOGEY DOPE", "ANSWERS: WINGMAN", "WINGMAN CALLS BRA OF NEAREST AIR THREAT", "ASKED: BOGEY DOPE")));
+            c.Rows.Add(b.Reg(MenuRow.Action("wing/formup", "form-up", "FORM UP ON ME", to, "ALL WINGMEN JOIN FORMATION ON YOU", "ORDER: FORM UP")));
             c.Rows.Add(b.Reg(MenuRow.Action("wing/escort", "escort", "ESCORT ME", to, "WING GUARDS YOU WHILE YOU STRIKE", "ORDER: ESCORT")));
+            c.Rows.Add(b.Reg(MenuRow.Action("wing/breakoff", "break-off", "BREAK OFF ATTACK", to, "WING DISENGAGES AND REJOINS YOU", "ORDER: BREAK OFF")));
+            c.Rows.Add(b.Reg(MenuRow.Action("wing/dope", "bogey-dope", "ASK FOR BOGEY DOPE", "ANSWERS: WINGMAN", "WINGMAN CALLS BRA OF NEAREST AIR THREAT", "ASKED: BOGEY DOPE")));
             if (w.Shapes.Count > 0) c.Rows.Add(b.Reg(ShapeMenu(w)));
             c.Rows.Add(b.Reg(MenuRow.Action("wing/rtb", "rtb", "ORDER WING RTB", to, "WING RETURNS TO BASE AND LANDS", "ORDER: RTB")));
             Badge(c, w.Shape.Length > 0 ? ShortShape(w.Shape) : "WING " + w.Wingmen);
@@ -516,7 +534,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         private static MenuCategory Comms(MenuWorld w, Builder b)
         {
-            var c = Cat("comms", "COMMS", 162f, "5", "TEAM CALLS");
+            var c = Cat("comms", "COMMS", 198f, "6", "TEAM CALLS");
             c.Iconless = true;
             if (!w.CallsAvailable || w.CallLabels.Count == 0) return c;
             var rows = new List<KeyValuePair<int, MenuRow>>(w.CallLabels.Count);
@@ -541,14 +559,31 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             return c;
         }
 
-        // ------------------------------------------------------------------ COCKPIT (the radio and the cabin)
+        // ------------------------------------------------------------------ COCKPIT (cabin, lights & radio)
 
         private static MenuRow In(string group, MenuRow row) { row.Group = group; return row; }
 
         private static MenuCategory Cockpit(MenuWorld w, Builder b)
         {
-            var c = Cat("cockpit", "COCKPIT", 198f, "6", "RADIO" + D + "CABIN");
+            var c = Cat("cockpit", "COCKPIT", 234f, "7", "CABIN" + D + "RADIO");
             string title = Cut(w.DeckTitle, 22), station = Cut(w.Station, 22);
+            if (w.HasNav || w.HasLandingLight)
+            {
+                string[] modes = { "OFF", "ON", "AUTO" };
+                int mode = Math.Clamp(w.LandingLight, 0, 2);
+                var kids = new List<MenuRow>(2);
+                if (w.HasNav)
+                    kids.Add(MenuRow.Toggle("cockpit/lights/nav", "nav-lights", w.NavOn,
+                        F("TURN NAV LIGHTS ON", "NAV LIGHTS: OFF", "SHOW POSITION LIGHTS TO FRIENDLIES", "NAV LIGHTS ON"),
+                        F("TURN NAV LIGHTS OFF", "NAV LIGHTS: ON", "GO DARK, HARDER TO SPOT AT NIGHT", "NAV LIGHTS OFF")));
+                if (w.HasLandingLight)
+                    kids.Add(MenuRow.Cycle("cockpit/lights/light", "landing-light", "SET LANDING LIGHT", "LANDING LIGHT: ", modes, mode, "LANDING LIGHT: "));
+                string state = (w.HasNav ? "NAV " + (w.NavOn ? "ON" : "OFF") : "") + (w.HasNav && w.HasLandingLight ? D : "") + (w.HasLandingLight ? "LANDING " + modes[mode] : "");
+                c.Rows.Add(b.Reg(In("CABIN", MenuRow.Submenu("cockpit/lights", "lights", "EXTERIOR LIGHTS", state, "NAV LIGHTS AND THE LANDING LIGHT", "EXTERIOR", "LIGHTS", kids))));
+            }
+            if (w.KneeboardAvailable)
+                c.Rows.Add(b.Reg(In("CABIN", MenuRow.Action("cockpit/kneeboard", "kneeboard", "NEXT KNEEBOARD CARD", "CARD: " + Cut(w.KneeboardCard, MaxState - 6),
+                    "FLIP TO THE NEXT CARD ON YOUR KNEE", "KNEEBOARD CARD CHANGED"))));
             if (w.DeckAvailable)
             {
                 c.Rows.Add(b.Reg(In("MUSIC DECK", MenuRow.Toggle("cockpit/music", "music", w.DeckPlaying,
@@ -565,9 +600,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(In("RECEIVER", MenuRow.Action("cockpit/seek", "seek", "SEEK NEXT STATION", w.ReceiverOn && station.Length > 0 ? "TUNED: " + station : "RECEIVER: OFF",
                     "SCAN UP THE DIAL TO THE NEXT STATION", "STATION CHANGED"))));
             }
-            if (w.KneeboardAvailable)
-                c.Rows.Add(b.Reg(In("CABIN", MenuRow.Action("cockpit/kneeboard", "kneeboard", "NEXT KNEEBOARD CARD", "CARD: " + Cut(w.KneeboardCard, MaxState - 6),
-                    "FLIP TO THE NEXT CARD ON YOUR KNEE", "KNEEBOARD CARD CHANGED"))));
             if (w.DeckPlaying) Badge(c, "MUSIC", show: true);
             else if (w.ReceiverAvailable && !w.ReceiverOn) Badge(c, "RX OFF", show: true);
             else Badge(c, w.ReceiverOn ? MenuText.FirstWord(w.Station, MenuModel.BadgeChars) : "CABIN");
@@ -578,22 +610,10 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         private static MenuCategory Support(MenuWorld w, Builder b)
         {
-            var c = Cat("support", "SUPPORT", 234f, "7", "OPS");
-            string markState = w.HasMark ? "MARK: SET" + D + (int)w.MarkAgeSeconds + " S AGO" : "MARK: NONE";
-            if (w.MarkAvailable)
-            {
-                MenuRow mark = MenuRow.Action("support/mark", "camera-mark", "MARK CAMERA POINT", markState, "MARK WHERE THE CAMERA IS LOOKING", "MARK SET");
-                if (!w.CanCapture) mark.Blocked = "NO SURFACE IN VIEW";
-                c.Rows.Add(b.Reg(mark));
-                MenuRow call = MenuRow.Action("support/callmark", "call-at-mark", "CALL AT MARK",
-                    w.Armed.Length > 0 ? "ARMED: " + w.Armed : "NOTHING ARMED", "SEND THE ARMED SUPPORT TO THE MARK", "SUPPORT CALLED AT MARK",
-                    w.Armed.Length > 0 ? MenuTone.Normal : MenuTone.Caution);
-                if (!w.CanCallAtMark) call.Blocked = !w.HasMark ? "MARK: NONE" : w.Armed.Length == 0 ? "NOTHING ARMED" : "NOT AVAILABLE";
-                c.Rows.Add(b.Reg(call));
-                MenuRow clear = MenuRow.Action("support/clearmark", "mark-clear", "CLEAR MARK", markState, "FORGET THE MARKED POINT", "MARK CLEARED");
-                if (!w.HasMark) clear.Blocked = "MARK: NONE";
-                c.Rows.Add(b.Reg(clear));
-            }
+            var c = Cat("support", "SUPPORT", 162f, "5", "OPS");
+            if (w.CanExfil)
+                c.Rows.Add(b.Reg(MenuRow.Action("support/exfil", "exfil", "REQUEST SQUAD EXFIL", "SQUAD: IN ROPE RANGE",
+                    "LIFT THE SQUAD OUT ON THE ROPES", "EXFIL REQUESTED", MenuTone.Caution)));
             int armed = 0, ready = 0;
             if (w.PerksAvailable && w.Perks.Count > 0)
             {
@@ -615,6 +635,21 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(MenuRow.Submenu("support/perks", "perk", "OPS PERKS", ready + " READY" + D + armed + " ARMED",
                     "ARM A PERK, PRESS AGAIN TO FIRE", "OPS PERKS", "PERKS", kids)));
             }
+            string markState = w.HasMark ? "MARK: SET" + D + (int)w.MarkAgeSeconds + " S AGO" : "MARK: NONE";
+            if (w.MarkAvailable)
+            {
+                MenuRow mark = MenuRow.Action("support/mark", "camera-mark", "MARK CAMERA POINT", markState, "MARK WHERE THE CAMERA IS LOOKING", "MARK SET");
+                if (!w.CanCapture) mark.Blocked = "NO SURFACE IN VIEW";
+                c.Rows.Add(b.Reg(mark));
+                MenuRow call = MenuRow.Action("support/callmark", "call-at-mark", "CALL AT MARK",
+                    w.Armed.Length > 0 ? "ARMED: " + w.Armed : "NOTHING ARMED", "SEND THE ARMED SUPPORT TO THE MARK", "SUPPORT CALLED AT MARK",
+                    w.Armed.Length > 0 ? MenuTone.Normal : MenuTone.Caution);
+                if (!w.CanCallAtMark) call.Blocked = !w.HasMark ? "MARK: NONE" : w.Armed.Length == 0 ? "NOTHING ARMED" : "NOT AVAILABLE";
+                c.Rows.Add(b.Reg(call));
+                MenuRow clear = MenuRow.Action("support/clearmark", "mark-clear", "CLEAR MARK", markState, "FORGET THE MARKED POINT", "MARK CLEARED");
+                if (!w.HasMark) clear.Blocked = "MARK: NONE";
+                c.Rows.Add(b.Reg(clear));
+            }
             if (w.SkywellCarried)
                 c.Rows.Add(b.Reg(MenuRow.Toggle("support/skywell", "skywell", w.SkywellDeployed,
                     F("DEPLOY SKYWELL", Cut(w.SkywellStock, MaxState), "OPEN THE REFUEL AND REARM KIT", "SKYWELL DEPLOYED"),
@@ -624,40 +659,47 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 string[] ids = { "both", "fuel", "mun" }, labels = { "BOTH", "FUEL ONLY", "MUNITIONS ONLY" };
                 var kids = new List<MenuRow>();
                 for (int i = 0; i < labels.Length; i++)
-                    kids.Add(MenuRow.Pick("support/pit/" + ids[i], i == 1 ? "engine" : "skywell", labels[i], "ORDER: " + labels[w.PitMode <= 2 ? w.PitMode : 0],
-                        "ACTIVE", w.PitMode == i, "SET THE STANDING SERVICE ORDER", "ORDER: " + labels[i]));
-                kids.Add(MenuRow.Action("support/pit/auto", "station-select", "AUTO ORDER", "EMPTIEST STATION FIRST", "CLEAR THE STATION PRIORITY", "AUTO ORDER"));
+                    kids.Add(In("ORDER", MenuRow.Pick("support/pit/" + ids[i], i == 1 ? "engine" : "skywell", labels[i], "ORDER: " + labels[w.PitMode <= 2 ? w.PitMode : 0],
+                        "ACTIVE", w.PitMode == i, "SET THE STANDING SERVICE ORDER", "ORDER: " + labels[i])));
+                kids.Add(In("PRIORITY", MenuRow.Action("support/pit/auto", "station-select", "AUTO ORDER", "EMPTIEST STATION FIRST", "CLEAR THE STATION PRIORITY", "AUTO ORDER")));
                 for (int i = 0, n = Math.Min(w.PitStations.Count, 8); i < n; i++)
                 {
                     WorldPitStation station = w.PitStations[i];
                     MenuRow row = MenuRow.Pick("support/pit/station/" + station.Index, "station-select", Cut(station.Label, 14), Cut(station.State, MaxState),
                         "FIRST", station.First, "HAND THIS STATION ITS ROUNDS FIRST", "HANDOFF FIRST");
                     row.Index = station.Index;
-                    kids.Add(row);
+                    kids.Add(In("PRIORITY", row));
                 }
                 c.Rows.Add(b.Reg(MenuRow.Submenu("support/pit", "skywell", "PIT STOP", labels[w.PitMode <= 2 ? w.PitMode : 0],
                     "SET THE ORDER AND FIRST STATION", "PIT STOP", "SERVICE", kids)));
             }
-            if (w.CanExfil)
-                c.Rows.Add(b.Reg(MenuRow.Action("support/exfil", "exfil", "REQUEST SQUAD EXFIL", "SQUAD: IN ROPE RANGE", "LIFT THE SQUAD OUT ON THE ROPES", "EXFIL REQUESTED")));
-            if (armed > 0) Badge(c, armed + " ARMED", show: true, alert: true);
+            if (w.CanExfil) Badge(c, "EXFIL", show: true, alert: true);
+            else if (armed > 0) Badge(c, armed + " ARMED", show: true, alert: true);
+            else if (w.SkywellDeployed) Badge(c, "SKYWELL", show: true);
             else Badge(c, "OPS");
             return c;
         }
 
-        // ------------------------------------------------------------------ VIEW
+        // ------------------------------------------------------------------ VIEW (camera & optics)
 
         private static MenuCategory View(MenuWorld w, Builder b)
         {
-            var c = Cat("view", "VIEW", 270f, "8", "CAMERA");
+            var c = Cat("view", "VIEW", 270f, "8", "CAMERA" + D + "OPTICS");
             if (w.MissileViewActive)
             {
-                string cam = "CAMERA: " + (w.MissileCurrent.Length > 0 ? w.MissileCurrent : "MISSILE POV");
-                c.Rows.Add(b.Reg(MenuRow.Action("view/mslexit", "missile-exit", "BACK TO PLANE", cam, "RETURN CAMERA TO YOUR AIRCRAFT", "BACK TO PLANE")));
+                string cam = Cut(w.MissileCurrent.Length > 0 ? w.MissileCurrent : "MISSILE POV", MaxState);
+                c.Rows.Add(b.Reg(MenuRow.Action("view/mslexit", "missile-exit", "BACK TO PLANE", "CAMERA: " + Cut(w.MissileCurrent.Length > 0 ? w.MissileCurrent : "MISSILE POV", MaxState - 8),
+                    "RETURN CAMERA TO YOUR AIRCRAFT", "BACK TO PLANE")));
+                if (w.Missiles > 1)
+                {
+                    c.Rows.Add(b.Reg(MenuRow.Action("view/mslnext", "missile-next", "NEXT MISSILE", cam, "SWITCH CAMERA TO THE NEXT MISSILE", "NEXT MISSILE")));
+                    c.Rows.Add(b.Reg(MenuRow.Action("view/mslprev", "missile-prev", "PREV MISSILE", cam, "SWITCH CAMERA TO THE PREVIOUS MISSILE", "PREVIOUS MISSILE")));
+                }
                 string[] words = w.MissileCurrent.Split(' ');
                 Badge(c, words.Length >= 2 ? words[0] + " " + words[1] : "MISSILE POV", show: true);
                 return c;
             }
+            if (w.MapAvailable) c.Rows.Add(b.Reg(MenuRow.Action("view/map", "map", "OPEN MAP", "MAP: CLOSED", "FULL-SCREEN TACTICAL MAP", "MAP OPEN")));
             if (w.CameraFollowing)
             {
                 MenuRow cam = MenuRow.Toggle("view/cam", "external-view", w.Camera == ViewKind.Orbit,
@@ -666,17 +708,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 cam.IconOn = "cockpit-view";
                 if (w.Camera == ViewKind.Orbit && !w.HasCockpitPoint) cam.Blocked = "NO COCKPIT VIEW";
                 c.Rows.Add(b.Reg(cam));
-                c.Rows.Add(b.Reg(MenuRow.Toggle("view/cinematic", "external-view", w.CinematicCamera,
-                    F("ENABLE CINEMATIC CAM", "CINEMATIC CAM: OFF", "SWITCH VIEW GOES EXTERNAL, THEN CINEMATIC", "CINEMATIC CAM ON"),
-                    F("DISABLE CINEMATIC CAM", "CINEMATIC CAM: ON", "SWITCH VIEW SKIPS THE CINEMATIC CAMERA", "CINEMATIC CAM OFF"))));
-            }
-            if (w.MapAvailable) c.Rows.Add(b.Reg(MenuRow.Action("view/map", "map", "OPEN MAP", "MAP: CLOSED", "FULL-SCREEN TACTICAL MAP", "MAP OPEN")));
-            if (w.MissileViewAvailable)
-            {
-                // no missile in flight is transient: the row keeps its place and number, dimmed
-                MenuRow view = MenuRow.Action("view/mslview", "missile-view", "MISSILE POV", Cut(w.MissileStatus, MaxState), "RIDE THE MISSILE NOSE CAMERA", "MISSILE POV");
-                if (!w.CanEnterMissileView) view.Blocked = "NO MISSILE IN FLIGHT";
-                c.Rows.Add(b.Reg(view));
             }
             if (w.HasNvg)
                 c.Rows.Add(b.Reg(MenuRow.Toggle("view/nvg", "night-vision", w.NvgOn,
@@ -685,15 +716,17 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (w.HasNvg && w.NvgOn && w.HasNvgGain)
                 c.Rows.Add(b.Reg(MenuRow.Cycle("view/nvg-gain", "night-vision", "SET NVG GAIN", "NVG GAIN: ",
                     new[] { "AUTO", "LOW", "MED", "HIGH" }, Math.Clamp(w.NvgGain, 0, 3), "NVG GAIN: ")));
-            // AR overlays drawn on the world, not the board: never blocked by TAC BOARD OFF
-            if (w.TerrainAvailable)
-                c.Rows.Add(b.Reg(MenuRow.Cycle("view/grid", "shape", "SET TERRAIN GRID", "TERRAIN GRID: ", Ghosts, Clamp(w.TerrainGhost, Ghosts), "TERRAIN GRID: ")));
-            if (w.BoardAvailable)
+            if (w.MissileViewAvailable)
             {
-                List<MenuRow> ar = Switches("view/ar/", "ar/", ArParts, w.ArSwitches, out int arOn);
-                c.Rows.Add(b.Reg(MenuRow.Submenu("view/ar", "warning", "AR OVERLAYS",
-                    arOn + " OF " + ArParts.Length + " ON", "WORLD-LOCKED SYMBOLS, ALERTS AND HUD REACTIONS", "AR", "OVERLAYS", ar, iconless: true)));
+                // no missile in flight is transient: the row keeps its place and number, dimmed
+                MenuRow view = MenuRow.Action("view/mslview", "missile-view", "MISSILE POV", Cut(w.MissileStatus, MaxState), "RIDE THE MISSILE NOSE CAMERA", "MISSILE POV");
+                if (!w.CanEnterMissileView) view.Blocked = "NO MISSILE IN FLIGHT";
+                c.Rows.Add(b.Reg(view));
             }
+            if (w.CameraFollowing)
+                c.Rows.Add(b.Reg(MenuRow.Toggle("view/cinematic", "external-view", w.CinematicCamera,
+                    F("ENABLE CINEMATIC CAM", "CINEMATIC CAM: OFF", "SWITCH VIEW GOES EXTERNAL, THEN CINEMATIC", "CINEMATIC CAM ON"),
+                    F("DISABLE CINEMATIC CAM", "CINEMATIC CAM: ON", "SWITCH VIEW SKIPS THE CINEMATIC CAMERA", "CINEMATIC CAM OFF"))));
             if (w.Camera == ViewKind.Orbit) Badge(c, "EXTERNAL", show: true);
             else if (w.Missiles > 0) Badge(c, w.Missiles + " MSL", show: true);
             else if (w.HasNvg && w.NvgOn) Badge(c, "NVG ON", show: true);
@@ -705,7 +738,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         private static MenuCategory Defence(MenuWorld w, Builder b)
         {
-            var c = Cat("defence", "DEFENCE", 306f, "9", "COUNTERMEASURES");
+            var c = Cat("defence", "DEFENCE", 90f, "3", "COUNTERMEASURES");
             if (w.HasCountermeasures && w.HasFlares && w.Airborne)
             {
                 string state = w.FlaresMax > 0 ? "FLARES: " + w.Flares + " / " + w.FlaresMax : "FLARES: " + w.Flares;
@@ -738,6 +771,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(dark));
             }
             if (w.HasFlares && w.Airborne && w.Flares <= 0) Badge(c, "FLR 0", show: true, alert: true);
+            else if (w.HasChaff && w.Airborne && w.Chaff <= 0) Badge(c, "CHF 0", show: true, alert: true);
             else if (w.CountermeasureIndex > 0 && w.Countermeasure.Length > 0) Badge(c, w.Countermeasure.Substring(w.Countermeasure.LastIndexOf(' ') + 1), show: true); // JAMMER
             else if (w.HasRadar && !w.RadarOn) Badge(c, "SILENT", show: true);
             else if (w.HasFlares && w.FlaresMax > 0) Badge(c, "FLR " + w.Flares);
@@ -749,7 +783,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         private static MenuCategory Targets(MenuWorld w, Builder b)
         {
-            var c = Cat("targets", "TARGETS", 342f, "0", "SELECTED TARGETS");
+            var c = Cat("targets", "TARGETS", 54f, "2", "SELECTED TARGETS");
             if (!w.HudReady) return c;
             string selected = "SELECTED: " + w.Targets;
             MenuRow threat = MenuRow.Action("targets/threat", "threat-lock", "LOCK NEAREST THREAT",
@@ -765,12 +799,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 w.Targets > 0 && w.NearestKm >= 0f ? selected + D + "NEAREST " + MenuText.Distance(w.NearestKm) : selected, "DROP ALL BUT THE NEAREST TARGET", "KEPT NEAREST TARGET");
             if (w.Targets < 2) keep.Blocked = w.Targets == 0 ? "NO TARGETS" : "ONLY ONE TARGET";
             c.Rows.Add(b.Reg(keep));
-            MenuRow drop = MenuRow.Action("targets/droplast", "target-drop", "DROP LAST TARGET", selected, "REMOVE THE NEWEST SELECTION", "LAST TARGET DROPPED");
-            if (w.Targets == 0) drop.Blocked = "NO TARGETS";
-            c.Rows.Add(b.Reg(drop));
-            MenuRow clear = MenuRow.Action("targets/clear", "target-clear", "CLEAR ALL TARGETS", selected, "DESELECT EVERY TARGET", "TARGETS CLEARED");
-            if (w.Targets == 0) clear.Blocked = "NO TARGETS";
-            c.Rows.Add(b.Reg(clear));
             if (w.Filters.Count > 0)
             {
                 string active = "NONE";
@@ -790,7 +818,14 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(MenuRow.Submenu("targets/filters", "target-filter", "TARGET FILTERS", "ACTIVE: " + active, "APPLY A SAVED TARGET FILTER",
                     "TGT QUICK SLOTS", "FILTERS", kids, iconless: true)));
             }
-            Badge(c, w.Targets > 0 ? w.Targets + " SEL" : "NO SEL");
+            MenuRow drop = MenuRow.Action("targets/droplast", "target-drop", "DROP LAST TARGET", selected, "REMOVE THE NEWEST SELECTION", "LAST TARGET DROPPED");
+            if (w.Targets == 0) drop.Blocked = "NO TARGETS";
+            c.Rows.Add(b.Reg(drop));
+            MenuRow clear = MenuRow.Action("targets/clear", "target-clear", "CLEAR ALL TARGETS", selected, "DESELECT EVERY TARGET", "TARGETS CLEARED");
+            if (w.Targets == 0) clear.Blocked = "NO TARGETS";
+            c.Rows.Add(b.Reg(clear));
+            if (w.Inbound > 0) Badge(c, w.Inbound + " INB", show: true, alert: true);
+            else Badge(c, w.Targets > 0 ? w.Targets + " SEL" : "NO SEL");
             return c;
         }
     }

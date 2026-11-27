@@ -47,6 +47,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static int boxReleaseFrame = -1;
         private static bool rightPress;
         private static Vector2 rightStart;
+        private static float flatClickTime = -1f;
+        private static Vector2 flatClickScreen;
         private const string PauseOwner = "command.map";
         private static bool pauseHeld;
         private static string feedback;
@@ -152,6 +154,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             DrawBanner(map);
             MapSelectionDeck.Tick(map);
             MfdFieldLog.Tick(map);
+            ReliefMapHud.Tick(map);
+            MapCursorCue.Tick(map);
             if (!MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out GlobalPosition pointer)) cursor = pointer;
             TickMarkTool(map);
             // An armed tool owns the right button: the card goes and no right press is latched for it.
@@ -197,6 +201,26 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     !MapTool.Typing() && map.TryGetCursorCoordinates(out _);
                 boxDragged = false;
                 if (boxPress) boxStart = Input.mousePosition;
+                else if (!MfdTerrainRelief.IsDrawing && !BoxBlocked() && !MapUiPointer.OverControls() &&
+                    !MapTool.Typing() && Configuration.CommandSettingsScope.Current?.MapDoubleClickZoom?.Value != false &&
+                    map.TryGetCursorCoordinates(out GlobalPosition dblGround))
+                {
+                    Vector2 clickPos = Input.mousePosition;
+                    bool overIcon = ContactAt(map, clickPos) != null || AirbaseAt(map, clickPos) != null;
+                    if (!overIcon && Time.unscaledTime - flatClickTime < .3f &&
+                        MapTool.IsClick(flatClickScreen, clickPos))
+                    {
+                        flatClickTime = -1f;
+                        MapFocus.To(dblGround.x, dblGround.z, true);
+                        Echo("AREA FRAMED");
+                    }
+                    else if (!overIcon)
+                    {
+                        flatClickTime = Time.unscaledTime;
+                        flatClickScreen = clickPos;
+                    }
+                    else flatClickTime = -1f;
+                }
             }
             if (!boxPress) return;
             if (MapUiPointer.OverControls() || !map.TryGetCursorCoordinates(out _))
@@ -225,7 +249,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             candidates.Clear();
             if (map.mapIcons == null) return;
             GameManager.GetLocalAircraft(out Aircraft localAircraft);
-            MapBoxSide side = Plugin.Settings?.Command?.MapBoxSide?.Value ?? MapBoxSide.All;
+            MapBoxSide side = Configuration.CommandSettingsScope.Current?.MapBoxSide?.Value ?? MapBoxSide.All;
             int limit = Mathf.Min(map.mapIcons.Count, MaximumScannedIcons);
             for (int i = 0; i < limit; i++)
             {
@@ -258,8 +282,42 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>The selection box being dragged now, if any (the cursor follows it).</summary>
         internal static MapBoxMode BoxDragging => boxPress && boxDragged ? boxMode : MapBoxMode.None;
 
+        /// <summary>Current screen-space selection box rect while dragging.</summary>
+        internal static Rect CurrentBoxScreenRect
+        {
+            get
+            {
+                if (!boxPress || !boxDragged) return default;
+                Vector2 cur = Input.mousePosition;
+                return new Rect(Mathf.Min(boxStart.x, cur.x), Mathf.Min(boxStart.y, cur.y),
+                    Mathf.Abs(cur.x - boxStart.x), Mathf.Abs(cur.y - boxStart.y));
+            }
+        }
+
+        /// <summary>How many contacts a selection box over <paramref name="region"/> would add or drop (allocation-free).</summary>
+        internal static int PreviewBoxCount(DynamicMap map, Rect region, MapBoxMode mode)
+        {
+            if (map == null || map.mapIcons == null || mode == MapBoxMode.None) return 0;
+            GameManager.GetLocalAircraft(out Aircraft localAircraft);
+            MapBoxSide side = Configuration.CommandSettingsScope.Current?.MapBoxSide?.Value ?? MapBoxSide.All;
+            int limit = Mathf.Min(map.mapIcons.Count, MaximumScannedIcons), count = 0;
+            for (int i = 0; i < limit && count < MaximumSelected; i++)
+            {
+                if (!Pickable(map.mapIcons[i], localAircraft, out UnitMapIcon icon)) continue;
+                if (!MapClickRules.BoxTakes(side, icon.unit.NetworkHQ != null, icon.unit.NetworkHQ == map.HQ)) continue;
+                Vector2 screen = IconScreen(icon);
+                if (!region.Contains(screen) || !MapUiPointer.Contains(map.mapBackground.rectTransform, screen)) continue;
+                bool held = IsSelected(map, icon.unit);
+                if (mode == MapBoxMode.Drop ? held : !held) count++;
+            }
+            return count;
+        }
+
         /// <summary>The pickable contact under this screen point, as a click would take it.</summary>
         internal static UnitMapIcon HoverContact(DynamicMap map, Vector2 screen) => ContactAt(map, screen);
+
+        /// <summary>The airbase icon under this screen point, as a click would take it.</summary>
+        internal static AirbaseMapIcon HoverAirbase(DynamicMap map, Vector2 screen) => AirbaseAt(map, screen);
 
         private static void ShowMenu(DynamicMap map, GlobalPosition ground, Vector2 click)
         {
@@ -514,12 +572,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             RectTransform viewport = map.mapBackground.rectTransform;
             RectTransform sheet = mark.HasValue ? MfdTerrainRelief.MapImageRect(map.mapImage) : null;
+            Vector2 point = default;
             Vector3 local = default;
-            // ponytail: the mark is drawn on the relief only; the flat sheet still gets every FROM MARK
-            // readout. Project through the native sheet too if flat-map users ask for the glyph.
-            bool shown = sheet != null &&
-                MfdTerrainRelief.TryProject(mark.Value.x, mark.Value.z, sheet.rect, out Vector2 point) &&
-                viewport.rect.Contains(local = viewport.InverseTransformPoint(sheet.TransformPoint(point)));
+            bool projected = sheet != null && (MfdTerrainRelief.IsDrawing
+                ? MfdTerrainRelief.TryProject(mark.Value.x, mark.Value.z, sheet.rect, out point)
+                : map.mapDisplayFactor > 0f && FlatPoint(mark.Value, map.mapDisplayFactor, out point));
+            bool shown = projected && viewport.rect.Contains(local = viewport.InverseTransformPoint(sheet.TransformPoint(point)));
             if (!shown)
             {
                 if (markGlyph != null) markGlyph.gameObject.SetActive(false);
@@ -537,6 +595,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             markGlyph.gameObject.SetActive(true);
             markGlyph.localPosition = new Vector3(local.x, local.y, 0f);
+        }
+
+        private static bool FlatPoint(GlobalPosition world, float factor, out Vector2 point)
+        {
+            point = new Vector2(world.x, world.z) * factor;
+            return float.IsFinite(point.x) && float.IsFinite(point.y);
         }
 
         // ---- armed tools: the one banner and the pause key ----
@@ -956,6 +1020,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bannerPrompt = null;
             MapSelectionDeck.Reset();
             MfdFieldLog.Reset();
+            ReliefMapHud.Reset();
+            MapCursorCue.Reset();
             mark = null;
             cursor = null;
         }
@@ -969,6 +1035,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ReleasePause();
             MapSelectionDeck.Hide();
             MfdFieldLog.Hide();
+            ReliefMapHud.Hide();
+            MapCursorCue.Hide();
             DroneMapTracks.Hide();
             if (banner != null) banner.gameObject.SetActive(false);
             if (markGlyph != null) Object.Destroy(markGlyph.gameObject);
@@ -976,6 +1044,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             rows.Clear();
             wingRows.Clear();
             rightPress = false;
+            flatClickTime = -1f;
             boxReleaseFrame = -1;
             candidates.Clear();
             actions.Clear();

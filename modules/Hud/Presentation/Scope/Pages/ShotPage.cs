@@ -35,6 +35,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly float[] segs = new float[4 * 2], trailXY = new float[2 * (MissilePath.RecentSamples + 2)], ringKm = new float[8];
         private readonly int[] seenId = new int[Cap], pitSaid = new int[Cap];
         private readonly ShotState[] resultState = new ShotState[ShotLedger.Capacity];
+        private readonly bool[] resultMerged = new bool[ShotLedger.Capacity];
         private string headlineText = "";
         private int headlineKey = -1, hitsKey = int.MinValue, targetKey = int.MinValue, leadTarget = -1;
         private bool leadOff;
@@ -191,7 +192,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < d.MissileCount; i++) if (!d.Missiles[i].Ghost) TtiRing(g, i, k);
             if (lead >= 0) Tags(g, lead, k, p.H - 4f);      // the lead's tags first: it always gets a free spot, the rest drop out when none is left
             for (int i = 0; i < d.MissileCount; i++) if (i != lead) Tags(g, i, k, p.H - 4f);
-            for (int i = 0; i < d.ResultCount; i++) Result(g, d.Results[i], k, p.H);
+            int rCount = Math.Min(d.ResultCount, resultMerged.Length);
+            Array.Clear(resultMerged, 0, rCount);
+            int stampIndex = 0;
+            for (int i = 0; i < rCount; i++)
+            {
+                if (resultMerged[i]) continue;
+                ShotResult r = d.Results[i];
+                if (r.AgeS > ShotMath.ResultS) continue;
+                Plan(r.Pos, k, out float rx, out float ry);
+                int group = 1;
+                for (int j = i + 1; j < rCount; j++)
+                {
+                    if (resultMerged[j] || d.Results[j].State != r.State || d.Results[j].AgeS > ShotMath.ResultS) continue;
+                    Plan(d.Results[j].Pos, k, out float qx, out float qy);
+                    float dx = qx - rx, dy = qy - ry;
+                    if (dx * dx + dy * dy <= 20f * 20f)
+                    {
+                        resultMerged[j] = true;
+                        group++;
+                    }
+                }
+                Result(g, r, k, p.H, group, stampIndex++);
+            }
         }
 
         /// <summary>A global place on the plan: pixels from the aircraft's pose.</summary>
@@ -232,7 +255,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             ShotTarget t = d.Targets[i];
             Plan(t.Pos, k, out float x, out float y);
-            if (x < -10f || x > 450f || y < 28f) { if (i == leadTarget) leadOff = true; return; }          // off the plan: the gauge's needle says where
+            if (x < -10f || x > 450f || y < 28f || y > OY + 16f) { if (i == leadTarget) leadOff = true; return; }          // off the plan: the gauge's needle says where
             ScopeTone tone = t.Hot ? Hi : Ink;
             if (t.Air) g.Diamond(x, y, 5f, tone, false);
             else g.Box(Mathf.Round(x - 4f), Mathf.Round(y - 4f), 9f, 9f, tone);
@@ -403,7 +426,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private static string PhaseLabel(in ShotMissile m) => ShotMath.PhaseWord(m.Phase);
 
-        private void Result(ScopeCanvas g, in ShotResult r, float k, float h)
+        private void Result(ScopeCanvas g, in ShotResult r, float k, float h, int count, int stampIndex)
         {
             if (r.AgeS > ShotMath.ResultS) return;
             Plan(r.Pos, k, out float x, out float y);
@@ -430,9 +453,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             else if (r.State == ShotState.Miss) g.Cross(x, y, 7f, Dim, fade, 1f);
             // the stamp is a placed label: on the short FIRES plan the clamped stamp landed on the own-ship glyph and the ring numerals
-            string word = r.State == ShotState.Defeated ? "DEFEATED" : r.State == ShotState.Miss ? "MISS" : "HIT";
+            string baseWord = r.State == ShotState.Defeated ? "DEFEATED" : r.State == ShotState.Miss ? "MISS" : "HIT";
+            ReadOnlySpan<char> word = count > 1 ? ScopeStr.Cat(baseWord, " x", count, null) : baseWord;
             float sw = Mathf.Round(ScopeCanvas.TextW(word, 14f) + 14f), sh = 22f;      // the Stamp's own bracket box
+            int at = keep.Count;
             keep.Place(LabelSpots.Shot, x, y, sw, sh, default, 2f, xMax, 32f, h - 2f, out float lx, out float ly);
+            if (stampIndex > 0 && !Free(at)) return;
             g.Stamp(word, lx + sw / 2f, ly + sh / 2f, tone, 14f, r.State == ShotState.Defeated ? -4f : 0f, fade);
         }
 
@@ -455,9 +481,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Glyph(g, x + 4.5f, cy, c.State, fly, isLead ? Hi : Ink);
                 // the chain reads by shape: a name only where the weapon changes, in flight the seconds to go instead of it
                 float tti = fly ? TtiOf(c.Id) : float.NaN;
-                if (!float.IsNaN(tti)) g.Text(ScopeStr.Cat("", (int)Math.Ceiling(tti), "S"), x + 13f, cy + 1f, isLead ? Hi : Ink, 12f, ScopeAlign.Left);
-                else if (i == 0 || fly || c.Name != d.Cells[first + i - 1].Name)
-                    g.Text(name.Slice(0, ShotMath.ChipName(c.Name, name)), x + 13f, cy + 1f, fly ? (isLead ? Hi : Ink) : c.State == ShotState.Defeated ? Amber : c.State == ShotState.Miss ? Dim : Ink, 12f, ScopeAlign.Left);
+                if (!float.IsNaN(tti)) g.FitText(ScopeStr.Cat("", (int)Math.Ceiling(tti), "S"), x + 13f, cy + 1f, 48f, isLead ? Hi : Ink, 12f, 12f, ScopeAlign.Left);
+                else if (i == 0 || c.Name != d.Cells[first + i - 1].Name)
+                    g.FitText(name.Slice(0, ShotMath.ChipName(c.Name, name)), x + 13f, cy + 1f, 48f, fly ? (isLead ? Hi : Ink) : c.State == ShotState.Defeated ? Amber : c.State == ShotState.Miss ? Dim : Ink, 12f, 12f, ScopeAlign.Left);
                 if (fly) g.Bar(x + 1f, 18f, 51f, 3f, c.Frac, isLead ? Hi : Ink);      // the track: the shot's journey, filled as it closes
             }
         }

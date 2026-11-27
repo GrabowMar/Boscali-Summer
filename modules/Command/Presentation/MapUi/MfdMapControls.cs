@@ -163,8 +163,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             status.color = MapPicker.IsBusy ? AvInk.State(AvState.Caution) : AvInk.Dim;
             string viewStatus = !Folded ? MapSelectionDeck.StatusLine : null;
             if (!Folded)
+            {
+                string ambient = MfdTerrainRelief.IsDrawing
+                    ? "LMB: SELECT/PAN · WHEEL: ZOOM · RMB-DRAG / ALT-DRAG: ORBIT · RMB: MENU"
+                    : "LMB: SELECT/PAN · WHEEL: ZOOM · DBL-CLICK: ZOOM · RMB: MENU";
                 Footer.Set(!string.IsNullOrEmpty(prompt) ? prompt : !string.IsNullOrEmpty(viewStatus) ? viewStatus : MfdMapInteractions.Feedback ??
-                    "LEFT: SELECT / PAN   ·   WHEEL: ZOOM   ·   RIGHT: TOOL / ORDERS", MapPicker.IsBusy ? AvState.Caution : AvState.Inert);
+                    ambient, MapPicker.IsBusy ? AvState.Caution : AvState.Inert);
+            }
         }
 
         internal static void RequestRefresh() { nextRead = 0f; layoutPending = true; }

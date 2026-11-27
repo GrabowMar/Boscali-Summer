@@ -5,7 +5,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>The cloud renderer's weather maps for one tape and frame: a near map over the
     /// flight domain and a coarse far map (the level of detail out to the horizon), RGBA32
-    /// bytes ready to upload. Pure: built on a worker, or once on the main thread to preload.
+    /// bytes ready to upload. Pure so it can be built on a worker.
     /// Structure: sheet cover, top low byte, cell shape, low/tower top (high byte). Profiles: (unused),
     /// base low byte, cloud base (high byte), rain.</summary>
     internal sealed class CloudMaps

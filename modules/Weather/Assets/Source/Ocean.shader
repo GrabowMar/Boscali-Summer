@@ -269,10 +269,10 @@ Shader "Boscali/Ocean"
             }
 
             float3 ScatterColour(float shallow, float lightVis, float pixCover, float pixTurbidity, float rise, float compression,
-                float3 macro, float3 shallowCol, float3 n, float3 v, float3 l, float3 sun, float3 skyIrradiance,
-                float3 causticSource, float footprint)
+                float crestRelief, float sssFade, float3 macro, float3 shallowCol, float3 n, float3 v, float3 l, float3 sun,
+                float3 skyIrradiance, float3 causticSource, float footprint)
             {
-                float3 grazingCol = _OceanDeepGrazing.a > 0.5 ? _OceanDeepGrazing.rgb : _OceanDeep.rgb * float3(1.4, 1.75, 1.35);
+                float3 grazingCol = _OceanDeepGrazing.a > 0.5 ? _OceanDeepGrazing.rgb : _OceanDeep.rgb * float3(1.15, 1.28, 1.18);
                 float3 shadowCol = _OceanShadowTint.a > 0.5 ? _OceanShadowTint.rgb : _OceanDeep.rgb * 0.45;
                 float vUp = abs(v.y);
 
@@ -286,7 +286,7 @@ Shader "Boscali/Ocean"
                 float3 seabed = lerp(shallowCol, macro, 0.65);
                 baseCol = lerp(baseCol, seabed, saturate(transmittance * smoothstep(0.08, 0.85, shallow)));
 
-                float3 body = baseCol * (skyIrradiance + sun * saturate(l.y) * 0.48) * lerp(0.84, 1.18, rise);
+                float3 body = baseCol * (skyIrradiance + sun * saturate(l.y) * 0.48) * lerp(1.0, lerp(0.88, 1.14, rise), crestRelief);
 
                 // Subtle shallow-water caustics derived from existing ripple maps (zero extra taps).
                 float causticFade = smoothstep(0.35, 0.85, shallow) * (1.0 - smoothstep(0.5, 3.0, footprint)) * saturate(l.y * 2.5);
@@ -296,13 +296,13 @@ Shader "Boscali/Ocean"
                     body += shallowCol * sun * (caustic * transmittance.g * causticFade * 0.45);
                 }
 
-                // Crest subsurface scattering: thin pinched crests backlit toward the sun and steep wave faces.
-                float crestThin = saturate(rise * rise * (0.65 + 0.85 * compression));
+                // Crest subsurface scattering: thin pinched crests backlit toward the sun and steep wave faces (gated by physical steepness & distance).
+                float crestThin = saturate(rise * rise * (0.55 + 0.85 * compression)) * sssFade;
                 float towardsSun = pow(saturate(dot(l, -v)), 3.5);
                 float waveFace = pow(saturate(dot(v, -normalize(l + n * 0.45))), 3.0);
                 float sss = (0.18 + 0.82 * max(towardsSun, waveFace)) * (1.0 - vUp * vUp) * crestThin;
                 body += _OceanScatter.rgb * sun * sss * _OceanScatter.a;
-                body += _OceanScatter.rgb * skyIrradiance * crestThin * (1.0 - vUp) * 0.22 * (1.0 - pixTurbidity * 0.65) * _OceanScatter.a;
+                body += _OceanScatter.rgb * skyIrradiance * crestThin * (1.0 - vUp) * 0.12 * (1.0 - pixTurbidity * 0.65) * _OceanScatter.a;
                 return body;
             }
 
@@ -350,33 +350,50 @@ Shader "Boscali/Ocean"
                 float2 slope = float2(jzz * sx - jxz * sz, jxx * sz - jxz * sx) / max(determinant, 0.05);
                 float rise = saturate(height / max(crest, 0.05) * 0.5 + 0.5);
 
-                // Gust patches drift downwind: rougher, foamier water in some places, glassier lanes between; storm cells boost chop.
-                float gust = lerp(1.0 - _OceanWind.w, 1.0 + _OceanWind.w, tex2D(_GustTex, rel * _GustUV.z + _GustUV.xy).r);
+                float physicalAmp = smoothstep(0.35, 1.8, crest);
+                float crestRelief = physicalAmp * (1.0 - smoothstep(2.0, 14.0, footprint));
+                float slopeSteep = smoothstep(0.04, 0.22, length(slope));
+                float sssFade = smoothstep(0.15, 1.2, max(height, 0.0)) * slopeSteep * (1.0 - smoothstep(1.0, 6.5, footprint));
+
+                // Smoothly damp calm low-amplitude discrete swell normals from altitude into roughness variance so 4 sine waves never stripe.
+                float calmAerial = smoothstep(2.0, 12.0, footprint) * (1.0 - smoothstep(0.6, 2.2, crest));
+                float swellKeep = lerp(1.0, 0.22, calmAerial);
+                variance += 0.5 * dot(slope, slope) * (1.0 - swellKeep * swellKeep);
+                slope *= swellKeep;
+
+                // Dual-scale rotated gust patches drift downwind: rougher, foamier water in some places, glassier wind slicks between.
+                float gustA = tex2D(_GustTex, rel * _GustUV.z + _GustUV.xy).r;
+                float2 relRot = float2(rel.x * 0.53 - rel.y * 0.85, rel.x * 0.85 + rel.y * 0.53);
+                float gustB = tex2D(_GustTex, relRot * (_GustUV.z * 0.37) + _GustUV.xy * 0.41).r;
+                float macroSlick = saturate(gustA * 0.62 + gustB * 0.38);
+                float gust = lerp(1.0 - _OceanWind.w, 1.0 + _OceanWind.w, macroSlick);
                 gust *= 1.0 + _OceanWeather2.z * 0.3 + pixCell * 0.45;
 
                 float fadeA = saturate(1.0 / (_RippleA.z * 10.0 * footprint));
                 float fadeB = saturate(1.0 / (_RippleB.z * 10.0 * footprint));
-                float fadeC = saturate(1.0 / (_RippleC.z * 10.0 * footprint));
+                float fadeC = saturate(1.0 / (_RippleC.z * 26.0 * footprint));
                 float2 wind = _OceanWind.xy, crosswind = float2(-wind.y, wind.x);
                 float2 windB = float2(wind.x * 0.764842 + wind.y * 0.644218, wind.y * 0.764842 - wind.x * 0.644218);
                 float2 crossB = float2(-windB.y, windB.x);
                 float2 windC = float2(wind.x * 0.877583 - wind.y * 0.479426, wind.y * 0.877583 + wind.x * 0.479426);
                 float2 crossC = float2(-windC.y, windC.x);
+                float slickWarp = (macroSlick - 0.5) * 0.16;
                 float2 uvA = float2(dot(rel, wind), dot(rel, crosswind)) * _RippleA.z + _RippleA.xy;
-                float2 uvB = float2(dot(rel, windB), dot(rel, crossB)) * _RippleB.z + _RippleB.xy;
-                float2 uvC = float2(dot(rel, windC), dot(rel, crossC)) * _RippleC.z + _RippleC.xy;
+                float2 uvB = float2(dot(rel, windB), dot(rel, crossB)) * _RippleB.z + _RippleB.xy + slickWarp;
+                float2 uvC = float2(dot(rel, windC), dot(rel, crossC)) * _RippleC.z + _RippleC.xy - slickWarp * 0.7;
                 float3 na = UnpackNormal(tex2D(_RippleNormal, uvA));
                 float3 nb = UnpackNormal(tex2D(_RippleNormal, uvB));
                 float3 nc = UnpackNormal(tex2D(_RippleNormal, uvC));
 
-                // Crest-wind coupling: exposed crests catch stronger capillary ripples than sheltered troughs.
-                float crestWind = lerp(0.76, 1.28, rise);
+                // Crest-wind coupling: exposed crests catch stronger capillary ripples than sheltered troughs (gated by physical wave relief).
+                float crestWind = lerp(1.0, lerp(0.78, 1.24, rise), crestRelief);
                 float rainDamp = 1.0 - 0.25 * pixRain;
                 float ripple = _OceanWind.z * gust * crestWind * rainDamp * lerp(0.35, 1.0, calm);
                 float2 fineRippleSlope = ((na.x * wind + na.y * crosswind) * fadeA * _RippleA.w
                     + (nb.x * windB + nb.y * crossB) * fadeB * _RippleB.w) * ripple;
                 slope -= fineRippleSlope + (nc.x * windC + nc.y * crossC) * fadeC * _RippleC.w * ripple;
                 variance += ripple * ripple * 0.03 * (3.0 - fadeA - fadeB - fadeC) + pixRain * 0.008 + pixCell * 0.006;
+                variance += max(macroSlick - 0.32, 0.0) * 0.0045 * smoothstep(1.0, 8.0, footprint);
 
                 // Procedural raindrop impact rings (liquid rain only; masked under heavy chop and distance).
                 float rainVar = 0.0;
@@ -443,7 +460,7 @@ Shader "Boscali/Ocean"
 
                 // Energy-conserving roughness-aware Schlick Fresnel.
                 float f0 = 0.02;
-                float fresnel = f0 + (max(1.0 - rough * 0.55, f0) - f0) * pow(1.0 - nv, 5.0);
+                float fresnel = f0 + (max(1.0 - rough * 0.65, f0) - f0) * pow(1.0 - nv, 5.0);
 
                 // Dual-lobe GGX specular: broad glitter highway + crisp near capillary sun sparkles.
                 float3 spec = GGXTerm(n, v, l, nv, nl, rough, sun);
@@ -462,8 +479,8 @@ Shader "Boscali/Ocean"
                 float3 macro = tex2D(_macro_basecolor, i.map.xy).rgb;
                 float3 shallowCol = hasWeather ? _OceanShallow.rgb : float3(0.04, 0.34, 0.36);
                 float3 skyDiffuse = max(_OceanAmbient.rgb, texCUBElod(_OceanSky, float4(0, 1, 0, _OceanSea2.z)).rgb * _OceanSea2.w);
-                float3 body = ScatterColour(shallow, lightVis, pixCover, pixTurbidity, rise, compression,
-                    macro, shallowCol, n, v, l, sun, lerp(_OceanAmbient.rgb, skyDiffuse, 0.35), float3(na.x, nb.y, 0.0), footprint);
+                float3 body = ScatterColour(shallow, lightVis, pixCover, pixTurbidity, rise, compression, crestRelief, sssFade,
+                    macro, shallowCol, n, v, l, sun, max(_OceanAmbient.rgb, skyDiffuse * (0.14 + 0.18 * overcastShade)), float3(na.x, nb.y, 0.0), footprint);
                 body += lightningDiff * max(_OceanDeep.rgb, float3(0.02, 0.05, 0.08)) * 2.5;
 
                 // Foam masks: whitecaps under wave compression + gust + storm cell, gale streaks, dual-wave shore surf, wakes.

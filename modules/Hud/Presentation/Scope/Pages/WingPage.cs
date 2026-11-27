@@ -73,7 +73,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             now = env.Now;
             units = env.Units;
             bool have = ScopeFeeds.TryRead(out d) && d.Count > 0;
-            if (!have) { live = false; primed = false; defenders = 0; return false; }
+            if (!have) { live = false; primed = false; defenders = 0; Array.Clear(damagedUntil, 0, Cap); Array.Clear(wasDamaged, 0, Cap); return false; }
             Edges(env);
             primed = true;
             defenders = 0;
@@ -287,8 +287,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Line(Px + ox, Py + oy, Px + ix, Py + iy, Dim);
             }
             bool imperial = units == AvUnits.Imperial;
-            g.Text(ScopeStr.Cat("", Scale(WingBoardMath.RimM / 2f), null), Px + 4f, Py + R / 2f + 8f, Dim, 12f, ScopeAlign.Left);
-            g.Text(ScopeStr.Cat("", Scale(WingBoardMath.RimM), imperial ? " FT" : " M"), Px + 4f, Py + R - 8f, Dim, 12f, ScopeAlign.Left);
+            ReadOnlySpan<char> halfScale = ScopeStr.Cat("", Scale(WingBoardMath.RimM / 2f), null);
+            float halfY = Py - R / 2f + 8f;
+            g.Text(halfScale, Px + 4f, halfY, Dim, 12f, ScopeAlign.Left);
+            placer.Reserve(Px + 4f, Px + 4f + ScopeCanvas.TextW(halfScale, 12f), halfY);
+            ReadOnlySpan<char> rimScale = ScopeStr.Cat("", Scale(WingBoardMath.RimM), imperial ? " FT" : " M");
+            float rimY = Py - R + 10f;
+            g.Text(rimScale, Px + 4f, rimY, Dim, 12f, ScopeAlign.Left);
+            placer.Reserve(Px + 4f, Px + 4f + ScopeCanvas.TextW(rimScale, 12f), rimY);
 
             // Formation skeleton and slots (a client has none: the snapshot does not carry the shape).
             int slots = 0;
@@ -386,7 +392,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 {
                     g.Tri(ax, ay, WingBoardMath.BearingDeg(m.X, m.Y), 6f, tone, !hollow);
                     float dist = (float)Math.Sqrt(m.X * m.X + m.Y * m.Y);
-                    int l = Begin(Mathf.Clamp(ax, Px - R + 30f, Px + R - 30f), ay + (ay < Py ? 14f : -14f), tone, tone == Amber, ScopeAlign.Center);
+                    int l = Begin(Mathf.Clamp(ax, Px - R + 30f, Px + R - 30f), ay + (ay < Py ? 14f : -12f), tone, tone == Amber, ScopeAlign.Center);
                     Append(l, ScopeStr.Cat("#", m.Number, " "));
                     Append(l, ScopeStr.Distance(null, dist, units, 10));
                 }
@@ -405,7 +411,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             int shown = Math.Min(n, WingBoardMath.MaxRows);
             for (int i = 0; i < shown; i++) Block(g, d.Members[i], i, WingBoardMath.BlockTop + i * WingBoardMath.BlockPitch, t);
-            if (n > shown) g.Text(ScopeStr.Cat("+", n - shown, " AC"), 0f, 172f, Dim, HudType.Label);
+            if (n > shown) g.Text(ScopeStr.Cat("+", n - shown, " AC"), 0f, 164f, Dim, HudType.Label);
         }
 
         /// <summary>
@@ -419,11 +425,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopeTone tone = WingBoardMath.ToneOf(st);
             bool caution = tone == Amber, engage = st == WingState.Engage;
             g.Chevron(X + 8f, a, m.HeadingDeg > 90f || m.HeadingDeg < -90f ? 180f : 0f, 5f, m.Damaged && tone == Ink ? Amber : tone, !WingBoardMath.Hollow(st), 1f);
-            g.FitText(m.Name ?? "", X + 22f, a, 110f, Ink, HudType.Body, HudType.Label);
+            g.FitText(m.Name ?? "", X + 22f, a, 106f, Ink, HudType.Body, HudType.Label);
             bool low = m.Fuel < 0.25f || m.Bingo || m.Joker;
-            g.Bar(X + 142f, a - 1f, 48f, 3f, m.Fuel, low ? Amber : Ink, 8);
-            g.BarTick(X + 142f, a - 1f, 48f, 3f, 0.25f, m.Fuel < 0.25f ? Amber : Dim);        // the quarter mark every caution below it is read against
-            g.Bar(X + 198f, a - 1f, 24f, 3f, m.Ammo, m.Ammo <= 0f ? Amber : Ink, 4);
+            g.Bar(X + 136f, a - 1f, 48f, 3f, m.Fuel, low ? Amber : Ink, 8);
+            g.BarTick(X + 136f, a - 1f, 48f, 3f, 0.25f, m.Fuel < 0.25f ? Amber : Dim);        // the quarter mark every caution below it is read against
+            g.Bar(X + 192f, a - 1f, 24f, 3f, m.Ammo, m.Ammo <= 0f ? Amber : Ink, 4);
             ScopeTone wordTone = caution ? Amber : engage ? Hi : st == WingState.Join ? Ink : Dim;
             float wordAlpha = st == WingState.Damaged && (int)(t * 6f) % 2 == 1 ? 0.55f : 1f;
             g.Text(WingBoardMath.Word(st), X + W, a, wordTone, HudType.Label, ScopeAlign.Right, caution || engage, wordAlpha);
@@ -476,7 +482,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     {
                         if (!ReferenceEquals(replyFor[index], m.ThreatReply)) { replyFor[index] = m.ThreatReply; replyPost[index] = "S - " + (m.ThreatReply ?? "EVADE"); }
                         if (!ReferenceEquals(seekerFor[index], m.ThreatSeeker)) { seekerFor[index] = m.ThreatSeeker; seekerPre[index] = (m.ThreatSeeker ?? "MSL") + " "; }
-                        g.FitText(ScopeStr.Cat(seekerPre[index], (int)Math.Ceiling(m.ThreatTtiS), replyPost[index]), x, y, w, tone);
+                        if (float.IsFinite(m.ThreatTtiS))
+                            g.FitText(ScopeStr.Cat(seekerPre[index], (int)Math.Ceiling(Math.Max(0f, m.ThreatTtiS)), replyPost[index]), x, y, w, tone);
+                        else
+                            g.FitText(ScopeStr.Cat(seekerPre[index], "- ", m.ThreatReply ?? "EVADE"), x, y, w, tone);
                     }
                     else g.Text("MISSILE - DEFENDING", x, y, tone);
                     break;

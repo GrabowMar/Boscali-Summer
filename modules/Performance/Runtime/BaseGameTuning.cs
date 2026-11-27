@@ -95,24 +95,27 @@ namespace BoscaliSummer.Modules.Performance.Runtime
 
         private void SyncLod(bool want)
         {
-            if (want == lodApplied) return;
+            if (!want && !lodApplied) return;
             try
             {
+                float current = QualitySettings.lodBias;
                 if (want)
                 {
-                    lodOriginal = QualitySettings.lodBias;
-                    QualitySettings.lodBias = ClientTuningMath.PlanLodBias(lodOriginal, true);
+                    float capped = ClientTuningMath.PlanLodBias(current, true);
+                    if (!(capped < current)) return;
+                    QualitySettings.lodBias = capped;
+                    lodOriginal = current;
+                    if (!lodApplied)
+                        Plugin.Logger?.LogInfo("Performance: LOD bias cap on (game " +
+                            current.ToString("F2") + " -> " + capped.ToString("F2") + ").");
                     lodApplied = true;
-                    Plugin.Logger?.LogInfo("Performance: LOD bias cap on (game " +
-                        lodOriginal.ToString("F2") + " -> " +
-                        QualitySettings.lodBias.ToString("F2") + ").");
                 }
                 else
                 {
-                    QualitySettings.lodBias = ClientTuningMath.RestoreLodBias(lodOriginal, QualitySettings.lodBias);
+                    float restored = ClientTuningMath.RestoreLodBias(lodOriginal, current);
+                    if (restored != current) QualitySettings.lodBias = restored;
                     lodApplied = false;
-                    Plugin.Logger?.LogInfo("Performance: LOD bias restored to " +
-                        QualitySettings.lodBias.ToString("F2") + ".");
+                    Plugin.Logger?.LogInfo("Performance: LOD bias restored to " + restored.ToString("F2") + ".");
                 }
             }
             catch (Exception error)
@@ -229,7 +232,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         /// </summary>
         private void SyncMsaa(int cap)
         {
-            var asset = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+            var asset = cap != 0 ? GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset : null;
             // A new cap, or the game swapped its pipeline asset: hand the game's value back first.
             if (msaaAsset != null && (cap != msaaCap || !ReferenceEquals(asset, msaaAsset)))
             {
@@ -267,8 +270,8 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         /// handed back on release. The game's DetailRenderer re-reads both every LateUpdate.</summary>
         private void SyncDetail(bool want)
         {
+            if ((!want && detailOwner == null) || GrassField == null || TreeField == null) return;
             NuclearOption.Effects.DetailSettings detail = PlayerSettings.DetailSettings;
-            if (GrassField == null || TreeField == null) return;
             if (detailOwner != null && (!want || !ReferenceEquals(detail, detailOwner)))
             {
                 if (!GrassField(detailOwner)) GrassField(detailOwner) = grassOriginal;

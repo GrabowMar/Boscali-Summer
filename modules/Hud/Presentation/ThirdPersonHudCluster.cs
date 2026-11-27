@@ -59,6 +59,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>The target's aspect angle (<see cref="TargetReadout.Aspect"/>; NaN = none) for the TARGET CAM's data strip. Set by the board before <see cref="Present"/>.</summary>
         public float CardAspectDeg = float.NaN;
+        /// <summary>True while the targeting pod is in IR mode. Set by the board before <see cref="Present"/>.</summary>
+        public bool CardIr;
         /// <summary>The picture already carries the game's own tac-screen text (the cockpit). Kept for the board's write; the card draws no name of its own on the picture any more (the name is on the shelf).</summary>
         public bool CardNativeText = true;
 
@@ -95,6 +97,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             public TextMeshProUGUI Note;          // on the picture, bottom right (SIGNAL LOST)
             public TextMeshProUGUI[] Cells;       // the data strip's three cells: left, centre, right
             public RawImage Feed;
+            public CamFeedEffect Effect;
             public bool Active;
             public string LastState, LastNote, LastCode, StateText;
             public float StripPt, LastPicW, LastPicH, LastTexAspect;      // LastPicW / H start at -1 (set in BuildTargetCard)
@@ -164,8 +167,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             spd = BuildBox("SPD", "SPD");
             alt = BuildBox("ALT", "ALT");
             hdg = BuildBox("HDG", null, withBar: false);
-            card = BuildTargetCard("TargetCard", "TARGET CAM");
-            missile = BuildTargetCard("MissileCard", "MISSILE CAM");
+            card = BuildTargetCard("TargetCard", "TARGET CAM", CamFeedMode.Target);
+            missile = BuildTargetCard("MissileCard", "MISSILE CAM", CamFeedMode.Missile);
             // Root is zero-size at screen centre, so this surface's origin is screen centre: RectF space.
             symbols = AvVector.Create(root, "Symbols", 900, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             lastSymbols = 0;
@@ -251,7 +254,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             };
         }
 
-        private TargetCardWidgets BuildTargetCard(string name, string shelfName)
+        private TargetCardWidgets BuildTargetCard(string name, string shelfName, CamFeedMode mode)
         {
             const float header = ThirdPersonHudLayout.TargetCardHeaderHeight, strip = FeedCorner.Strip;
             var cardObject = new GameObject(name, typeof(RectTransform));
@@ -270,6 +273,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             feedRect.offsetMax = new Vector2(0f, -header);
             RawImage feed = feedObject.GetComponent<RawImage>();
             feed.raycastTarget = false;
+            var effect = new CamFeedEffect(mode);
+            effect.Bind(feed);
 
             // On the picture: the missile's countdown (bottom left), SIGNAL LOST (bottom right). The target's name lives on the shelf.
             TextMeshProUGUI count = Label(feedRect, "Count", TextAlignmentOptions.BottomLeft, HudType.Emphasis,
@@ -306,7 +311,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return new TargetCardWidgets
             {
                 Root = rect, Name = title, State = state, Count = count, Note = note, Cells = cells, CellKey = keys,
-                Feed = feed, Active = false, StripPt = HudType.Label, LastCount = -2, LastPicW = -1f, LastPicH = -1f
+                Feed = feed, Effect = effect, Active = false, StripPt = HudType.Label, LastCount = -2, LastPicW = -1f, LastPicH = -1f
             };
         }
 
@@ -390,11 +395,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 WriteAoa(overG ? float.NaN : f.AoaDeg);   // the 106 px caption row holds OVER-G or the AoA beside SPD, not both
                 WriteClimb(f.ClimbMps, units);
             }
-            // The target card stands in the left column (TARGET CAM zone); the missile card in the bottom-right feed column, on the UAV card (VANGUARD's, FeedCorner) when one is up.
+            // All camera HUD cards live in the bottom-right corner: UAV at the base when up, TARGET CAM and MISSILE CAM beside/above it without overlapping.
             RectF uav = UavCard(screenW, screenH);
-            RectF targetRect = ThirdPersonHudLayout.TargetCard(screenW, screenH, true);
-            RectF missileRect = ThirdPersonHudLayout.MissileCard(screenW, screenH, uav, avoid,
-                active ? ThirdPersonHudLayout.AltitudeBlock(screenW, screenH, avoid) : default);
+            RectF keepOff = active ? ThirdPersonHudLayout.AltitudeBlock(screenW, screenH, avoid) : default;
+            RectF targetRect = ThirdPersonHudLayout.TargetCard(screenW, screenH, cameraTexture != null, uav, avoid, keepOff);
+            RectF missileRect = ThirdPersonHudLayout.MissileCard(screenW, screenH, uav, avoid, keepOff, targetRect);
             // The cards' words first (their widths set where the shelf rules stop), then the mesh over them.
             PresentTargetCard(cameraTexture, cameraCode, rangeM, closureMps, targetRect, ink, units);
             PresentMissileCard(missileRect, ink, units);
@@ -443,7 +448,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             // Bank in 2 degree steps and slip in whole degrees: finer motion is not visible and would rebuild the mesh every tick in a turn.
             int key = (int)screenW * 7919 + (int)screenH * 31 + (int)(lastScale * 100f) * 977 + Code(ink) * 17 +
-                Mathf.RoundToInt(targetCard.CenterY + targetCard.Height) * 11 + (flight ? 19 : 0) +
+                Mathf.RoundToInt(targetCard.CenterX * 5f + targetCard.CenterY + targetCard.Height) * 11 + (flight ? 19 : 0) +
                 Mathf.RoundToInt(missileCard.CenterX * 3f + missileCard.CenterY + missileCard.Height) * 23 + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7 +
                 Mathf.RoundToInt(avoid.CenterX) * 15485863 + Mathf.RoundToInt(avoid.CenterY) * 32452843 + Mathf.RoundToInt(avoid.Width) * 49979687 + Mathf.RoundToInt(avoid.Height) * 67867967;
             key += (card.Locked ? 7 : 0) * 104723;      // whether the lock bracket is drawn
@@ -686,6 +691,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 card.Locked = locked;
             }
             if (!PresentCard(ref card, rect, cameraTexture, card.StateText, ink, locked ? VanillaHudStyle.InkHi : VanillaHudStyle.InkDim)) return;
+            card.Effect?.Bind(card.Feed);
+            card.Effect?.SetThermal(CardIr ? 1f : 0f);
 
             // RNG, CLS (closing positive), ASP (the target's aspect: 0 tail-on, 180 head-on, R or L of its tail): a cell with no truthful value is blank.
             if (Changed(ref card, 0, locked ? Mathf.RoundToInt(rangeM / 100f) : int.MinValue))
@@ -722,6 +729,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             Color alert = VanillaHudStyle.WarningRed;
             if (!PresentCard(ref missile, rect, missileFeed, missileName, ink, ink)) return;
+            missile.Effect?.Bind(missile.Feed);
+            missile.Effect?.SetSignal(missileLost ? 0f : 1f);
             string note = missileLost ? "SIGNAL LOST" : "";
             if (missile.LastNote != note)
             {
@@ -830,13 +839,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             c.LastTexAspect = ta;
             float pa = h > 1f ? w / h : ta;
             c.Feed.uvRect = pa > ta ? new Rect(0f, (1f - ta / pa) * 0.5f, 1f, ta / pa) : new Rect((1f - pa / ta) * 0.5f, 0f, pa / ta, 1f);
+            c.Effect?.SetUvRect(c.Feed.uvRect);
         }
 
         /// <summary>Take the cluster out of view without destroying it. Idempotent.</summary>
         public void Hide()
         {
             if (root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);
+            if (card.Root != null && card.Root.gameObject.activeSelf) card.Root.gameObject.SetActive(false);
+            if (missile.Root != null && missile.Root.gameObject.activeSelf) missile.Root.gameObject.SetActive(false);
             builtActive = false;
+            card.Active = false;
+            missile.Active = false;
+            MissileFeedCamera.CardOnScreen = true;
             if (card.Feed != null) card.Feed.texture = null;
             if (missile.Feed != null) missile.Feed.texture = null;
         }
@@ -845,6 +860,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// took the tree with it (root reads as Unity's fake-null and the destroy is a no-op).</summary>
         public void Destroy()
         {
+            card.Effect?.Dispose();
+            missile.Effect?.Dispose();
             if (root != null) Object.Destroy(root.gameObject);
             root = null;
             canvasRoot = null;

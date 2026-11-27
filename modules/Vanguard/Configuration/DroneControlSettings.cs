@@ -46,7 +46,7 @@ namespace BoscaliSummer.Modules.Vanguard.Configuration
             Center = config.Bind("DroneControls", "CenterView", KeyCode.Home, "Center the drone's chase camera and reset its zoom.");
             GunView = config.Bind("DroneControls", "GunView", KeyCode.G, "Hold to sight along a drone's port cannon in forward view.");
             JoystickDevice = config.Bind("DroneControls", "JoystickDevice", "",
-                "Optional flight stick or gamepad. Use its exact device name from the game's controls menu. Leave empty to disable native device axes and trigger for drones.");
+                "Optional raw joystick override. Use its exact device name from the game's controls menu. Leave empty to use the game's mapped controller actions.");
             JoystickPitch = config.Bind("DroneControls", "JoystickPitch", 0, "Drone pitch axis by one-based device axis number. Use a negative number to invert it or 0 to disable it.");
             JoystickRoll = config.Bind("DroneControls", "JoystickRoll", 0, "Drone roll axis by one-based device axis number. Use a negative number to invert it or 0 to disable it.");
             JoystickYaw = config.Bind("DroneControls", "JoystickYaw", 0, "Drone yaw axis by one-based device axis number. Use a negative number to invert it or 0 to disable it.");

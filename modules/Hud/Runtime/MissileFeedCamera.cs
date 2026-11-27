@@ -11,8 +11,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
     /// </summary>
     internal sealed class MissileFeedCamera
     {
-        // Clean nose-mounted seeker feed: legible resolution at 15 Hz, graded with ACES only (no bloom/grain/vignette/aberration passes).
-        private const int Width = 384, Height = 216;
+        // Clean nose-mounted seeker feed: lightweight resolution at 15 Hz, graded with ACES only; UI shader adds the tactical seeker look.
+        private const int Width = 320, Height = 180;
         private const float Fps = 15f, FieldOfView = 45f, HoldSeconds = 1.5f;
 
         private readonly FeedCamera feed = new FeedCamera("BoscaliMissileFeed", Width, Height, FeedLook.Seeker, pointFilter: false) { Fps = Fps, FieldOfView = FieldOfView };

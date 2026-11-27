@@ -174,6 +174,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                     if (name.StartsWith("REMORA", StringComparison.Ordinal)) w.OwnRemora = true;
                 }
                 w.DroneLinked = drones.LinkedIndex; w.DroneFeed = drones.FeedShown; w.DroneRamMode = drones.RamMode; w.DronePiloting = drones.Piloting;
+                w.DroneCanPilot = w.DroneLinked >= 0 && drones.CanPilot(w.DroneLinked);
+                w.DroneLookWord = MenuText.Upper(drones.LookWord, 16);
+                w.DroneZoomWord = MenuText.Upper(drones.ZoomWord, 16);
             }
             ChaffDispenser chaff = ChaffDispenser.Instance;
             if (chaff != null && chaff.Fitted) { w.HasChaff = true; w.Chaff = chaff.Ammo; w.ChaffMax = chaff.MaxAmmo; }
@@ -243,8 +246,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "weapons/next": return With(a => a.weaponManager.NextWeaponStation());
                 case "weapons/link": return With(a => a.weaponManager.ToggleGunsLinked());
                 case "weapons/turret": return () => CombatHUD.i?.ToggleAutoControl();
-                case "flight/lights/nav": return With(a => a.ToggleNavLights());
-                case "flight/lights/light": return () => LandingLight.Instance?.Cycle();
+                case "cockpit/lights/nav": return With(a => a.ToggleNavLights());
+                case "cockpit/lights/light": return () => LandingLight.Instance?.Cycle();
                 // not NightVision.Toggle: it refuses while any cursor is up, and the open menu holds one
                 case "view/nvg": return () => { if (GameAccess.TryGetNightVisionState(out bool on, out _)) GameAccess.SetNightVisionSelected(!on); };
                 case "view/nvg-gain": return NightVisionLink.CycleGain;
@@ -266,7 +269,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "weapons/fighters/launch": return () => Service<ICarrierBayControl>()?.Request(CarrierBayAction.Launch);
                 case "weapons/fighters/recall": return () => Service<ICarrierBayControl>()?.Request(CarrierBayAction.Recall);
                 case "weapons/fighters/waveoff": return () => Service<ICarrierBayControl>()?.Request(CarrierBayAction.WaveOff);
-                case "weapons/cargo/next": return With(NextCargo);
                 case "weapons/cargo/setzone": return SetCargoZone;
                 case "weapons/cargo/clearzone": return () => Service<ILandingZone>()?.ClearLocal();
                 case "weapons/cargo/map": return () => { OpenMap(); NOAvionics.AvConsole.Open("MAP", "TOOLS"); };   // LANDING ZONE is a MARK tool there
@@ -313,19 +315,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (a.weaponManager == null || a.weaponStations == null || index < 0 || index >= a.weaponStations.Count) return;
             a.SetActiveStation((byte)index);
             CombatHUD.i?.ShowWeaponStation(a.weaponStations[index]);
-        }
-
-        private static void NextCargo(Aircraft a)
-        {
-            if (a.weaponManager == null || a.weaponStations == null || a.weaponStations.Count == 0) return;
-            int current = a.weaponStations.IndexOf(a.weaponManager.currentWeaponStation), count = a.weaponStations.Count;
-            for (int step = 1; step <= count; step++)
-            {
-                int index = (current + step) % count;
-                if (CargoStationRead.KindOf(a.weaponStations[index]) == CargoKind.None) continue;
-                SelectStation(a, index);
-                return;
-            }
         }
 
         /// <summary>A selected airborne contact is not a landing fix. Hostile ground fixes use the faction's known position, never a hidden live transform.</summary>

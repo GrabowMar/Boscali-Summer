@@ -108,12 +108,11 @@ namespace BoscaliSummer.Modules.Wing.Networking
             if (!hooked)
             {
                 hooked = true;
+                // Mirage replays Started to listeners added after the event fired.
                 nm.Server.Started.AddListener(OnServerStarted);
                 nm.Server.Stopped.AddListener(ClearPlayers);
                 nm.Server.Disconnected.AddListener(Forget);
                 nm.Client.Started.AddListener(OnClientStarted);
-                if (nm.Server.Active) OnServerStarted();
-                if (nm.Client.Active) OnClientStarted();
             }
             if (!nm.Server.Active) return;
             if ((snapshotClock += dt) >= SnapshotSeconds)

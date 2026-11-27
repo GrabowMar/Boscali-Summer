@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Runtime;
 using NOAvionics;
@@ -8,16 +9,17 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
-    /// The linked drone's HUD feed with sensor symbology, live telemetry and signal-loss static.
+    /// The linked drone's HUD feed with sensor symbology, live telemetry and shader signal-loss effects.
     /// </summary>
     internal sealed class DroneFeedView : AvPart
     {
-        private const float BurstSeconds = 0.6f, LockSnap = 0.5f, BigWidth = 600f;
+        private const float BurstSeconds = 0.6f, LockSnap = 0.5f, BigWidth = 600f, PaintInterval = 0.1f;
         private const float HaloPx = 2.4f;
         private static readonly Rgba Halo = new Rgba(0f, 0f, 0f, 0.6f);
 
         private readonly Image back;
-        private readonly RawImage picture, snow;
+        private readonly RawImage picture;
+        private readonly CamFeedEffect effect = new CamFeedEffect(CamFeedMode.DroneEo);
         private readonly AvVector ink;
         private readonly TMP_Text topLeft, topRight, heading, alt, speed, bottomLeft, bottomRight, centre, gimbal, markName, markRange, ownLabel;
         private readonly TMP_Text[] numerals = new TMP_Text[3];
@@ -26,8 +28,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private float w = 320f, h = 180f, pad = 8f, line = 15f, boxW = 60f, topBand = 60f, bottomBand = 20f;
         private bool big;
         private bool wasTracking;
-        private float lockAt = -9f;
-        private static Texture2D staticTile;
+        private float lockAt = -9f, nextPaint = float.NegativeInfinity;
+        private DroneView lastPaintedView;
+        private bool lastPaintedLost, lastPaintedTracking;
+        private string lastLookWord, lastZoomWord;
 
         /// <param name="textSize">Point size of the overlay text (the terminal's hero uses a larger one than the cards).</param>
         public DroneFeedView(RectTransform parent, string name, float textSize)
@@ -39,8 +43,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             AvLay.Fill(back.rectTransform);
             back.raycastTarget = false;
             picture = Raw("Picture");
-            snow = Raw("Static");
-            snow.texture = Static();
+            effect.Bind(picture);
             ink = AvVector.Create(Rect, "Symbology", 700);
             recLamp = AvLay.Solid(Rect, "Rec", Color.red);
             recLamp.raycastTarget = false;
@@ -78,20 +81,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             return t;
         }
 
-        // Grey snow, built once: the grain tile is single-channel and would draw red in a UI image.
-        private static Texture2D Static()
-        {
-            if (staticTile != null) return staticTile;
-            const int size = 96;
-            staticTile = new Texture2D(size, size, TextureFormat.RGBA32, false) { name = "BoscaliDroneStatic", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
-            var rng = new System.Random(7);
-            var px = new Color32[size * size];
-            for (int i = 0; i < px.Length; i++) { byte g = (byte)rng.Next(256); px[i] = new Color32(g, g, g, 255); }
-            staticTile.SetPixels32(px);
-            staticTile.Apply(false, true);
-            return staticTile;
-        }
-
         public override float Measure(float width) => Mathf.Round(width * 9f / 16f);
 
         /// <summary>The overlay's ink; null = the avionics white. The HUD card sets the HUD theme's colour so it reads like the rest of the HUD.</summary>
@@ -99,9 +88,12 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         private float TapeRow => big ? pad + line * 2f + 2f : pad;     // the card has no corner words over its tape
 
+        public void Dispose() => effect.Dispose();
+
         public override void Place(AvSlot s)
         {
             base.Place(s);
+            nextPaint = float.NegativeInfinity;
             w = s.W;
             h = s.H;
             big = w >= BigWidth;
@@ -123,32 +115,40 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             AvLay.Place(centre, 0f, h * 0.5f + h * 0.12f, w, line * 1.6f);
         }
 
-        /// <summary>Every frame the view is on screen: asks for the feed and repaints picture, static and symbology.</summary>
+        /// <summary>Every frame the view is on screen: asks for the feed, updates the lightweight shader params, and repaints symbology at 10 Hz or on state changes.</summary>
         public void Paint(DroneLinkService link)
         {
             link.Want();
             DroneView v = link.Linked;
             Texture tex = link.Feed;
-            if (picture.texture != tex) picture.texture = tex;
-            picture.enabled = tex != null;
+            effect.Bind(picture);
+            effect.SetMode(link.LookWord == "IR WHOT" ? CamFeedMode.DroneIr : CamFeedMode.DroneEo);
+            bool hasShader = effect.Ready;
+            Texture shownTex = tex != null ? tex : hasShader ? Texture2D.blackTexture : null;
+            if (!ReferenceEquals(picture.texture, shownTex)) picture.texture = shownTex;
+            picture.enabled = shownTex != null;
 
             float now = Time.unscaledTime;
             float quality = v != null ? v.Quality : 0f;
-            // Static says "weak link" without burying the picture and the words (a full-screen snow storm read as noise, user 2026-10-20).
-            float amount = v == null ? (link.Lost ? 0.25f : 0.45f) : Mathf.Pow(1f - quality, 1.5f) * 0.4f;
-            if (v != null && link.SinceSwitch < BurstSeconds) amount = Mathf.Max(amount, 0.6f * (1f - link.SinceSwitch / BurstSeconds));
-            if (v != null && quality <= 0f) amount = 0.45f;
-            picture.color = v != null && quality <= 0f ? new Color(0.45f, 0.45f, 0.45f, 1f) : Color.white;
-            snow.enabled = amount > 0.02f;
-            if (snow.enabled)
-            {
-                snow.color = new Color(1f, 1f, 1f, Mathf.Clamp01(amount));
-                snow.uvRect = new Rect(Random.value, Random.value, w / 160f, h / 160f);
-            }
+            float signal = v == null ? (link.Lost ? 0.15f : 0f) : quality;
+            if (v != null && link.SinceSwitch < BurstSeconds) signal = Mathf.Min(signal, (link.SinceSwitch / BurstSeconds) * 0.4f);
+            effect.SetSignal(signal);
+            picture.color = !hasShader && v != null && quality <= 0f ? new Color(0.45f, 0.45f, 0.45f, 1f) : Color.white;
 
             bool tracking = v != null && link.Tracking;
             if (tracking && !wasTracking) lockAt = now;
             wasTracking = tracking;
+
+            bool stateChanged = !ReferenceEquals(v, lastPaintedView) || link.Lost != lastPaintedLost ||
+                tracking != lastPaintedTracking || link.LookWord != lastLookWord || link.ZoomWord != lastZoomWord ||
+                (v != null && link.SinceSwitch < BurstSeconds);
+            if (!stateChanged && now < nextPaint) return;
+            nextPaint = now + PaintInterval;
+            lastPaintedView = v;
+            lastPaintedLost = link.Lost;
+            lastPaintedTracking = tracking;
+            lastLookWord = link.LookWord;
+            lastZoomWord = link.ZoomWord;
 
             Color ink0 = Ink ?? AvInk.Ink, dim = Ink.HasValue ? Ink.Value.WithAlpha(0.6f) : AvInk.Dim;
             Color tone = v == null ? AvInk.State(AvState.Inert) : v.Occupied ? AvInk.State(AvState.Caution) : AvInk.State(AvState.Ready);

@@ -164,13 +164,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 page.Section(AvIcon.Focus2, "VIEW", "THE RELIEF CAMERA");
                 viewTools = page.Buttons(
                     new AvControl.Spec("NORTH UP", ReliefNavigator.North, AvButtonStyle.Default, AvIcon.CurrentLocation),
+                    new AvControl.Spec("TOP / 3D", ReliefNavigator.TogglePerspective, AvButtonStyle.Toggle, AvIcon.Eye),
                     new AvControl.Spec("FIT MAP", ReliefNavigator.Fit, AvButtonStyle.Default, AvIcon.Maximize),
                     new AvControl.Spec("FOLLOW", ReliefNavigator.ToggleFollow, AvButtonStyle.Toggle, AvIcon.Plane),
-                    new AvControl.Spec("WASD", ReliefNavigator.ToggleFly, AvButtonStyle.Toggle, AvIcon.Eye)).Controls;
-                viewTools[0].Help = "North up at the default terrain tilt.";
-                viewTools[1].Help = "Fit the whole mission map. Double-click the ground to zoom in there.";
-                viewTools[2].Help = "Follow your aircraft, or drag the map to move freely.";
-                viewTools[3].Help = "Keyboard camera flight: W/A/S/D moves relative to the view heading while the map is open.";
+                    new AvControl.Spec("WASD", ReliefNavigator.ToggleFly, AvButtonStyle.Toggle, AvIcon.AdjustmentsHorizontal)).Controls;
+                viewTools[0].Help = "North up (click again while North-Up to return to straight top-down view).";
+                viewTools[1].Help = "Switch between straight top-down chart view and tilted 3D relief.";
+                viewTools[2].Help = "Fit the whole mission map (Home key). Double-click empty ground to zoom in there.";
+                viewTools[3].Help = "Follow your aircraft, or drag the map to move freely.";
+                viewTools[4].Help = "Keyboard camera flight: W/A/S/D pan, Q/E turn, R/F tilt while the map is open.";
 
                 selectSection = page.Section(AvIcon.Target, "SELECT", "LEFT MOUSE · SHIFT BOXES IN · CTRL BOXES OUT");
                 AvControl[] select = page.Buttons(
@@ -230,8 +232,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 bool relief = MfdTerrainRelief.IsDrawing;
                 foreach (AvControl c in viewTools) c.Interactable = relief;
-                viewTools[2].Latched = ReliefNavigator.Following;
-                viewTools[3].Latched = ReliefNavigator.Flying;
+                viewTools[1].Latched = relief && !ReliefNavigator.IsTopDown;
+                viewTools[3].Latched = ReliefNavigator.Following;
+                viewTools[4].Latched = ReliefNavigator.Flying;
             }
 
             // ------------------------------------------------------------- layers

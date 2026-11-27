@@ -93,9 +93,9 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 "Show stores, countermeasures and power. Off gives back the game's native panels." + live);
 
             PageMissileCam = config.Bind(section, "PageMissileCam", d.PageMissileCam,
-                "Show the missile camera card (the newest own missile in the air) beside the board. Off also stops its camera rendering." + live);
+                "Show the missile camera card (the newest own missile in the air) in the bottom-right corner. Off also stops its camera rendering." + live);
             TargetCam = config.Bind(section, "TargetCam", true,
-                "Show the TARGET CAM card (the targeting pod's picture) in the left column. The pod camera is the game's own and keeps feeding the cockpit tac screen." + live);
+                "Show the TARGET CAM card (the targeting pod's picture) in the bottom-right corner. The pod camera is the game's own and keeps feeding the cockpit tac screen." + live);
 
             ShowLamps = config.Bind(section, "ShowLamps", d.ShowLamps,
                 "Show the lamp row: the aircraft's switch states and the threat lamps." + live);
@@ -218,7 +218,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 PageMissileCam, TargetCam,
                 ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts,
                 ArPath, ArDomes, ArMissiles, ArBeacons, HudFx,
-                ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts, Brow, Arcs, Boot, Reactive, VisorSound, TextEdge,
+                Brow, Arcs, Boot, Reactive, VisorSound, TextEdge,
             };
             ConfigFile file = Enabled.ConfigFile;
             bool save = file.SaveOnConfigSet;

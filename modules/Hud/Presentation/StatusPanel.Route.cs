@@ -155,6 +155,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (routeRoot != null) UnityEngine.Object.Destroy(routeRoot.gameObject);
             routeRoot = routeSurface = null;
+            routeGroup = null;
             routeVector = null;
             routeText = null;
             routeCanvas = null;

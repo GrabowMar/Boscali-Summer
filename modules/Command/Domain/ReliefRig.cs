@@ -18,8 +18,9 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal const float MinZoom = 1f;
         internal const float MaxZoom = 40f;
         internal const float MinPitch = 20f;
-        internal const float MaxPitch = 85f;
-        internal const float DefaultPitch = 40f;
+        internal const float MaxPitch = 89f;
+        internal const float DefaultPitch = 89f;
+        internal const float ObliquePitch = 42f;
         private const float FitMargin = .92f;
         private const float MinimumSize = 10f;
 

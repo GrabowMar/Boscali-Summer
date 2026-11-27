@@ -125,11 +125,13 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (Application.isBatchMode) return;
             EnsureAudio();
             if (epoch != Sa74Fallout.Epoch || (!Sa74Fallout.Active && (arrivals.Count != 0 || seen.Count != 0))) ResetForScene();
+            if (arrivals.Count == 0) return;
             CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
             Camera camera = cameras != null ? cameras.mainCamera : Camera.main;
             if (camera == null) return;
             bool cockpit = cameras != null && cameras.currentState == cameras.cockpitState;
-            var mixer = SoundManager.i != null ? SoundManager.i.EffectsMixer : null;
+            SoundManager sound = SoundManager.i;
+            var mixer = sound != null ? sound.EffectsMixer : null;
             Gain = 0f;
             foreach (Arrival arrival in arrivals)
             {
