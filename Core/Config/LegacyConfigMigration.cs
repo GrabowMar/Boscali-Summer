@@ -57,7 +57,6 @@ namespace BoscaliSummer.Core.Config
             BindAndRemove(config, "Garrisons", "StrongholdBlastArmor", 50f);
             BindAndRemove(config, "Garrisons", "StrongholdDefenseType", "auto");
             BindAndRemove(config, "Air Assault", "InfantryPerFastRope", 8);
-            BindAndRemove(config, "Radio", "Volume", 0.65f);
 
             // The sector grid moved from a fixed dimension count to cells on the map's own
             // base grid, so the old size knob no longer means anything.
