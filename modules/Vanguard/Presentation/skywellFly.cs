@@ -109,7 +109,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             float floor = parameters != null ? parameters.landingSpeed * StallMargin : 0f; // never flown slower than this
             Aircraft tanker = target.Tanker;
             Vector3 slot = target.World;
-            SkywellHold.Command cmd = st.Hold.Step(state, slot, SkywellBoard.Velocity(tanker), inputs.throttle, floor);
+            Vector3 tankerVelocity = SkywellBoard.TankerVelocity(tanker);
+            SkywellHold.Command cmd = st.Hold.Step(state, slot, tankerVelocity, inputs.throttle, floor);
             inputs.roll = cmd.Roll;
             inputs.pitch = cmd.Pitch;
             inputs.yaw = 0f;
@@ -123,8 +124,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             {
                 nextTrace = Time.time + 2f;
                 Vector3 e = tanker.transform.InverseTransformDirection(slot - rx.transform.position);
-                Vector3 lv = SkywellBoard.Velocity(tanker);
-                HoldProbe = $"t={Time.time:F0} {rx.unitName} err={e.ToString("F0")} floor={floor:F0} v={vel.magnitude:F0}/{lv.magnitude:F0}>{cmd.SpeedTarget:F0} vy={vel.y:F1}/{lv.y:F1}>{cmd.VsTarget:F1} " +
+                HoldProbe = $"t={Time.time:F0} {rx.unitName} err={e.ToString("F0")} floor={floor:F0} v={vel.magnitude:F0}/{tankerVelocity.magnitude:F0}>{cmd.SpeedTarget:F0} vy={vel.y:F1}/{tankerVelocity.y:F1}>{cmd.VsTarget:F1} " +
                             $"bank={state.BankDeg:F0}>{cmd.BankTarget:F0} nz={state.Nz:F2} thr={cmd.Throttle:F2} stick p={rawPitch:F2}>{inputs.pitch:F2} r={rawRoll:F2}>{inputs.roll:F2} assist={rx.flightAssist} pitch={Mathf.Asin(fwd.y) * Mathf.Rad2Deg:F1} alt={rx.radarAlt:F0}";
                 BoscaliSummer.Plugin.Logger?.LogInfo("[SKYWELL hold] " + HoldProbe);
             }

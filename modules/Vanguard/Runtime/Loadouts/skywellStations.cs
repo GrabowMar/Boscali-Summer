@@ -21,11 +21,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             catch (Exception) { return null; }
         }
 
-        /// <summary>Stations the kit never serves: cargo, nuclear, massless, or not rearmable.</summary>
+        /// <summary>Stations the kit never serves: cargo, service kits, nuclear, massless, or not rearmable.</summary>
         public static bool Skip(WeaponStation s)
         {
             WeaponInfo info = s?.WeaponInfo;
-            return info == null || info.cargo || info.nuclear || info.massPerRound <= 0f ||
+            return info == null || info.cargo || SkywellBoard.IsKit(info) || info.nuclear || info.massPerRound <= 0f ||
                    s.Weapons == null || s.Weapons.Count == 0 || s.Weapons[0] == null || !s.Weapons[0].Rearmable;
         }
 

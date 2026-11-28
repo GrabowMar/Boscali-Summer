@@ -22,6 +22,18 @@ namespace BoscaliSummer.Vanguard
     {
         private static Aircraft Rx(Dictionary<string, object> args) => Has(args, "rx") ? Arg(args, "rxUnit") as Aircraft : receiver;
 
+        /// <summary>Use a scenario's aircraft as-is when it already carries the native kit.</summary>
+        private static Dictionary<string, object> SkywellBind(Dictionary<string, object> args)
+        {
+            Aircraft candidate = Arg(args, "idUnit") as Aircraft;
+            if (candidate == null || candidate.disabled || SkywellBoard.KitStation(candidate) == null)
+                return Failure("VanguardAutomation", "skybind", "the registered tanker must already carry SKYWELL");
+            tanker = candidate;
+            receiver = Arg(args, "rxUnit") as Aircraft;
+            return new Dictionary<string, object> { ["ok"] = true, ["tankerType"] = tanker.definition.unitName,
+                ["receiverBound"] = receiver != null, ["kit"] = 1 };
+        }
+
         /// <summary>The seated local aircraft; with an <c>rx</c> named, that must be it.</summary>
         private static Aircraft SeatedRx(Dictionary<string, object> args)
         {

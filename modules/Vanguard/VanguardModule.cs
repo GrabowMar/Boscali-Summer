@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.VanguardSeekPatch),
             typeof(Patches.HawcxGlowPatch),
             typeof(Patches.VanguardSlowChecksPatch),
+            typeof(Patches.DronePrefabRegistrationPatch),
             typeof(Patches.AegisSnapPatch),
             typeof(Patches.AegisDoorsPatch),
             typeof(Patches.AegisFinsPatch),
