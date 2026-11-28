@@ -244,10 +244,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal bool FillState(Player viewer, OpsStateData into)
         {
             into.Active = false; into.CyberOps = false; into.SofOps = false; into.BirdsDown = 0; into.EnemyBirdsDown = 7; into.BirdsLaunched = 0;
-            into.IncomingBird = -1; into.IncomingLaunched = false; into.IncomingDeadline = into.IncomingAimU = into.IncomingAimV = 0f;
+            into.IncomingBird = -1; into.IncomingLaunched = into.IncomingClear = false; into.IncomingDeadline = into.IncomingConjunctionAt = 0f;
+            into.OutgoingTrackId = 0; into.OutgoingLaunched = false; into.OutgoingDeadline = 0f;
             Array.Clear(into.BirdPercent, 0, into.BirdPercent.Length);
             Array.Clear(into.Geo, 0, into.Geo.Length);
             Array.Clear(into.EnemyTrackIds, 0, into.EnemyTrackIds.Length);
+            Array.Clear(into.Collections, 0, into.Collections.Length);
             into.Rows.Clear(); into.Pings.Clear(); into.Events.Clear(); into.Flights.Clear(); into.Sites.Clear(); into.Log.Clear();
             if (viewer == null || viewer.HQ == null || !Enabled || !factions.TryGetValue(viewer.HQ, out FactionOps f))
             {
@@ -289,6 +291,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 into.Events.Add(new OpsEventRow { Seq = f.Ring[i].Key, Kind = e.Kind, Domain = e.Domain, Op = e.Op });
             }
             FillBirdsAndFlights(viewer.HQ, now, into);
+            if (manager.Fronts != null) manager.Fronts.FillCollections(viewer.HQ, into.Collections);
             manager.CopyOverlordLog(viewer.HQ, into.Log); // OVERLORD's own actions and their reasons: this faction's console only
             return true;
         }

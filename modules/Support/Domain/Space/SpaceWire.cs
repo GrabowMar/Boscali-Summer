@@ -28,7 +28,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Defence verbs (protocol 42). Both carry nothing (Target 0): CyberPurge evicts every enemy hold on the faction's own network after a countdown; SofSweep sends a QRF against every hostile team detected near the faction's sites.</summary>
         CyberPurge = 27, SofSweep = 28,
         /// <summary>Truck relocation (protocol 44; 27 and 28 were already taken). TruckMove Ids = { truck index, packed point (SofCodes.PackPoint) }; the host judges the 20 km data center reach.</summary>
-        TruckMove = 29
+        TruckMove = 29,
+        /// <summary>RephaseBird Ids = { bird, advance bit }; BookPass Ids = { sensor bird, packed point }; CancelPass Target = sensor bird.</summary>
+        RephaseBird = 30, BookPass = 31, CancelPass = 32,
+        /// <summary>SendOrbitalIntel Target = one opaque faction contact id.</summary>
+        SendOrbitalIntel = 33
     }
 
     /// <summary>What the feed may say about a contact before its MARK verdict. Never the truth: see <see cref="SpaceProbable"/>.</summary>
@@ -67,9 +71,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             Protocol = protocol; Kind = kind; RequestId = requestId; Target = target; Ids = ids;
         }
 
-        public bool Mutating => Kind == SpaceCommandKind.Mark || Kind == SpaceCommandKind.SendTasked || Kind == SpaceCommandKind.ClaimTasked || IsCyberVerb || IsSofVerb || IsOpsVerb || IsFrontVerb;
+        public bool Mutating => Kind == SpaceCommandKind.Mark || Kind == SpaceCommandKind.SendTasked || Kind == SpaceCommandKind.SendOrbitalIntel ||
+            Kind == SpaceCommandKind.ClaimTasked || IsCyberVerb || IsSofVerb || IsOpsVerb || IsFrontVerb;
 
-        public bool IsFrontVerb => (Kind >= SpaceCommandKind.FrontDirective && Kind <= SpaceCommandKind.FrontDonate) || Kind == SpaceCommandKind.RelocateBird || Kind == SpaceCommandKind.TruckMove;
+        public bool IsFrontVerb => (Kind >= SpaceCommandKind.FrontDirective && Kind <= SpaceCommandKind.FrontDonate) || Kind == SpaceCommandKind.RelocateBird ||
+            (Kind >= SpaceCommandKind.TruckMove && Kind <= SpaceCommandKind.CancelPass);
 
         public bool IsOpsVerb => Kind >= SpaceCommandKind.OpFund && Kind <= SpaceCommandKind.OpCancel;
 
@@ -133,12 +139,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public float X, Z, Expires;
         public ProbableClass Class;
         public byte Percent;
-        public bool Moving;
+        public bool Moving, Booked;
         public BirdKind Source;
 
         public bool SameAs(in FeedContact o) =>
             Id == o.Id && UnitId == o.UnitId && SpaceMirror.SamePoint(X, o.X) && SpaceMirror.SamePoint(Z, o.Z) && Class == o.Class && Percent == o.Percent &&
-            Moving == o.Moving && Source == o.Source && SpaceMirror.SameExpiry(Expires, o.Expires);
+            Moving == o.Moving && Booked == o.Booked && Source == o.Source && SpaceMirror.SameExpiry(Expires, o.Expires);
     }
 
     internal struct FeedMark
@@ -252,7 +258,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public const int RadarUnavailable = int.MaxValue;
         /// <summary>Largest real deadline a reader accepts (mission seconds); anything above it, short of the marker, is clamped.</summary>
         public const int MaxDeadline = 100000000;
-        private const int MinContactBytes = 11, MinMarkBytes = 10, MinPostBytes = 17, MaxExpiryDeciseconds = 65535, MaxContactDeciseconds = 255;
+        private const int MinContactBytes = 11, MinMarkBytes = 10, MinPostBytes = 17, MaxExpiryDeciseconds = 65535;
         private const byte FlagFull = 1, FlagActive = 2, FlagFeed = 4;
 
         // ---- Command ---------------------------------------------------------------------------
@@ -275,6 +281,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case SpaceCommandKind.OpFund:
                 case SpaceCommandKind.OpCancel:
                 case SpaceCommandKind.FrontDirective:
+                case SpaceCommandKind.CancelPass:
+                case SpaceCommandKind.SendOrbitalIntel:
                     WriteVar(w, (uint)Math.Max(0, c.Target));
                     break;
                 case SpaceCommandKind.SendTasked:
@@ -287,6 +295,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case SpaceCommandKind.FrontDonate:
                 case SpaceCommandKind.RelocateBird:
                 case SpaceCommandKind.TruckMove:
+                case SpaceCommandKind.RephaseBird:
+                case SpaceCommandKind.BookPass:
                     int count = Math.Min(c.Ids?.Length ?? 0, SpaceCommand.MaxIds);
                     w.WriteByte((byte)count);
                     for (int i = 0; i < count; i++) WriteVar(w, (uint)Math.Max(0, c.Ids[i]));
@@ -299,7 +309,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (!r.TryReadByte(out byte version)) return default;
             if (version != protocol) return new SpaceCommand(version, SpaceCommandKind.None, 0);
-            if (!r.TryReadByte(out byte kindByte) || kindByte < (byte)SpaceCommandKind.OpenFeed || kindByte > (byte)SpaceCommandKind.TruckMove ||
+            if (!r.TryReadByte(out byte kindByte) || kindByte < (byte)SpaceCommandKind.OpenFeed || kindByte > (byte)SpaceCommandKind.SendOrbitalIntel ||
                 !ReadInt(r, out int request)) return default;
             var kind = (SpaceCommandKind)kindByte;
             switch (kind)
@@ -315,6 +325,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case SpaceCommandKind.OpFund:
                 case SpaceCommandKind.OpCancel:
                 case SpaceCommandKind.FrontDirective:
+                case SpaceCommandKind.CancelPass:
+                case SpaceCommandKind.SendOrbitalIntel:
                     return ReadInt(r, out int target) ? new SpaceCommand(version, kind, request, target) : default;
                 case SpaceCommandKind.SendTasked:
                 case SpaceCommandKind.SofMission:
@@ -326,6 +338,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case SpaceCommandKind.FrontDonate:
                 case SpaceCommandKind.RelocateBird:
                 case SpaceCommandKind.TruckMove:
+                case SpaceCommandKind.RephaseBird:
+                case SpaceCommandKind.BookPass:
                     if (!r.TryReadByte(out byte count) || count == 0 || count > SpaceCommand.MaxIds || r.Remaining < count) return default;
                     if (kind != SpaceCommandKind.SendTasked && count != (kind == SpaceCommandKind.FrontPriority ? 3 : 2) &&
                         !(kind == SpaceCommandKind.FrontQueue && count == 3)) return default;
@@ -361,11 +375,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 (kindByte < (byte)SpaceCommandKind.SofRaise || kindByte > (byte)SpaceCommandKind.SofDivert) &&
                 (kindByte < (byte)SpaceCommandKind.OpFund || kindByte > (byte)SpaceCommandKind.OpCancel) &&
                 (kindByte < (byte)SpaceCommandKind.FrontDirective || kindByte > (byte)SpaceCommandKind.FrontDonate) && kindByte != (byte)SpaceCommandKind.RelocateBird &&
-                kindByte != (byte)SpaceCommandKind.CyberPurge && kindByte != (byte)SpaceCommandKind.SofSweep && kindByte != (byte)SpaceCommandKind.TruckMove) || !ReadInt(r, out int request) ||
+                kindByte != (byte)SpaceCommandKind.CyberPurge && kindByte != (byte)SpaceCommandKind.SofSweep &&
+                (kindByte < (byte)SpaceCommandKind.TruckMove || kindByte > (byte)SpaceCommandKind.SendOrbitalIntel)) || !ReadInt(r, out int request) ||
                 !r.TryReadByte(out byte outcome) || !r.TryReadByte(out byte replay) || replay > 1 ||
                 !ReadInt(r, out int call) || !ReadInt(r, out int charged) || !ReadInt(r, out int detail) ||
                 !ReadText(r, SpaceReply.MaxClaimant, out string claimant)) return default;
             int max = kindByte == (byte)SpaceCommandKind.Mark ? (int)MarkVerdict.Capacity :
+                kindByte == (byte)SpaceCommandKind.SendOrbitalIntel ? (int)TaskedOutcome.MarkExpired :
                 kindByte == (byte)SpaceCommandKind.CyberPurge ? (int)CyberWords.MaxOutcome :
                 kindByte == (byte)SpaceCommandKind.SofSweep ? (int)SofOutcomeWords.MaxOutcome :
                 kindByte >= (byte)SpaceCommandKind.FrontDirective ? (int)FrontWords.MaxOutcome :
@@ -409,9 +425,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 WriteVar(w, (uint)Math.Max(0, c.Id));
                 WriteVar(w, c.UnitId);
                 WriteCoordinate(w, c.X); WriteCoordinate(w, c.Z);
-                w.WriteByte((byte)((byte)c.Class | (c.Moving ? 4 : 0) | ((byte)c.Source == (byte)BirdKind.Radar ? 8 : 0)));
+                w.WriteByte((byte)((byte)c.Class | (c.Moving ? 4 : 0) | (c.Source == BirdKind.Radar ? 8 : 0) | (c.Booked ? 16 : 0)));
                 w.WriteByte(c.Percent);
-                WriteExpiry1(w, c.Expires, s.Now); // a reveal lives twenty seconds: one byte of deciseconds is enough
+                WriteExpiry1(w, c.Expires, s.Now); // fifths of a second cover the longest reveal (45 s) in one byte
             }
             WriteIds(w, s.RemovedContacts, MaxContacts);
             n = Math.Min(s.Marks.Count, MaxMarks);
@@ -478,12 +494,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             for (int i = 0; i < n; i++)
             {
                 if (!ReadInt(r, out int id) || !ReadVar(r, out uint unit) || !ReadCoordinate(r, out float x) || !ReadCoordinate(r, out float z) ||
-                    !r.TryReadByte(out byte bits) || (bits & ~15) != 0 || (bits & 3) > (byte)ProbableClass.Friendly ||
+                    !r.TryReadByte(out byte bits) || (bits & ~31) != 0 || (bits & 3) > (byte)ProbableClass.Friendly ||
                     !r.TryReadByte(out byte percent) || percent > 100 || !ReadExpiry1(r, now, out float expires)) return Bad();
                 s.Contacts.Add(new FeedContact
                 {
                     Id = id, UnitId = unit, X = x, Z = z, Class = (ProbableClass)(bits & 3), Moving = (bits & 4) != 0,
-                    Source = (bits & 8) != 0 ? BirdKind.Radar : BirdKind.Optical, Percent = percent, Expires = expires
+                    Source = (bits & 8) != 0 ? BirdKind.Radar : BirdKind.Optical, Booked = (bits & 16) != 0, Percent = percent, Expires = expires
                 });
             }
             if (!ReadIds(r, s.RemovedContacts, MaxContacts)) return Bad();
@@ -597,15 +613,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         private static void WriteExpiry1(ISpaceWriter w, float expires, float now)
         {
-            double left = float.IsFinite(expires) && float.IsFinite(now) ? Math.Round((expires - now) * 10d) : 0d;
-            w.WriteByte((byte)Math.Clamp(left, 0d, MaxContactDeciseconds));
+            double left = float.IsFinite(expires) && float.IsFinite(now) ? Math.Round((expires - now) * 5d) : 0d;
+            w.WriteByte((byte)Math.Clamp(left, 0d, byte.MaxValue));
         }
 
         private static bool ReadExpiry1(ISpaceReader r, float now, out float expires)
         {
             expires = 0;
-            if (!r.TryReadByte(out byte ds)) return false;
-            expires = now + ds / 10f;
+            if (!r.TryReadByte(out byte fifths)) return false;
+            expires = now + fifths / 5f;
             return true;
         }
 

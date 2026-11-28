@@ -277,8 +277,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private OrbitRoom Orbit => rooms[(int)Front.Space] as OrbitRoom;
 
-        /// <summary>The SPACE room shows the DOWNLINK picture (its column tab, or enlarged over the map): only then does the feed hold its lease and render.</summary>
-        internal bool DownlinkShown => IsOpen && shownFront == (int)Front.Space && Orbit != null && tabOf[shownFront] == OrbitRoom.OperateTab && Orbit.OperateDownlinkShown;
+        internal bool OrbitWatchShown => IsOpen && shownFront == (int)Front.Space && tabOf[shownFront] == OrbitRoom.OperateTab;
+        /// <summary>Render the downlink only while its picture is on screen.</summary>
+        internal bool DownlinkShown => OrbitWatchShown && Orbit != null && Orbit.OperateDownlinkShown;
 
 #if !PUBLIC_RELEASE
         internal void ShowOrbitOperateForAutomation()

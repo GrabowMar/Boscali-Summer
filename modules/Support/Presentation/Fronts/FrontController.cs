@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         // The footer's resting line: how to use the room on screen, in the order the clicks happen (the latest answer replaces it for a few seconds).
         private static readonly string[] Resting =
         {
-            "LAUNCH configures satellites and builds pads. OPERATE plans burns and intercepts. Select a friendly track for DOWNLINK and SEND TO JOBS. Esc backs out.",
+            "LAUNCH plots the first crossing. In OPERATE, pick a grid to book a pass or open DOWNLINK. Esc backs out.",
             "BUILD DATA CENTER > click a held airbase. DEPLOY TRUCK > click near it. On NODES: a node in reach > HOP, then hold it or BURN it. Esc closes.",
             "BUILD CAMP > click ground you hold. TRAIN a team. Pick a target on TARGETS (or click open ground for RECON): the nearest ready team is picked, SEND sends it. SWEEP hunts intruders. Esc closes.",
         };
@@ -131,16 +131,22 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (window != null && window.IsOpen) window.Close();
             open = false;
             feed?.SetVisible(false);
+            if (feed != null) feed.ReportWatch = false;
         }
 
         private void OnClosed()
         {
             open = false;
             feed?.SetVisible(false);
+            if (feed != null) feed.ReportWatch = false;
         }
 
-        /// <summary>The SPACE feed holds its lease and renders only while the room shows DOWNLINK (enlarged counts); Returning to flight controls, FRONT and other rooms releases the lease.</summary>
-        private void ShowFeed() => feed?.SetVisible(open && window != null && window.DownlinkShown);
+        private void ShowFeed()
+        {
+            if (feed == null) return;
+            feed.SetVisible(open && window != null && window.DownlinkShown);
+            feed.ReportWatch = open && window != null && window.OrbitWatchShown;
+        }
 
         /// <summary>Picks belong to one faction and one scene: either changing drops them all (a vanished id is cleared by the views, nothing else).</summary>
         private void ClearSelections()
@@ -221,10 +227,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     view.IncomingBird = ops != null && ops.Active ? ops.IncomingBird : -1;
                     view.IncomingSeconds = view.IncomingBird < 0 ? 0f : Math.Max(0f, ops.IncomingDeadline - now);
                     view.IncomingLaunched = view.IncomingBird >= 0 && ops.IncomingLaunched;
-                    view.IncomingAimU = view.IncomingLaunched ? ops.IncomingAimU : 0f;
-                    view.IncomingAimV = view.IncomingLaunched ? ops.IncomingAimV : 0f;
+                    view.IncomingClear = view.IncomingBird >= 0 && ops.IncomingClear;
+                    view.IncomingPassSeconds = view.IncomingBird < 0 ? 0f : Math.Max(0f, ops.IncomingConjunctionAt - now);
+                    view.OutgoingTrackId = ops != null && ops.Active ? ops.OutgoingTrackId : 0;
+                    view.OutgoingSeconds = view.OutgoingTrackId == 0 ? 0f : Math.Max(0f, ops.OutgoingDeadline - now);
+                    view.OutgoingLaunched = view.OutgoingTrackId != 0 && ops.OutgoingLaunched;
                     FrontViews.Orbit(view, c);
-                    if (feed != null) view.Feed = feed.View;
+                    if (feed != null) { view.Feed = feed.View; view.CollectionReport = feed.CollectionReport(now); }
                     break;
                 case Front.Cyber:
                     FrontViews.Network(view, c, manager.CyberMirror.State, manager.CyberMirror.Known, selectedNode);
@@ -272,7 +281,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (manager.OpsMirror.Known && ops.Active)
             {
                 for (int k = 0; k < 3; k++) { geoOwn[k] = ops.Geo[k]; geoFoe[k] = ops.Geo[3 + k]; }
-                c.Geo = geoOwn; c.EnemyGeo = geoFoe;
+                c.Geo = geoOwn; c.EnemyGeo = geoFoe; c.Collections = ops.Collections;
             }
             if (calls != null && calls.TryAimPoint(out GlobalPosition aim)) { c.AimKnown = true; c.AimU = c.Frame.U(aim.x); c.AimV = c.Frame.V(aim.z); }
             c.Airbases = ReadAirbases(GameManager.GetLocalPlayer(out Player me) && me != null ? me.HQ : null);
@@ -335,7 +344,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             bool theirs = calls != null && calls.LastWords.Length > 0 && now - calls.LastWordsAt < WordsHold;
             if (theirs && (!mine || calls.LastWordsAt >= wordsAt)) { text = calls.LastWords; tone = text.StartsWith("NEGATIVE", StringComparison.Ordinal) ? AvState.Danger : AvState.Info; }
             else if (mine) { text = words; tone = wordsTone; }
-            else if (current == Front.Space && feed != null && feed.Shown && feed.View.Words.Length > 0) { text = feed.View.Words; tone = feed.View.WordsTone; }
+            else if (current == Front.Space && feed != null && window.OrbitWatchShown && feed.TryWords(now, out string spaceWords, out AvState spaceTone))
+            { text = spaceWords; tone = spaceTone; }
             window.Window.Footer.Set(text, tone);
         }
 
@@ -353,7 +363,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 return;
             }
             bool truck = reply.Kind == SpaceCommandKind.TruckMove;
-            if ((reply.Kind < SpaceCommandKind.FrontDirective || reply.Kind > SpaceCommandKind.FrontDonate) && reply.Kind != SpaceCommandKind.RelocateBird && !truck) return;
+            if (!new SpaceCommand(reply.Protocol, reply.Kind, reply.RequestId).IsFrontVerb) return;
             pendingRequest = 0;
             var code = (FrontOutcome)reply.Outcome;
             words = (reply.Replayed ? "EARLIER · " : "") + (truck ? FrontWords.TruckMove(code) : FrontWords.Outcome(code, pendingFront, reply.Detail, reply.Claimant, reply.Charged));
@@ -508,12 +518,27 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public void Touch() { if (current == Front.Space) feed?.Touch(); }
 
-        /// <summary>Sends the relocation order; the host (SpaceState owns a GeoBird per bird) judges it and the verdict words come back through OnReply.</summary>
+        /// <summary>Sends a ground-track transfer order to the host.</summary>
         public void RelocateBird(int birdKind, float u, float v)
         {
             Touch();
-            if (Gate()) Sent(Front.Space, manager.RelocateBird(birdKind, u, v), "NO HOST LINK", SpaceCommandKind.None, "RELOCATION BURN");
+            if (Gate()) Sent(Front.Space, manager.RelocateBird(birdKind, u, v), "NO HOST LINK", SpaceCommandKind.None, "TRACK TRANSFER");
         }
+
+        public bool Retime(int birdKind, bool advance) =>
+            Gate() && Sent(Front.Space, manager.FrontRephaseBird(birdKind, advance), "NO HOST LINK", SpaceCommandKind.None, "RETIME PASS");
+
+        public bool BookPass(int birdKind, Vector2 world)
+        {
+            if (!Gate()) return false;
+            MapFrame frame = Frame();
+            return Sent(Front.Space, manager.FrontBookPass(birdKind, frame.U(world.x), frame.V(world.y)), "NO HOST LINK", SpaceCommandKind.None, "BOOK COLLECTION");
+        }
+
+        public bool CancelPass(int birdKind) =>
+            Gate() && Sent(Front.Space, manager.FrontCancelPass(birdKind), "NO HOST LINK", SpaceCommandKind.None, "CANCEL COLLECTION");
+
+        public bool SendOrbitalTarget(int contactId) => feed != null && Gate() && feed.SendOrbitalTarget(contactId);
 
         public ISpaceFeedActions Orbit => feed;
     }

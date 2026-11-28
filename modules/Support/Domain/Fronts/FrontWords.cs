@@ -16,15 +16,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         /// <summary>GEO burn verdicts (Detail = seconds of burn, Charged = fuel percent spent; for NoFuel Detail = percent needed).</summary>
         Relocated = 32, NoFuel = 33, Burning = 34, NoMove = 35, BirdLost = 36, NoSite = 37,
         NoPad = 38, PadFull = 39, KindUp = 40, NoDataCenter = 41, DataCenterFull = 42, NoCamp = 43, CampFull = 44, NotHeld = 45,
-        NotOwnGround = 46, TooFar = 47, FobMax = 48, NoSpot = 49, Packing = 50, TruckBusy = 51, NoEnemyTrack = 52
+        NotOwnGround = 46, TooFar = 47, FobMax = 48, NoSpot = 49, Packing = 50, TruckBusy = 51, NoEnemyTrack = 52,
+        Rephased = 53, PassBooked = 54, PassCancelled = 55, NoPass = 56, NoDeltaV = 57
     }
 
     /// <summary>Every front sentence, built from a few bytes on the client (radio style, upper case). Pure.</summary>
     internal static class FrontWords
     {
-        public const byte MaxOutcome = (byte)FrontOutcome.NoEnemyTrack;
+        public const byte MaxOutcome = (byte)FrontOutcome.NoDeltaV;
 
-        public static bool Good(FrontOutcome o) => (o >= FrontOutcome.Ok && o <= FrontOutcome.FocusCleared) || o == FrontOutcome.Relocated;
+        public static bool Good(FrontOutcome o) => (o >= FrontOutcome.Ok && o <= FrontOutcome.FocusCleared) || o == FrontOutcome.Relocated ||
+            o == FrontOutcome.Rephased || o == FrontOutcome.PassBooked || o == FrontOutcome.PassCancelled;
 
         public static string Callsign(Front f) => f == Front.Space ? "DARKSTAR" : f == Front.Cyber ? "HEXWARD" : "SHADOW";
 
@@ -73,6 +75,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case FrontOutcome.Packing: return "TRUCK IS PACKING UP";
                 case FrontOutcome.TruckBusy: return "TRUCK IS BUSY";
                 case FrontOutcome.NoEnemyTrack: return "NO CONFIRMED HOSTILE SATELLITE TRACK";
+                case FrontOutcome.NoPass: return "NO USABLE PASS FOR THIS ORDER";
                 default: return "";
             }
         }
@@ -102,6 +105,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case FrontOutcome.RateLimited: return "TOO FAST, WAIT A MOMENT";
                 case FrontOutcome.BadFront: return "NO SUCH FRONT";
                 case FrontOutcome.Relocated: return "BURN STARTED · ETA " + FrontRules.Clock(detail) + " · FUEL -" + amount + " %";
+                case FrontOutcome.Rephased: return "PASS RETIMING · ETA " + FrontRules.Clock(detail) + " · RESERVE -" + amount + " M/S";
+                case FrontOutcome.PassBooked: return "COLLECTION BOOKED · T-" + FrontRules.Clock(detail);
+                case FrontOutcome.PassCancelled: return "COLLECTION CANCELLED";
+                case FrontOutcome.NoDeltaV: return "INSUFFICIENT MANEUVER RESERVE";
                 case FrontOutcome.NoFuel: return "NOT ENOUGH FUEL · NEEDS " + Math.Max(1, detail) + " %";
                 case FrontOutcome.Burning: return "BIRD IS MID-BURN · WAIT FOR IT TO PARK";
                 case FrontOutcome.NoMove: return "ALREADY OVER THAT POINT";
@@ -131,7 +138,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case FrontLogCode.Started: return call + Programme(id) + " FUNDED, BUILD " + FrontRules.Clock(row.B);
                 case FrontLogCode.Done:
                     return call + (id == ProgrammeId.LaunchSatellite ? "SATELLITE LAUNCHED" : Programme(id) + " COMPLETE");
-                case FrontLogCode.Effect: return call + "SATELLITE ON STATION · " + Bird(row.B);
+                case FrontLogCode.Effect: return call + "SATELLITE IN ORBIT · " + Bird(row.B);
                 case FrontLogCode.Failed:
                     string cause = Refusal((FrontOutcome)(byte)row.B, f);
                     return call + Programme(id) + " FAILED · " + (cause.Length > 0 ? cause : "NOTHING TO DO") + " · FUNDS RETURNED";

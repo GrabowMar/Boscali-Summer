@@ -242,6 +242,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal int SpaceSend(int[] markIds) =>
             markIds == null || markIds.Length == 0 || markIds.Length > SpaceCommand.MaxIds ? 0 : SendSpace(SpaceCommandKind.SendTasked, 0, markIds);
 
+        internal int SpaceSendOrbitalIntel(int contactId) => contactId > 0 ? SendSpace(SpaceCommandKind.SendOrbitalIntel, contactId, null) : 0;
+
+        internal TaskedResult SendOrbitalIntel(Player player, int requestId, int contactId) =>
+            space != null ? space.SendOrbitalIntel(player, requestId, contactId) : new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
+
         /// <summary>Claims a posted TASKED call by its id. No aim, price or priority is sent. Returns the request id (0 when not sent).</summary>
         internal int SpaceClaim(int postId) =>
             SendSpace(SpaceCommandKind.ClaimTasked, postId, null);

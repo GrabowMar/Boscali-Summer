@@ -68,8 +68,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 {
                     case "SATELLITES": label = "LAUNCH"; break;
                     case "DOWNLINK": window.ShowOrbitOperateForAutomation(); label = "OPEN DOWNLINK"; break;
-                    case "RELOCATE": window.ShowOrbitOperateForAutomation(); label = "PLAN BURN"; break;
+                    case "RELOCATE": window.ShowOrbitOperateForAutomation(); label = "PLAN NEW TRACK"; break;
+                    case "PLAN BURN": label = "PLAN NEW TRACK"; break;
                     case "CONFIRM BURN": label = "EXECUTE BURN"; break;
+                    case "PICK STATION": label = "PICK CROSSING"; break;
+                    case "BACK TO FLIGHT CONTROL": label = "RETURN TO WATCH"; break;
                 }
             }
             List<AvHit> hits = Hits(window);
@@ -200,7 +203,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (Field(window, "lastView") is FrontRoomView lv)
             {
                 int moving = 0;
-                foreach (OrbitTrackView b in lv.Birds) if (b.Own && b.Relocating) moving++;
+                foreach (OrbitTrackView b in lv.Birds)
+                {
+                    if (!b.Own) continue;
+                    if (b.Relocating) moving++;
+                    r["collection" + (int)b.Kind] = (int)b.CollectionStatus;
+                }
                 r["birdsMoving"] = moving;
                 for (int i = 0; i < lv.Shares.Length; i++) r["share" + i] = lv.Shares[i];
                 r["queue"] = lv.Queue.Count;
@@ -234,7 +242,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (room == null) return r;
             r["room"] = room.GetType().Name;
             r["enlarged"] = room is OrbitRoom orbit && orbit.Enlarged ? 1 : 0;
-            if (room is OrbitRoom acq) r["acquire"] = acq.AcquirePhase; // 0 WIDE, 1 SLEW, 2 RESOLVE, 3 done
+            if (room is OrbitRoom acq)
+            {
+                r["acquire"] = acq.AcquirePhase; // 0 WIDE, 1 SLEW, 2 RESOLVE, 3 done
+                r["downlink"] = acq.OperateDownlinkShown ? 1 : 0;
+                r["launchCrossing"] = Field(room, "launchStation") is Vector2 ? 1 : 0;
+                r["watchGridPicked"] = Field(room, "localAim") is Vector2 ? 1 : 0;
+                r["watchTitle"] = (Field(room, "watchLabel") as TMP_Text)?.text ?? "";
+                if (Field(room, "hasPass") is bool[] known && known.Length > 0) r["opticalForecast"] = known[0] ? 1 : 0;
+            }
             r["selKind"] = Int(Field(room, "selKind"));
             r["relocating"] = Bool(Field(room, "relocating"));
             r["hasPending"] = Bool(Field(room, "hasPending"));

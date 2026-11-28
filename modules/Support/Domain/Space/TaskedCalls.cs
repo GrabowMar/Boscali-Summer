@@ -185,6 +185,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             var shares = new List<EffortShare>(MaxMarks);
             var types = new Dictionary<int, int>();
             int newPlayers = 0;
+            // An intel report publishes a verified point. Keep its strike effort available for a pilot's later call.
+            bool spendsWork = action != SupportActionId.OrbitalIntel;
             for (int i = 0; i < markIds.Length; i++)
             {
                 int markId = markIds[i];
@@ -192,8 +194,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 if (!contacts.TryMark(markId, now, out marks[i]) || !contacts.TryProvenance(markId, now, out provenance[i]) ||
                     provenance[i].ObservationGeneration <= 0 || provenance[i].Player == 0 || provenance[i].TypeId < 0 ||
                     provenance[i].EarnedEffort < 0 || provenance[i].EarnedEffort > 1 ||
-                    consumed.ContainsKey(new WorkKey(markId, provenance[i].ObservationGeneration))) return false;
-                if (watchOfficer || provenance[i].EarnedEffort == 0) continue;
+                    (spendsWork && consumed.ContainsKey(new WorkKey(markId, provenance[i].ObservationGeneration)))) return false;
+                if (!spendsWork || watchOfficer || provenance[i].EarnedEffort == 0) continue;
                 types.TryGetValue(provenance[i].TypeId, out int sameType);
                 if (sameType >= 2) continue; // Additional legal targets do not mint a third paid token of this unit type.
                 types[provenance[i].TypeId] = sameType + 1;
@@ -204,13 +206,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 else { shares.Add(new EffortShare(player, 1)); if (!effortAdjustments.ContainsKey(player)) newPlayers++; }
             }
             var candidate = new TaskedCall(id, action, maker, watchOfficer, humanProfile, now, marks, shares.ToArray());
-            if (!CanPost(candidate, now) || consumed.Count + marks.Length > MaxConsumedTokens ||
+            if (!CanPost(candidate, now) || (spendsWork && consumed.Count + marks.Length > MaxConsumedTokens) ||
                 effortAdjustments.Count + newPlayers > SpaceContacts.MaxPlayers) return false;
             if (workOwner == null) { workOwner = contacts; contactsGeneration = contacts.Generation; }
-            for (int i = 0; i < marks.Length; i++)
-                consumed.Add(new WorkKey(marks[i].Id, provenance[i].ObservationGeneration), new UsedWork(now, marks[i].ExpiresAt));
+            if (spendsWork)
+                for (int i = 0; i < marks.Length; i++)
+                    consumed.Add(new WorkKey(marks[i].Id, provenance[i].ObservationGeneration), new UsedWork(now, marks[i].ExpiresAt));
             for (int i = 0; i < shares.Count; i++) Adjust(shares[i].Player, -shares[i].Effort);
-            Add(candidate, true);
+            Add(candidate, spendsWork);
             call = candidate;
             return true;
         }

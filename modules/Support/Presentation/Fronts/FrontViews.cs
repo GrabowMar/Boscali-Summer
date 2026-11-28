@@ -44,8 +44,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public int[] EnemyTrackIds;
         /// <summary>Whether the faction owns satellite i.</summary>
         public bool[] HasBird;
-        /// <summary>Each satellite's geostationary state (own / strongest enemy); null falls back to the default parking slots until the host owns it.</summary>
+        /// <summary>Friendly orbital elements and the strongest enemy's coarse tracking fixes.</summary>
         public GeoBird[] Geo, EnemyGeo;
+        public OrbitCollection[] Collections;
         /// <summary>The map point the pilot is aiming a perk at (calls aim / targeting pod), when there is one.</summary>
         public bool AimKnown;
         public float AimU, AimV;
@@ -316,57 +317,56 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         internal static float[] Reach => GeoSpace.Reach;
         private static readonly float[] OwnU = { 0.38f, 0.55f, 0.46f }, OwnV = { 0.42f, 0.58f, 0.50f }, FoeU = { 0.74f, 0.66f, 0.84f }, FoeV = { 0.26f, 0.40f, 0.22f };
 
-        /// <summary>A bird's geostationary state: the host's when the inputs carry it, else it sits parked at its default slot with a full tank.</summary>
+        /// <summary>The host's satellite state, with a position-only placeholder before the first snapshot.</summary>
         internal static GeoBird GeoOf(GeoBird[] src, int k, bool own) =>
             src != null && k < src.Length ? src[k] : new GeoBird(own ? OwnU[k] : FoeU[k], own ? OwnV[k] : FoeV[k], 100f);
 
         internal static string BirdCallsign(int k) => Names[k];
 
-        /// <summary>Slot longitude of a parked point: a fixed per-faction base plus the point's offset across the theatre at geostationary range (1 degree = 735 km). Flavour; it moves only when the bird really does.</summary>
-        internal static string SlotLon(string faction, bool own, float u, float theatreM)
+        private static OrbitTrackView Track(int k, bool own, in GeoBird g, in FrontInputs c, FrontRoomView v)
         {
-            float lon = 12f + FactionIdentity.Of(faction) % 600u / 10f + (own ? 0f : 9.6f) + (u - 0.5f) * theatreM / 735000f;
-            return lon.ToString("0.00", NetFmt) + "E";
-        }
-
-        private static OrbitTrackView Station(int k, bool own, GeoBird g, in FrontInputs c, FrontRoomView v)
-        {
-            float u = g.U(c.Now), radius = own ? GeoSpace.Footprint(Kinds[k], g.Bus) : 0f;
+            g.Project(c.Now, out float u, out float w);
+            float radius = own ? GeoSpace.Footprint(Kinds[k], g.Bus) : 0f;
+            OrbitCollection collection = own && c.Collections != null && k < c.Collections.Length ? c.Collections[k] : default;
             return new OrbitTrackView
             {
-                Kind = Kinds[k], Bus = g.Bus, Own = own, U = u, V = g.V(c.Now), FromU = g.FromU, FromV = g.FromV, TargetU = g.ToU, TargetV = g.ToV,
+                Kind = Kinds[k], Bus = g.Bus, Geo = g, Own = own, U = u, V = w, FromU = g.FromU, FromV = g.FromV, TargetU = g.ToU, TargetV = g.ToV,
                 Relocating = g.Moving(c.Now), EtaSeconds = g.Eta(c.Now), BurnCost = g.BurnCost, Fuel = g.Fuel, Radius = radius,
                 Overhead = own && v.HasFocus && g.Covers(c.Now, v.FocusU, v.FocusV, radius),
-                FootprintKm = radius * v.TheatreKm, Slot = SlotLon(c.Faction, own, u, c.Frame.W),
-                Catalog = "CAT " + (40000u + (FactionIdentity.Of(c.Faction) + 977u * (uint)(k + 1) + (own ? 0u : 3331u)) % 9000u),
+                FootprintKm = radius * v.TheatreKm,
+                Booked = collection.Status == OrbitCollection.Queued, CollectionStatus = collection.Status,
+                BookedU = collection.U, BookedV = collection.V, BookedAt = collection.At,
             };
         }
 
-        /// <summary>Each satellite parked over a point of the theatre (geostationary), its footprint, fuel and any transfer under way; the uplink sites; the focus pin the footprints are read against.</summary>
+        /// <summary>Projects the host's orbital elements, ground objectives and reported hostile tracks for the theatre plot.</summary>
         public static void Orbit(FrontRoomView v, in FrontInputs c)
         {
             v.Birds.Clear(); v.Sites.Clear();
             v.TheatreKm = c.Frame.W / 1000f;
             v.HasFocus = v.Row != null && v.Row.HasFocus && !IsWaiting(v.Row);
             v.FocusU = v.HasFocus ? c.Frame.U(v.Row.FocusX) : 0.5f; v.FocusV = v.HasFocus ? c.Frame.V(v.Row.FocusZ) : 0.5f;
+            v.HasAim = c.AimKnown;
+            v.AimU = c.AimU; v.AimV = c.AimV;
+            v.AimGrid = c.AimKnown ? OpsKit.Grid(c.Frame.X(c.AimU), c.Frame.Z(c.AimV)) : "";
             Sites(v, c);
             for (int k = 0; k < Kinds.Length; k++)
             {
                 // A bird never launched is not in orbit (its card says NOT LAUNCHED); a launched one that is down stays on the plate as lost.
                 bool has = c.HasBird != null && c.HasBird[k], lost = (c.BirdsDown & c.BirdsLaunched & (1 << k)) != 0;
                 if (!has && !lost) continue;
-                OrbitTrackView b = Station(k, true, GeoOf(c.Geo, k, true), c, v);
+                OrbitTrackView b = Track(k, true, GeoOf(c.Geo, k, true), c, v);
                 string word = C2Orbit.BirdState(Kinds[k], c.SpaceLinked, has, c.Family, c.RadarSeconds, c.RadarUnavailable, out C2Tone tone);
                 AvState state = C2Kit.StateOf(tone);
                 if (lost) { word = "LOST · RELAUNCH IT"; state = AvState.Danger; }
                 b.Alive = has && !lost; b.Overhead &= b.Alive; b.Callsign = Names[k]; b.State = word; b.Tone = state;
-                b.Orbit = "SLOT " + b.Slot + " · " + b.Catalog;
+                b.Orbit = b.Geo.Orbital ? b.Geo.AltitudeKm.ToString("0", NetFmt) + " KM · " + b.Geo.InclinationDeg.ToString("0.0", NetFmt) + "°" : "";
                 v.Birds.Add(b);
             }
             for (int k = 0; c.EnemyTrackIds != null && k < Kinds.Length && k < c.EnemyTrackIds.Length; k++)
             {
                 if (c.EnemyTrackIds[k] <= 0) continue;
-                OrbitTrackView b = Station(k, false, GeoOf(c.EnemyGeo, k, false), c, v);
+                OrbitTrackView b = Track(k, false, GeoOf(c.EnemyGeo, k, false), c, v);
                 b.TrackId = c.EnemyTrackIds[k];
                 b.Alive = true; b.Callsign = "T" + b.TrackId + " · " + GeoSpace.Names[k]; b.State = "COARSE TRACK"; b.Tone = AvState.Danger;
                 v.Birds.Add(b);

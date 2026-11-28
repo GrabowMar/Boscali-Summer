@@ -11,17 +11,18 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>The upper speed bound of a window that admits every ground contact, static and moving (RECON PASS).</summary>
         public const float AnySpeed = float.MaxValue;
         public readonly BirdKind Source;
+        public readonly bool Booked;
         public readonly float X, Z, Radius, CreatedAt, ExpiresAt, MinimumSpeed, MaximumSpeed;
 
         private SpaceRevealWindow(BirdKind source, float x, float z, float radius, float now,
-            float expiresAt, float minimumSpeed, float maximumSpeed)
+            float expiresAt, float minimumSpeed, float maximumSpeed, bool booked)
         {
             Source = source; X = x; Z = z; Radius = radius; CreatedAt = now; ExpiresAt = expiresAt;
-            MinimumSpeed = minimumSpeed; MaximumSpeed = maximumSpeed;
+            MinimumSpeed = minimumSpeed; MaximumSpeed = maximumSpeed; Booked = booked;
         }
 
         public static bool TryCreate(BirdKind source, float x, float z, float radius, float now,
-            float seconds, float minimumSpeed, float maximumSpeed, out SpaceRevealWindow window)
+            float seconds, float minimumSpeed, float maximumSpeed, out SpaceRevealWindow window, bool booked = false)
         {
             window = default;
             float expiresAt = now + seconds;
@@ -30,7 +31,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 !float.IsFinite(seconds) || seconds <= 0 || seconds > 300 || !float.IsFinite(expiresAt) ||
                 expiresAt <= now || !float.IsFinite(minimumSpeed) || minimumSpeed < 0 ||
                 !float.IsFinite(maximumSpeed) || maximumSpeed < minimumSpeed) return false;
-            window = new SpaceRevealWindow(source, x, z, radius, now, expiresAt, minimumSpeed, maximumSpeed);
+            window = new SpaceRevealWindow(source, x, z, radius, now, expiresAt, minimumSpeed, maximumSpeed, booked);
             return true;
         }
 

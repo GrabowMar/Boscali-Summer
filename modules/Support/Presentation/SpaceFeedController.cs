@@ -24,11 +24,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
     /// <para>In-process SPACE replies arrive on the next Update, so a request id is registered here as soon as the request call
     /// returns it. A MARK replay returns the historical verdict and is worded as history.</para>
     /// </summary>
-    internal sealed class SpaceFeedController : MonoBehaviour, ISceneService, ISpaceFeedActions
+    internal sealed partial class SpaceFeedController : MonoBehaviour, ISceneService, ISpaceFeedActions
     {
         private const float RefreshFull = 0.08f, RequestTimeout = 6f, WordsHold = 10f;
         private const float OpticalWidth = 640f, OpticalHeight = 400f;
-        private const float RadarAltitude = 600000f, GeoAltitude = 35786000f;
         /// <summary>After an own rod lands the STRIKE view holds on the impact this long (mission seconds).</summary>
         private const float StrikeHold = 8f;
 
@@ -45,6 +44,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         /// <summary>Until this unscaled time MIS JOBS is reading the posts: hold the feed lease (posts arrive with it) without rebuilding the ORBIT view.</summary>
         internal float WatchUntil { get; set; }
+        internal bool ReportWatch { get; set; }
         private float nextRefresh, nextActivity, failedUntil;
         private int lastFaction;
 
@@ -53,6 +53,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private DownlinkPost post;
         private readonly Vector2[] glowUv = new Vector2[DownlinkPost.MaxGlows];
         private int sarSerial, radarBaseline, cameraBaseline;
+        private float sarCaptureAt = -1f;
         private GlobalPosition sarTarget;
         private bool baselined;
 
@@ -67,6 +68,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private float markAt, sendAt;
         // SEND TO TASKED: the track whose MARK the press sent; the TRANSMIT follows once that mark is on the board.
         private int chainTrack;
+        private bool chainSingle;
         private float chainAt;
 
         // Telemetry: what changed since the last look at the mirrors. Baselined on the first sample, so nothing that happened before the room existed is reported as news.
@@ -113,6 +115,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             leaseOpen = false;
             visible = false;
             WatchUntil = 0f;
+            ReportWatch = false;
             baselined = false;
             SpaceCockpitThreatProbe.ResetForScene();
             DisposeSensors();
@@ -134,6 +137,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             sar?.Dispose();
             sar = null;
             sarSerial = 0;
+            sarCaptureAt = -1f;
         }
 
         /// <summary>Faction change, scene reset or operator loss: nothing of the old view may be painted again.</summary>
@@ -156,6 +160,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
             sar?.Dispose();
             sar = null;
             sarSerial = 0;
+            sarCaptureAt = -1f;
+            cameraBaseline = cameraSeen = manager?.CameraSerial ?? 0;
+            radarBaseline = radarSeen = manager?.RadarScanSerial ?? 0;
             imager?.SetApprovedContacts(null);
             dirty = true;
         }
@@ -178,7 +185,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AdvanceChain(now);
             WatchEvents(now);
 
-            bool wanted = visible || Time.unscaledTime < WatchUntil;
+            bool wanted = visible || ReportWatch || Time.unscaledTime < WatchUntil;
             leaseOpen = manager.SpaceFeedWanted; // a link or faction reset clears the manager's lease; follow it so the feed re-opens
             if (wanted && !leaseOpen) { manager.SpaceOpenFeed(); leaseOpen = true; }
             else if (!wanted && leaseOpen)
@@ -272,7 +279,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
             FillImage(state, known, now);
             view.ImageAge = -1f;
             view.ImageStale = false;
-            float lookAt = draft.Source == BirdKind.Radar ? radarAt : draft.Source == BirdKind.Optical ? cameraAt : -1f;
+            float lookAt = draft.Source == BirdKind.Radar ? sarCaptureAt : draft.Source == BirdKind.Optical ? cameraAt : -1f;
+            if (view.LookNote == "BOOKED COLLECTION" && TryCollectedLook(draft.Source, now, out _, out float capturedAt))
+                lookAt = capturedAt;
             if (view.ImageKind != FeedImageKind.None && lookAt >= 0f)
             {
                 view.ImageAge = Math.Max(0f, now - lookAt);
@@ -359,12 +368,29 @@ namespace BoscaliSummer.Modules.Support.Presentation
             else FillOptical(state, now, player.HQ);
         }
 
-        private bool TryAim(BirdKind bird, SpaceFeedState state, FactionHQ hq, float now, out GlobalPosition aim)
+        private bool TryCollectedLook(BirdKind bird, float now, out GlobalPosition aim, out float capturedAt)
         {
+            aim = default;
+            capturedAt = -1f;
+            var ops = manager.OpsMirror;
+            if ((int)bird >= OrbitCollection.SensorCount || !ops.Known || !ops.State.Active || ops.State.Faction != lastFaction) return false;
+            OrbitCollection collection = ops.State.Collections[(int)bird];
+            if (collection.Status != OrbitCollection.Collected || now - collection.At >= OrbitCollection.RetainSeconds) return false;
+            Fronts.MapFrame frame = Fronts.FrontController.Frame();
+            aim = new GlobalPosition(frame.X(collection.U), 0f, frame.Z(collection.V));
+            capturedAt = collection.At;
+            return true;
+        }
+
+        private bool TryAim(BirdKind bird, SpaceFeedState state, FactionHQ hq, float now, out GlobalPosition aim, out float captureAt)
+        {
+            bool collected = TryCollectedLook(bird, now, out GlobalPosition collectedAt, out float collectionTime) && collectionTime >= cameraAt;
+            captureAt = collected ? collectionTime : cameraAt >= 0f ? cameraAt : now;
             int index = IndexOf(draft.Selected);
             // STARE: zoomed in with a track selected, the look follows it.
             if (draft.Zoom > 1.01f && bird == BirdKind.Optical && index >= 0) { aim = new GlobalPosition(entries[index].X, 0f, entries[index].Z); return true; }
-            if (bird == BirdKind.Optical && manager.CameraSerial > cameraBaseline) { aim = manager.CameraTarget; return true; }
+            if (collected) { aim = collectedAt; aimNote = "BOOKED COLLECTION"; return true; }
+            if (bird == BirdKind.Optical && manager.CameraSerial > cameraBaseline && now - cameraAt < StaleLookSeconds) { aim = manager.CameraTarget; return true; }
             if (bird == BirdKind.Radar && manager.RadarScanSerial > radarBaseline) { aim = manager.RadarScanTarget; return true; }
             // Another pilot's look: centre on what the faction's reveals say.
             float x = 0f, z = 0f;
@@ -378,7 +404,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             return TryDefaultLook(bird, hq, now, out aim); // nothing picked yet: the ground under the bird
         }
 
-        // The default look, cached per bird and parked point (a burn moves it): its search casts up to ~180 rays once.
+        // The default look caches the current acquisition centre. Its terrain search casts up to ~180 rays.
         private const float DefaultLookMove = 500f;
         private BirdKind lookBird;
         private SatelliteBus lookBus;
@@ -388,8 +414,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private static readonly Func<float, float, bool> IsLand = Land;
 
         /// <summary>
-        /// Where a bird nobody pointed looks: the default slots sit over the theatre's inner sea, and a nadir over water images as a flat sheet. The
-        /// airbase nearest the nadir inside the footprint, else the nadir on land, else the nearest land (<see cref="SpaceFeedRules.DefaultLook"/>).
+        /// The nearest in-swath airbase or ground under a passing satellite, when nobody has assigned a look.
         /// </summary>
         private bool TryDefaultLook(BirdKind bird, FactionHQ hq, float now, out GlobalPosition aim)
         {
@@ -397,6 +422,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (hq == null || !manager.TryOwnGeo(hq, (int)bird, out GeoBird geo)) return false;
             Fronts.MapFrame frame = Fronts.FrontController.Frame();
             var nadir = new GlobalPosition(frame.X(geo.U(now)), 0f, frame.Z(geo.V(now)));
+            if (!geo.NextTheatrePass(now, out OrbitPass pass) || !pass.Contains(now)) return false;
             if (bird != lookBird || geo.Bus != lookBus || !(Mathf.Abs(nadir.x - lookKeyX) <= DefaultLookMove && Mathf.Abs(nadir.z - lookKeyZ) <= DefaultLookMove))
             {
                 lookBird = bird; lookBus = geo.Bus; lookKeyX = nadir.x; lookKeyZ = nadir.z;
@@ -451,13 +477,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
             GlobalPosition aim;
             bool aimed;
             aimNote = "";
-            if (!strikeView) aimed = TryAim(BirdKind.Optical, state, hq, now, out aim);
+            float captureAt = now;
+            if (!strikeView) aimed = TryAim(BirdKind.Optical, state, hq, now, out aim, out captureAt);
             else if (haveStrike) { aim = strike.Target; aimed = true; } // the newest own rod, held 8 s past its impact
             else aimed = TryDefaultLook(BirdKind.Kinetic, hq, now, out aim);
             view.LookNote = aimNote;
             if (!aimed)
             {
-                view.Refusal = "NO CAMERA LOOK YET — FIRE SAT CAMERA AT THE MAP, OR WAIT FOR A REVEAL";
+                view.Refusal = "NO CAMERA PRODUCT · BOOK A PASS IN OPERATE";
                 return;
             }
             EnsureImager();
@@ -483,9 +510,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
             BirdKind bird = strikeView ? BirdKind.Kinetic : BirdKind.Optical;
             imager.Visible = true;
             imager.SetApprovedContacts(state.Contacts);
-            imager.Aim(aimLocal, SatelliteSky.LineOfSight(bird), Vector3.forward, footprint, 8f);
+            Vector3 los = SatelliteSky.LineOfSight(bird, lookAt, captureAt);
+            imager.Aim(aimLocal, los, Vector3.forward, footprint, 8f);
             Look(lookAt, footprint);
-            FillTelemetry(bird, footprint, haveSky, sky);
+            FillTelemetry(bird, los, footprint, haveSky, sky);
             view.ImageKind = FeedImageKind.Optical;
             view.ImageAspect = OpticalWidth / OpticalHeight;
             IReadOnlyList<OpticalBracket> found = imager.Brackets;
@@ -536,12 +564,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         /// The burn-in numbers, all derived from what the client already has: ground sample distance off the framed width, slant range and elevation off
         /// the bird's line of sight, the sun's height and the way shadows fall off the scene's sun, and the cloud word off the sky sample.
         /// </summary>
-        private void FillTelemetry(BirdKind bird, float footprint, bool haveSky, in WeatherViewSample sky)
+        private void FillTelemetry(BirdKind bird, Vector3 los, float footprint, bool haveSky, in WeatherViewSample sky)
         {
             bool sar = bird == BirdKind.Radar;
-            Vector3 los = SatelliteSky.LineOfSight(bird);
             float elevation = Mathf.Asin(Mathf.Clamp(los.y, -1f, 1f));
-            float slantKm = (sar ? RadarAltitude : GeoAltitude) / 1000f / Mathf.Max(0.2f, Mathf.Sin(elevation));
+            float slantKm = GeoOrbit.AltitudeKm(bird) / Mathf.Max(0.2f, Mathf.Sin(elevation));
             string[] t = view.Telemetry;
             t[0] = sar ? "RES 1.0 M" : "GSD " + (footprint / OpticalWidth).ToString("0.00", CultureInfo.InvariantCulture) + " M";
             t[1] = "SLANT " + Mathf.RoundToInt(slantKm).ToString(CultureInfo.InvariantCulture) + " KM";
@@ -562,10 +589,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void FillRadar(SpaceFeedState state, float now)
         {
-            if (manager.RadarScanSerial > radarBaseline && manager.RadarScanSerial != sarSerial) BeginSar(manager.RadarScanTarget, manager.RadarScanSerial, now);
+            if (TryCollectedLook(BirdKind.Radar, now, out GlobalPosition target, out float captureAt) && captureAt > sarCaptureAt && captureAt >= radarAt)
+                BeginSar(target, BitConverter.SingleToInt32Bits(captureAt), now, captureAt);
+            else if (manager.RadarScanSerial > radarBaseline && manager.RadarScanSerial != sarSerial && radarAt > sarCaptureAt)
+                BeginSar(manager.RadarScanTarget, manager.RadarScanSerial, now, radarAt);
             if (sar == null || sar.Phase == SarPhase.Idle)
             {
-                view.Refusal = "NO RADAR PRODUCT YET — FIRE RECON PASS AT THE MAP";
+                view.Refusal = "NO RADAR PRODUCT · BOOK A PASS IN OPERATE";
                 return;
             }
             sar.Visible = true;
@@ -574,10 +604,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
             sar.Tick(now);
             if (sar.Image == null) { view.Refusal = "NEGATIVE: RADAR PRODUCT UNAVAILABLE — FIRE RECON PASS AGAIN"; return; }
             view.ImageKind = FeedImageKind.Sar;
+            if (sarCaptureAt != radarAt) view.LookNote = "BOOKED COLLECTION";
             view.Image = sar.Image;
             view.ImageAspect = SarCollector.ImageWidth / (float)SarCollector.ImageHeight;
             Look(sarTarget, 2f * settings.SarSceneRadius.Value);
-            FillTelemetry(BirdKind.Radar, 0f, false, default);
+            FillTelemetry(BirdKind.Radar, SatelliteSky.LineOfSight(BirdKind.Radar, sarTarget, sarCaptureAt), 0f, false, default);
             if (sar.Phase == SarPhase.Complete)
                 for (int i = 0; i < state.Contacts.Count && view.Brackets.Count < SpaceFeedView.MaxBrackets; i++)
                 {
@@ -591,17 +622,19 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 }
         }
 
-        private void BeginSar(GlobalPosition target, int serial, float now)
+        private void BeginSar(GlobalPosition target, int serial, float now, float capturedAt)
         {
             if (sar == null) sar = new SarCollector();
-            Vector3 los = SatelliteSky.LineOfSight(BirdKind.Radar);
+            Vector3 los = SatelliteSky.LineOfSight(BirdKind.Radar, target, capturedAt);
             double horizontal = Math.Sqrt((double)los.x * los.x + (double)los.z * los.z);
             double elevation = Math.Atan2(los.y, horizontal);
             double azX = horizontal > 1e-6 ? los.x / horizontal : 0.0, azZ = horizontal > 1e-6 ? los.z / horizontal : 1.0;
-            double slant = RadarAltitude / Math.Max(0.2, Math.Sin(elevation));
-            sar.Begin(target, Math.PI * 0.5 - elevation, azX, azZ, slant, RadarAltitude,
+            double altitude = 1000 * GeoOrbit.AltitudeKm(BirdKind.Radar);
+            double slant = altitude / Math.Max(0.2, Math.Sin(elevation));
+            sar.Begin(target, Math.PI * 0.5 - elevation, azX, azZ, slant, altitude,
                 settings.SarSceneRadius.Value, serial, now);
             sarSerial = serial;
+            sarCaptureAt = capturedAt;
             sarTarget = target;
         }
 
@@ -624,7 +657,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void AdvanceChain(float now)
         {
             if (chainTrack == 0 || markRequest != 0) return; // still waiting for the verdict
-            if (MarkedId(chainTrack)) { int lead = chainTrack; chainTrack = 0; SendMarks(lead); return; } // the press's target leads the package
+            if (MarkedId(chainTrack)) { int lead = chainTrack; chainTrack = 0; SendMarks(lead, chainSingle); return; }
             if (now - chainAt > RequestTimeout * 2f) { chainTrack = 0; Say("NEGATIVE: MARK NOT ON THE BOARD — PRESS SEND AGAIN", AvState.Danger, AvUiCue.Caution); }
         }
 
@@ -792,7 +825,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (index >= 0 && SpaceFeedEntries.CanConfirm(entries[index]))
             {
                 Confirm();
-                if (markRequest != 0) { chainTrack = markTrack; chainAt = SupportManager.MissionNow(); }
+                if (markRequest != 0) { chainTrack = markTrack; chainSingle = false; chainAt = SupportManager.MissionNow(); }
                 return;
             }
             if (manager.SpaceMirror.State.Marks.Count == 0) { Say("NEGATIVE: NOTHING TO TRANSMIT — SELECT A TARGET", AvState.Danger, AvUiCue.Caution); return; }
@@ -803,11 +836,16 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             int index = IndexOf(draft.Selected);
             if (manager == null || index < 0 || !SpaceFeedEntries.CanConfirm(entries[index]) || markRequest != 0) return;
+            RequestMark(entries[index].Id);
+        }
+
+        private void RequestMark(int track)
+        {
             if (manager.SpaceMirror.State.LiveMarks >= SpaceWire.MaxMarks) { Say("NEGATIVE: 12 OF 12 MARKS HELD — TRANSMIT OR WAIT", AvState.Danger, AvUiCue.Caution); return; }
-            int id = manager.SpaceMark(entries[index].Id);
+            int id = manager.SpaceMark(track);
             if (id <= 0) { Say("NEGATIVE: NO HOST LINK — WAIT FOR THE LINK, THEN PRESS AGAIN", AvState.Danger, AvUiCue.Caution); return; }
             markRequest = id; // registered before the verdict: in-process replies land on the next Update
-            markTrack = entries[index].Id;
+            markTrack = track;
             markAt = SupportManager.MissionNow();
             Say("MARK SENT — STAND BY FOR THE HOST", AvState.Info, AvUiCue.Press);
         }
@@ -815,19 +853,29 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public void Send() => SendMarks(draft.Selected);
 
         /// <summary>TRANSMIT the live marks (at most six), <paramref name="lead"/> first when it is one of them.</summary>
-        private void SendMarks(int lead)
+        private bool SendMarks(int lead, bool single = false)
         {
-            if (manager == null || sendRequest != 0) return;
+            if (manager == null || sendRequest != 0) return false;
             var marks = manager.SpaceMirror.State.Marks;
-            int n = SpaceFeedEntries.SendIds(marks, lead, sendIds);
-            if (n == 0) return;
-            var ids = new int[n];
-            Array.Copy(sendIds, ids, n);
-            int id = manager.SpaceSend(ids);
-            if (id <= 0) { Say("NEGATIVE: NO HOST LINK — WAIT FOR THE LINK, THEN PRESS AGAIN", AvState.Danger, AvUiCue.Caution); return; }
+            int id;
+            if (single)
+            {
+                if (!MarkedId(lead)) return false;
+                id = manager.SpaceSendOrbitalIntel(lead);
+            }
+            else
+            {
+                int n = SpaceFeedEntries.SendIds(marks, lead, sendIds);
+                if (n == 0) return false;
+                var ids = new int[n];
+                Array.Copy(sendIds, ids, n);
+                id = manager.SpaceSend(ids);
+            }
+            if (id <= 0) { Say("NEGATIVE: NO HOST LINK — WAIT FOR THE LINK, THEN PRESS AGAIN", AvState.Danger, AvUiCue.Caution); return false; }
             sendRequest = id;
             sendAt = SupportManager.MissionNow();
             Say("TRANSMIT SENT — STAND BY FOR THE HOST", AvState.Info, AvUiCue.Press);
+            return true;
         }
 
 
@@ -842,7 +890,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 AvState markTone = good ? AvState.Ready : reply.Verdict == MarkVerdict.Neutral || reply.Verdict == MarkVerdict.Decoy || reply.Replayed ? AvState.Caution : AvState.Danger;
                 Say(words, markTone, good ? AvUiCue.Confirm : AvUiCue.Caution);
             }
-            else if (reply.Kind == SpaceCommandKind.SendTasked && reply.RequestId == sendRequest && sendRequest != 0)
+            else if ((reply.Kind == SpaceCommandKind.SendTasked || reply.Kind == SpaceCommandKind.SendOrbitalIntel) &&
+                reply.RequestId == sendRequest && sendRequest != 0)
             {
                 sendRequest = 0;
                 bool posted = reply.Tasked == TaskedOutcome.Posted;
@@ -850,7 +899,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 {
                     if (posted) postedAt = SupportManager.MissionNow();
                 }
-                Say(SpaceFeedRules.SendWords(reply.Tasked, reply.Detail, reply.Replayed), posted && !reply.Replayed ? AvState.Ready : AvState.Danger,
+                string receipt = posted && reply.Kind == SpaceCommandKind.SendOrbitalIntel
+                    ? (reply.Replayed ? "EARLIER · " : "") + "INTEL ON MIS · JOB " + reply.CallId
+                    : SpaceFeedRules.SendWords(reply.Tasked, reply.Detail, reply.Replayed);
+                Say(receipt, posted && !reply.Replayed ? AvState.Ready : AvState.Danger,
                     posted && !reply.Replayed ? AvUiCue.Confirm : AvUiCue.Caution);
             }
         }

@@ -32,7 +32,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public void HoldStation(FactionHQ owner, BirdKind bird, float now)
         {
             FactionRun run = RunFor(owner);
-            if (run != null) run.RestUntil[(int)bird] = now + GeoSpace.DirectorGap;
+            if (run != null) run.RestUntil[(int)bird] = now + Math.Max(GeoSpace.DirectorGap, GeoOrbit.PeriodSeconds(bird));
         }
 
         /// <summary>One host frame. Cheap while nothing is due: each faction's policy throttles itself to one think per two mission seconds.</summary>
@@ -91,6 +91,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             float u = GeoSpace.U(x, span.x), v = GeoSpace.V(z, span.y);
             int bird = GeoSpace.PickBird(state, now, run.RestUntil, u, v);
             if (bird < 0) return;
+            if (manager.Fronts != null && manager.Fronts.CollectionImminent(owner, (BirdKind)bird, now)) return;
             if (service.TryRelocate(owner, bird, u, v, now, out _) == GeoSpace.Refusal.None) run.RestUntil[bird] = now + GeoSpace.DirectorGap;
         }
 
@@ -174,8 +175,19 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         ? WatchOfficerPolicy.KindOf(definition.code, definition.roleIdentity.antiSurface, definition.roleIdentity.antiAir) : WatchKind.Other;
                     targets.Add(new WatchTarget(c.Id, c.X, c.Z, value, kind, c.Moving, IsStrategic(unit), c.ExpiresAt, FrontMeters(c.X, c.Z)));
                 }
-                for (int i = 0; i < sites.Count; i++) into.Add(sites[i]);
+                Vector2 span = BoscaliSummer.Core.Game.TheaterFrame.Resolve();
+                if (inputs.RadarReadyIn <= 0f && !(manager.Fronts != null && manager.Fronts.CollectionImminent(owner, BirdKind.Radar, now)))
+                    foreach (WatchSite site in sites)
+                        if (Overhead(state, BirdKind.Radar, now, site, span)) into.Add(site);
+                if (into.Count > 0) return;
+                inputs.RadarReadyIn = float.PositiveInfinity;
+                if (inputs.OpticalReadyIn <= 0f && !(manager.Fronts != null && manager.Fronts.CollectionImminent(owner, BirdKind.Optical, now)))
+                    foreach (WatchSite site in sites)
+                        if (site.OpticalOk && Overhead(state, BirdKind.Optical, now, site, span)) into.Add(site);
             }
+
+            private static bool Overhead(SpaceState state, BirdKind kind, float now, in WatchSite site, Vector2 span) =>
+                state.Covers(kind, now, GeoSpace.U(site.X, span.x), GeoSpace.V(site.Z, span.y));
 
             private float Ready(SpaceState state, SupportActionId action, BirdTask task, float now) =>
                 manager.ActionEnabled(action) ? state.ReadyIn(task, now) : float.PositiveInfinity;
@@ -270,13 +282,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 SupportActionId action = radar ? SupportActionId.Recon : SupportActionId.SatCamera;
                 if (!manager.ActionEnabled(action)) return false;
                 float now = SupportManager.MissionNow();
+                BirdKind bird = radar ? BirdKind.Radar : BirdKind.Optical;
+                if (!Overhead(state, bird, now, site, BoscaliSummer.Core.Game.TheaterFrame.Resolve()) ||
+                    (manager.Fronts != null && manager.Fronts.CollectionImminent(owner, bird, now))) return false;
                 if (!state.TryReserve(radar ? BirdTask.Scan : BirdTask.Camera, now, out SpaceTaskReservation receipt)) return false;
                 var transaction = new SpaceActionTransaction(service, owner, state, receipt, manager.TaskSecondsOf(action));
-                // No free reveal: if the task could not be committed after the window opens, it must not open at all.
-                if (!transaction.CanLaunch) { transaction.Cancel(); return false; }
                 var point = new GlobalPosition(site.X, 0f, site.Z);
                 SpaceObservations.OpenWalk walk;
-                try { walk = service.BeginScan(owner, point, radar ? manager.Settings.SarSceneRadius.Value : manager.Settings.OpticalSceneRadius.Value, radar); }
+                try { walk = service.BeginScan(owner, point, radar ? manager.Settings.SarSceneRadius.Value : manager.Settings.OpticalSceneRadius.Value, radar, transaction.Commit); }
                 catch (Exception e)
                 {
                     transaction.Cancel();
@@ -284,12 +297,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     return false;
                 }
                 if (walk == null) { transaction.Cancel(); return false; }
-                // The unit walk (line of sight per unit) was an 18 ms lump: it runs in 1.5 ms slices from Pump; commit and log land when it ends.
-                pending = new PendingScan { Walk = walk, Transaction = transaction, Radar = radar, SiteKey = site.Key };
+                // The unit walk is pumped in slices after committing the reserved pass.
+                pending = new PendingScan { Walk = walk, Radar = radar, SiteKey = site.Key };
                 return true;
             }
 
-            private struct PendingScan { public SpaceObservations.OpenWalk Walk; public SpaceActionTransaction Transaction; public bool Radar; public int SiteKey; }
+            private struct PendingScan { public SpaceObservations.OpenWalk Walk; public bool Radar; public int SiteKey; }
             private PendingScan pending;
 
             /// <summary>Advances the scan in flight one slice (or to its end when <paramref name="budgetMs"/> is infinite).</summary>
@@ -301,13 +314,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 try { more = p.Walk.Step(budgetMs); }
                 catch (Exception e)
                 {
-                    pending = default; p.Transaction.Cancel(); policy.NoteScanFailed(now, p.SiteKey);
+                    pending = default; policy.NoteScanFailed(now, p.SiteKey);
                     Plugin.Logger?.LogWarning("[Support.Overlord] " + Name + " scan failed: " + e.Message);
                     return;
                 }
                 if (more) return;
                 pending = default;
-                if (!p.Transaction.Commit()) { p.Transaction.Cancel(); policy.NoteScanFailed(now, p.SiteKey); return; }
                 Plugin.Logger?.LogInfo("[Support.Overlord] " + Name + " " + (p.Radar ? "RADAR SCAN" : "SAT CAMERA") + " of a public objective -> " + p.Walk.Admitted + " contact(s).");
             }
         }
