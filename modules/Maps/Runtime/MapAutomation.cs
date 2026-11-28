@@ -154,15 +154,29 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                     row["instances"] = row.Value<int>("instances") + 1;
                 }
             }
+            var instances = Object.FindObjectOfType<MapSceneryInstances>();
+            bool sceneryReady = instances != null && instances.Ready;
+            int sceneryInstances = instances != null ? instances.InstanceCount : 0;
+            long sceneryBufferBytes = instances != null ? instances.AllocatedBytes : 0L;
+            int sceneryVisible = 0;
+            if (sceneryReady && args != null && args.TryGetValue("visibleInstances", out object measure) && Convert.ToBoolean(measure))
+                instances.TryGetVisibleCount(out sceneryVisible);
             var root = new JObject
             {
                 ["renderers"] = renderers, ["lodGroups"] = lodGroups, ["noMesh"] = culled,
                 ["triangles"] = triangles, ["vertices"] = vertices,
+                ["sceneryReady"] = sceneryReady, ["sceneryInstances"] = sceneryInstances,
+                ["sceneryBufferBytes"] = sceneryBufferBytes, ["sceneryVisible"] = sceneryVisible,
                 ["materials"] = new JArray(byMaterial.Values.OrderByDescending(r => r.Value<long>("tris")).Take(40)),
             };
             File.WriteAllText(path, root.ToString(Formatting.None));
             Plugin.Logger?.LogInfo("[Maps] Perf: " + renderers + " renderers, " + triangles + " triangles, " + byMaterial.Count + " materials -> " + path);
-            return new Dictionary<string, object> { ["ok"] = true, ["path"] = path, ["renderers"] = renderers, ["triangles"] = triangles };
+            return new Dictionary<string, object>
+            {
+                ["ok"] = true, ["path"] = path, ["renderers"] = renderers, ["triangles"] = triangles,
+                ["sceneryReady"] = sceneryReady, ["sceneryInstances"] = sceneryInstances,
+                ["sceneryBufferBytes"] = sceneryBufferBytes, ["sceneryVisible"] = sceneryVisible,
+            };
         }
 
         /// <summary>A mesh's vertex colours, or null when it has none or was imported without Read/Write — a

@@ -43,6 +43,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
         public bool BuildFailed;
         /// <summary>Meshes, materials and assets made for the template; destroyed with it.</summary>
         public readonly List<Object> Owned = new List<Object>();
+        public readonly List<MapScenery.PlacementBatch> SceneryInstances = new List<MapScenery.PlacementBatch>();
         /// <summary>The tree material of each forest, made at the first load of the map.</summary>
         public readonly Dictionary<int, Material> TreeMaterials = new Dictionary<int, Material>();
     }
@@ -199,6 +200,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             foreach (Object made in entry.Owned)
                 if (made != null) Object.Destroy(made);
             entry.Owned.Clear();
+            entry.SceneryInstances.Clear();
             entry.TreeMaterials.Clear();
             if (entry.Bundle != null) entry.Bundle.Unload(true);
             entry.Bundle = null;
