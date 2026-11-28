@@ -83,6 +83,13 @@ def railgun(name, command="read"):
     return json.loads(response["value"])
 
 
+def skywell(name, command="read"):
+    response = live.call(name, "POST", "/call", params={
+        "path": "BoscaliSummer.Modules.Megaplane.MegaplaneSkywellProbe.Peer",
+    }, body={"args": [command]}, timeout=12)
+    return json.loads(response["value"])
+
+
 def wait_system(names, read, stage, predicate, timeout=55):
     deadline = time.monotonic() + timeout
     states = []
@@ -139,6 +146,34 @@ def exercise_railgun(names, report, checks):
     checks["client_deselects_and_stows_trident"] = not any(s["live"] or s["wanted"] for s in stowed)
 
 
+def exercise_skywell(names, report, checks):
+    skywell(names[0], "spawn")
+    readings = report["client_skywell"] = {}
+    initial = readings["initial"] = wait_system(names, skywell, "waiting for the Skywell pilot", lambda h, c:
+        h["server"] and not h["local"] and c["authority"] and c["local"] and c["ready"] and
+        all(s["separated"] and s["seated"] and s["gearUp"] and s["speed"] > 131 for s in (h, c)))
+    deploy = readings["deploy"] = skywell(names[1], "trigger")
+    tow = readings["tow"] = wait_system(names, skywell, "deploying Skywell", lambda h, c:
+        all(s["state"] == "Tow" and s["visible"] and s["tenderY"] < -23 and s["tenderZ"] < -78 for s in (h, c)), 75)
+    reel = readings["reel"] = skywell(names[1], "trigger")
+    readings["stowed"] = wait_system(names, skywell, "reeling Skywell back in", lambda h, c:
+        h["state"] == c["state"] == "Stowed", 75)
+    checks["client_skywell_reaches_tow_and_stows_on_both_peers"] = deploy["triggered"] and reel["triggered"]
+    checks["client_skywell_leaves_the_cargo_ramp_and_stock_alone"] = all(s["ramp"] == 0 and s["kitAmmo"] == 1 and
+        s["cargoAmmo"] == base["cargoAmmo"] > 0 for s, base in zip(tow, initial))
+    checks["client_skywell_uses_the_dedicated_store_on_both_peers"] = all(s["kitKey"] == "VG_Skywell_Groza" for s in initial)
+    wing_read = lambda name: skywell(name, "wing-read")
+    wing_initial = readings["wing_initial"] = wait_system(names, wing_read, "verifying the wing fit", lambda h, c:
+        all(s["bayAmmo"] == 6 and s["externalAmmo"] == 4 and s["closed"] for s in (h, c)))
+    wing_trigger = readings["wing_trigger"] = skywell(names[1], "wing-fire")
+    wing_released = readings["wing_released"] = wait_system(names, wing_read, "launching a wing drone", lambda h, c:
+        h["released"] == 1 and len(h["missileIds"]) == 1 and h["missileIds"] == c["missileIds"] and
+        all(s["bayAmmo"] == 5 for s in (h, c)))
+    checks["client_launch_replicates_one_internal_drone_and_its_launch_door"] = wing_trigger["triggered"] and all(
+        s["externalAmmo"] == base["externalAmmo"] and s["ramp"] == 0 and s["peakPort"] > .35 and s["peakStarboard"] == 0
+        for s, base in zip(wing_released, wing_initial))
+
+
 def wait_plant(names, historical, predicate, timeout):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
@@ -160,18 +195,21 @@ def wait_for_assist(names, predicate):
     raise Fail(PRECONDITION, "Groza assist did not converge on both peers: " + json.dumps(samples))
 
 
-def exercise(original, names, pids, timeout, report, before_client, weapons=False, recover=False, trident=False):
+def exercise(original, names, pids, timeout, report, before_client, weapons=False, recover=False, trident=False, tender=False):
     original(names, pids, timeout, report)
     report["ok"] = False
-    if recover or trident:
-        scope = "fighter bay launch, recall, wave-off and service" if recover else "Trident selection, discharge and stow"
+    if recover or trident or tender:
+        scope = ("fighter bay launch, recall, wave-off and service" if recover else
+                 "Trident selection, discharge and stow" if trident else "independent Skywell and wing-bay operation")
         report["evidence"]["scope"] = f"Groza {scope} on authenticated loopback peers"
         report["evidence"]["custom_mod_replication"] = "failed"
         checks = {}
         if recover:
             exercise_recovery(names, report, checks)
-        else:
+        elif trident:
             exercise_railgun(names, report, checks)
+        else:
+            exercise_skywell(names, report, checks)
         report["checks"].extend({"check": name, "ok": ok} for name, ok in checks.items())
         if not weapons and before_client is None:
             report["ok"] = all(c["ok"] for c in report["checks"])
@@ -193,16 +231,16 @@ def exercise(original, names, pids, timeout, report, before_client, weapons=Fals
         report["groza"] = {"host": host, "client": client}
         if len(host["aircraft"]) == len(client["aircraft"]) == 1:
             h, c = host["aircraft"][0], client["aircraft"][0]
-            if h == c and h["netId"] != 0 and len(h["stores"]) == 5 and any(h["stores"]):
+            if h == c and h["netId"] != 0 and len(h["stores"]) == 6 and any(h["stores"]):
                 break
         time.sleep(.5)
     else:
         raise Fail(PRECONDITION, "Groza failed to replicate matching native identity, airframe and stores within 45 seconds")
     checks = {
         "matching_catalogue_index": host["definitionIndex"] == client["definitionIndex"] >= 0,
-        "groza_native_identity": h["key"] == "BS_Megaplane" and h["prefab"] == 0x42534D60,
+        "groza_native_identity": h["key"] == "BS_Megaplane" and h["prefab"] == 0x42534D64,
         "groza_final_dimensions_and_lods": h["width"] > 342 and h["length"] > 230 and h["lodIslands"] == 50,
-        "five_replicated_store_selections": len(h["stores"]) == 5 and len(set(h["stores"])) == 5,
+        "six_replicated_store_selections": len(h["stores"]) == 6 and len(set(h["stores"])) == 6,
     }
     if weapons:
         exercise_battery(names, report, checks)
@@ -245,6 +283,7 @@ def main():
     bay = parser.add_mutually_exclusive_group()
     bay.add_argument("--recovery", action="store_true", help="exercise client pilot launch, recall, and wave-off (Fighters fit)")
     bay.add_argument("--railgun", action="store_true", help="exercise client pilot selection, discharge and stow (Railgun fit)")
+    bay.add_argument("--skywell", action="store_true", help="exercise a client pilot's dedicated Skywell station and replicated tender")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[3]
     original = peers._exercise
@@ -265,7 +304,7 @@ def main():
                 wait_plant([instance], True, lambda s: s["state"] == 12 and s["flashes"] == 1, 50)
             return snapshot
         peers._wait = wait_then_spawn
-    peers._exercise = lambda *a: exercise(original, *a, before_client, args.weapons, args.recovery, args.railgun)
+    peers._exercise = lambda *a: exercise(original, *a, before_client, args.weapons, args.recovery, args.railgun, args.skywell)
     try:
         report = peers.cmd_peers(SimpleNamespace(inst=args.inst, mod="boscalisummer", mod_root=str(root), mission="Free Flight", timeout=args.timeout))
     finally:

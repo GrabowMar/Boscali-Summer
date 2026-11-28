@@ -6,6 +6,7 @@
   "timeout_s": 120,
   "environment": {"config": {"boscalisummer": {"Trenches": {"Enabled": false}, "TheaterOps": {"Enabled": false}, "Events": {"Enabled": false}, "Garrisons": {"Enabled": false}, "DynamicOperations": {"Enabled": false}, "Support": {"Enabled": false}, "Weather": {"Enabled": false}, "Megaplane": {"BayPayload": "Fighters"}}}},
   "ops": [
+    {"op": "wait_until", "path": "BoscaliSummer.Modules.Megaplane.MegaplaneTemplate.Definition", "truthy": true, "timeout_s": 45},
     {"op": "seat", "id": "carrier", "aircraft": "KY-44 Groza", "near": [10000, -35000], "altitude": 3000, "speed": 135, "heading": 90, "view": "orbit", "timeout": 60},
     {"op": "record", "ids": ["carrier"], "hz": 2},
     {"op": "wait", "seconds": 2},
@@ -27,6 +28,7 @@
     {"check": "log_clean", "sources": ["Boscali Summer"]},
     {"check": "alive", "ids": ["carrier"]},
     {"check": "result_equals", "path": "old.valid", "value": true},
+    {"check": "result_equals", "path": "old.fromCargoValid", "value": true},
     {"check": "result_equals", "path": "fit.strikeOptions", "value": true},
     {"check": "result_equals", "path": "fit.escortOptions", "value": true},
     {"check": "result_equals", "path": "fit.distinctRacks", "value": true},

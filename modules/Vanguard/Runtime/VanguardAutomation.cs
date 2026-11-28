@@ -80,6 +80,7 @@ namespace BoscaliSummer.Vanguard
                     Modules.Vanguard.Runtime.DroneOrders.SetRamMode(lead, Number(args, "on", 1f) > 0f);
                     return Status(lead);
                 case "equip": return Equip(Text(args, "tanker") ?? "Tarantula", Has(args, "norx"), Text(args, "rxType") ?? "FS-20");
+                case "skybind": return SkywellBind(args);
                 case "skyview": return SkyView(Text(args, "angle") ?? "side");
                 case "drain": return Drain(Rx(args), Number(args, "fuel", 0.3f), (int)Number(args, "stations", 2f), (int)Number(args, "rounds", 1f));
                 case "netprefab": return NetPrefab(Text(args, "type"));

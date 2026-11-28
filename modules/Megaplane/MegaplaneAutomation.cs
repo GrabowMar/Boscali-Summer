@@ -369,14 +369,28 @@ namespace BoscaliSummer.Modules.Megaplane
             // A legacy save with an intentionally empty outboard beam must not silently receive the default escort.
             var saved = new SavedLoadout();
             foreach (WeaponMount mount in a.loadout.weapons.Take(4))
-                saved.Selected.Add(new SavedLoadout.SelectedMount { Key = saved.Selected.Count == 1 || mount == null ? "" : mount.jsonKey });
+                saved.Selected.Add(new SavedLoadout.SelectedMount { Key = saved.Selected.Count switch
+                {
+                    1 => "",
+                    3 => "VG_Skywell_Kit",
+                    _ => mount != null ? mount.jsonKey : "",
+                } });
             Loadout loaded = saved.CreateLoadout(a.definition.unitPrefab);
             string[] oldKeys = saved.Selected.Select(s => s.Key).ToArray();
             string[] newKeys = loaded.weapons.Select(w => w != null ? w.jsonKey : "").ToArray();
+            var cargoSaved = new SavedLoadout { Selected = new List<SavedLoadout.SelectedMount>(saved.Selected) };
+            cargoSaved.Selected[2] = new SavedLoadout.SelectedMount { Key = "VG_Skywell_Kit" };
+            cargoSaved.Selected[3] = new SavedLoadout.SelectedMount { Key = "" };
+            cargoSaved.Selected.Add(new SavedLoadout.SelectedMount { Key = MegaplaneStores.HaloMount });
+            string[] fromCargo = cargoSaved.CreateLoadout(a.definition.unitPrefab).weapons.Select(w => w != null ? w.jsonKey : "").ToArray();
+            const string skywell = "VG_Skywell_Groza";
             var hangars = Object.FindObjectsOfType<Hangar>().Where(h => h.attachedUnit != null && !h.attachedUnit.disabled)
                 .Select(h => h.GetAvailableAircraft()).Where(choices => choices != null && choices.Any(d => d != null && d.jsonKey == "Darkreach")).ToArray();
             int offered = hangars.Count(choices => choices.Contains(a.definition));
-            return new { valid = newKeys.Length == 5 && newKeys.Take(4).SequenceEqual(oldKeys) && newKeys[4] == "", oldKeys, newKeys,
+            return new { valid = newKeys.Length == 6 && newKeys.Take(3).SequenceEqual(oldKeys.Take(3)) && newKeys[3] == skywell &&
+                newKeys.Skip(4).All(string.IsNullOrEmpty), oldKeys, newKeys,
+                fromCargoValid = fromCargo.Length == 6 && fromCargo[2] == "" && fromCargo[3] == skywell &&
+                    fromCargo[4] == MegaplaneStores.HaloMount && fromCargo[5] == "", fromCargo,
                 darkreachHangars = hangars.Length, grozaHangars = offered, allHangars = offered == hangars.Length && offered > 0 };
         }
 

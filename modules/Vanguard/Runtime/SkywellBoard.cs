@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using UnityEngine;
 
@@ -66,7 +67,14 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             for (int i = 0; i < a.weaponStations.Count; i++)
             {
                 WeaponStation s = a.weaponStations[i];
-                if (IsKit(s?.WeaponInfo)) return s;
+                if (!IsKit(s?.WeaponInfo)) continue;
+                if (s.Weapons != null && s.Weapons.Count > 0 && s.Weapons[0] != null)
+                {
+                    Weapon weapon = s.Weapons[0];
+                    Transform exterior = ExteriorAnchor(weapon.transform);
+                    if (exterior != null && (!exterior.IsChildOf(a.transform) || !weapon.IsAttached())) continue;
+                }
+                return s;
             }
             return null;
         }
@@ -88,19 +96,45 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return s != null && s.Weapons.Count > 0 && s.Weapons[0] != null ? s.Weapons[0].transform : tanker.transform;
         }
 
+        internal static Transform ExteriorAnchor(Transform mount)
+        {
+            SkywellDeckAnchor deck = mount.GetComponentInParent<SkywellDeckAnchor>(true);
+            return deck != null ? deck.transform : null;
+        }
+
         /// <summary>The deck: the kit mount, the origin of the service zone and of the tow position.</summary>
-        public static Vector3 Anchor(Aircraft tanker) => Mount(tanker).position;
+        public static Vector3 Anchor(Aircraft tanker) => ServiceAnchor(tanker, out _).position;
+
+        private static Transform ServiceAnchor(Aircraft tanker, out bool external)
+        {
+            Transform mount = Mount(tanker);
+            Transform exterior = ExteriorAnchor(mount);
+            external = exterior != null;
+            return external ? exterior : mount;
+        }
 
         /// <summary>Receiver in the tanker's deck frame: position from the anchor in tanker axes, relative speed, speed along the tanker's heading, relative roll.</summary>
         public static void Rel(Aircraft tanker, Aircraft receiver, out Vector3 rel, out float relSpeed, out float relForward, out float roll)
         {
             Transform tt = tanker.transform, rt = receiver.transform;
-            rel = tt.InverseTransformDirection(rt.position - Anchor(tanker));
-            Vector3 dv = Velocity(receiver) - Velocity(tanker);
+            Transform deck = ServiceAnchor(tanker, out bool exterior);
+            rel = tt.InverseTransformDirection(rt.position - deck.position);
+            Vector3 dv = ReferenceVelocity(receiver, exterior) - ReferenceVelocity(tanker, exterior);
             relSpeed = dv.magnitude;
             relForward = Vector3.Dot(dv, tt.forward);
             roll = SkywellZone.Roll(tt.right, tt.up, tt.forward, rt.forward, rt.up);
         }
+
+        internal static Vector3 TankerVelocity(Aircraft tanker)
+        {
+            if (!tanker.remoteSim) return Velocity(tanker);
+            ServiceAnchor(tanker, out bool exterior);
+            return ReferenceVelocity(tanker, exterior);
+        }
+
+        // Aircraft snapshots also report velocity separately. The exterior rig uses it without differencing the fluctuating deck pose.
+        private static Vector3 ReferenceVelocity(Aircraft aircraft, bool exterior) =>
+            exterior && aircraft.rb != null ? aircraft.rb.velocity : Velocity(aircraft);
 
         private struct Track
         {

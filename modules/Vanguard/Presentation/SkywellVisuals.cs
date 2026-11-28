@@ -69,7 +69,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             public Joint Deck, Winch, Tender, WingL, WingR, Magazine;
             public Joint FuelBase, FuelBoom, FuelTele, Nozzle, LoadBase, LoadUpper, LoadFore, Gripper;
             public readonly Joint[] Nacelles = new Joint[4], Fans = new Joint[4], Rounds = new Joint[SkywellMagazine.Rounds];
-            public Transform TetherPoint;
+            public Transform TetherPoint, ExteriorAnchor;
             public Joint[] All;
             public Quaternion Body0;          // the tender's body frame at rest (x right, y up, z forward), world
             public Quaternion K;              // root rotation -> body frame
@@ -180,7 +180,13 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             float dt = Time.deltaTime;
             foreach (SkywellView v in SkywellBoard.Views.Values)
             {
-                if (!rigs.TryGetValue(v.Tanker, out Rig rig))
+                if (rigs.TryGetValue(v.Tanker, out Rig rig) && !rig.Tender.Ok)
+                {
+                    rig.Dispose();
+                    rigs.Remove(v.Tanker);
+                    rig = null;
+                }
+                if (rig == null)
                 {
                     if (!v.Active) continue;
                     if (unbuilt.TryGetValue(v.Tanker, out float retry) && Time.time < retry) continue;
@@ -233,7 +239,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 WingL = J("WingL"), WingR = J("WingR"), Magazine = J("Magazine"),
                 FuelBase = J("FuelBase"), FuelBoom = J("FuelBoom"), FuelTele = J("FuelTele"), Nozzle = J("Nozzle"),
                 LoadBase = J("LoadBase"), LoadUpper = J("LoadUpper"), LoadFore = J("LoadFore"), Gripper = J("Gripper"),
-                TetherPoint = Find(names, "TetherPoint"),
+                TetherPoint = Find(names, "TetherPoint"), ExteriorAnchor = SkywellBoard.ExteriorAnchor(mount),
             };
             for (int i = 0; i < 4; i++)
             {
@@ -397,7 +403,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             float p = SkywellTender.Progress(state, v.StateAge);
             bool hot = (v.Flags & PitFlags.HotBreak) != 0;
             bool free = SkywellTender.Flying(state);
-            if (state != TenderState.Stowed && !(state == TenderState.Stowing && p < 0.05f) && Time.time >= rig.NextDoor) HoldDoor(rig);
+            if (rig.ExteriorAnchor == null && state != TenderState.Stowed &&
+                !(state == TenderState.Stowing && p < 0.05f) && Time.time >= rig.NextDoor) HoldDoor(rig);
 
             // The rest pose, then the deck (slides aft with the deploy timeline).
             rig.Deck.Reset();
@@ -472,6 +479,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             {
                 float bob = Mathf.Sin(Time.time * 0.7f) * 0.6f;
                 Vector3 tow = SkywellZone.Tow + new Vector3(Mathf.Sin(Time.time * 0.31f) * 1.2f, bob, 0f);
+                if (rig.ExteriorAnchor != null) tow += tt.InverseTransformPoint(rig.ExteriorAnchor.position);
                 wantLocal = free ? tow : Vector3.Lerp(deckLocal, tow, SkywellTender.TowBlend(p));
                 wantBodyLocal = Quaternion.identity;
                 key = 0;

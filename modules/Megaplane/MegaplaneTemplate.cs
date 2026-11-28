@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Megaplane
         internal const string Key = "BS_Megaplane";
         // Mirage uses these only for network instantiation. Mission saves use the definition key.
         // Native damage and battery RPCs address parts and stations by index. Match the same layout on both peers.
-        private const int NativeLayout = 4;
+        private const int NativeLayout = 5;
         internal const int PrefabHashFighters = 0x42534D50 + 4 * NativeLayout;
         internal const int PrefabHashRailgun = 0x42534D52 + 4 * NativeLayout;
         internal static int PrefabHash => MegaplaneSettings.Railgun ? PrefabHashRailgun : PrefabHashFighters;
@@ -41,6 +41,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 ((INetworkDefinition)Definition).LookupIndex = encyclopedia.IndexLookup.Count;
                 encyclopedia.IndexLookup.Add(Definition);
                 Encyclopedia.Lookup.Add(Key, Definition);
+                MegaplaneStores.RegisterSpecialMounts(encyclopedia);
                 Set(encyclopedia, "aircraftAndVehiclesCache", null);
                 var manager = GameAccess.NetworkManagerOrNull;
                 if (manager != null && manager.ClientObjectManager != null)

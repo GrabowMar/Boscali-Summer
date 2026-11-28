@@ -86,8 +86,20 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         {
             if (!SkywellBoard.IsKit(station?.WeaponInfo)) return false;
             // AI tankers are deployed by SkywellService; their trigger is swallowed.
-            if (owner is Aircraft aircraft && aircraft.LocalSim && aircraft.Player != null) Networking.SkywellNet.RequestToggle(aircraft);
+            if (owner is Aircraft aircraft && aircraft.LocalSim && aircraft.Player != null && !HeldExteriorTrigger(station))
+                Networking.SkywellNet.RequestToggle(aircraft);
             return true;
+        }
+
+        private static bool HeldExteriorTrigger(WeaponStation station)
+        {
+            if (!Rewired.ReInput.isReady || station.Weapons.Count == 0 || station.Weapons[0] == null ||
+                SkywellBoard.ExteriorAnchor(station.Weapons[0].transform) == null) return false;
+
+            // The player polls Fire every frame. An exterior deck is a toggle, so only its first held frame counts.
+            // Calls through the radial or a scripted station command have no held physical trigger.
+            Rewired.Player input = Rewired.ReInput.players.GetPlayer(0);
+            return input != null && input.GetButton("Fire") && !input.GetButtonDown("Fire");
         }
     }
 

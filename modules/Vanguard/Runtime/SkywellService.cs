@@ -110,10 +110,20 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public static float FuelKg(Aircraft tanker) =>
             instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.FuelKg : -1f;
 
-        internal static string StateOf(Aircraft tanker) =>
-            instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.State.ToString() : "none";
+        internal static string StateOf(Aircraft tanker)
+        {
+            if (tanker == null) return "none";
+            if (instance != null && instance.kits.TryGetValue(tanker, out Kit kit)) return kit.State.ToString();
+            return SkywellBoard.Views.TryGetValue(tanker.persistentID.Id, out SkywellView view) ? view.State.ToString() : "none";
+        }
 
         string ISkywellTenderView.TenderState(Aircraft tanker) => StateOf(tanker);
+
+        bool ISkywellTenderView.TryGetPosition(Aircraft tanker, out Vector3 position)
+        {
+            position = default;
+            return tanker != null && Presentation.SkywellVisuals.TenderWorld(tanker.persistentID.Id, out position);
+        }
 
         public static int Rounds(Aircraft tanker) =>
             instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.Rounds : -1;
@@ -227,7 +237,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void TryDeploy(Kit kit, float now, bool announce)
         {
             Aircraft t = kit.Tanker;
-            if (t.radarAlt < SkywellZone.DeployAltitude || SkywellBoard.Velocity(t).magnitude > SkywellZone.AutoReelSpeed)
+            if (t.radarAlt < SkywellZone.DeployAltitude || SkywellBoard.TankerVelocity(t).magnitude > SkywellZone.AutoReelSpeed)
             {
                 if (announce)
                 {
@@ -264,7 +274,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 }
                 return;
             }
-            float speed = SkywellBoard.Velocity(kit.Tanker).magnitude;
+            float speed = SkywellBoard.TankerVelocity(kit.Tanker).magnitude;
             bool over = speed > SkywellZone.MaxTankerSpeed;
             if (over != kit.OverSpeed)
             {
@@ -287,7 +297,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 Aircraft a = all[i];
                 if (a == null || a.disabled || a.Player != null || SkywellBoard.KitStation(a) == null) continue;
                 Kit kit = KitOf(a);
-                if (kit.State == TenderState.Stowed && a.radarAlt >= SkywellZone.DeployAltitude && SkywellBoard.Velocity(a).magnitude <= SkywellZone.MaxTankerSpeed)
+                if (kit.State == TenderState.Stowed && a.radarAlt >= SkywellZone.DeployAltitude && SkywellBoard.TankerVelocity(a).magnitude <= SkywellZone.MaxTankerSpeed)
                     TryDeploy(kit, now, false);
             }
         }
@@ -297,7 +307,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             if (kit.FuelKg >= FuelStockKg - 1f && kit.Rounds >= SkywellMagazine.Rounds) return;
             Aircraft t = kit.Tanker;
-            if (t.radarAlt > 5f || SkywellBoard.Velocity(t).sqrMagnitude > 25f || t.NetworkHQ == null) return;
+            if (t.radarAlt > 5f || SkywellBoard.TankerVelocity(t).sqrMagnitude > 25f || t.NetworkHQ == null) return;
             Airbase field = t.NetworkHQ.GetNearestAirbase(t.transform.position, new RunwayQuery { RunwayType = RunwayQueryType.Landing, MinSize = 0f, LandingSpeed = 0f, TailHook = false });
             if (field == null) return;
             Vector3 centre = field.center != null ? field.center.position : field.transform.position;
