@@ -17,10 +17,45 @@ namespace BoscaliSummer.Modules.Maps.Runtime
         private const int MaxBytes = 16 * 1024 * 1024;
         private static readonly KitManifest none = new KitManifest();
         private static AssetBundle bundle;
+        private static AssetBundle instanceBundle;
+        private static Shader instanceShader;
+        private static Texture2D palmFoliage, scrubFoliage, nativeTreeSurface;
+        internal static Texture2D NativeTreeSurface => nativeTreeSurface;
         private static GameObject root;
         private static KitManifest manifest;
         private static string[] names = new string[0];
         private static bool tried, dressed;
+        private static bool triedInstanceShader;
+
+        public static Shader InstanceShader
+        {
+            get
+            {
+                if (triedInstanceShader) return instanceShader;
+                triedInstanceShader = true;
+                byte[] bytes = MapCatalog.ReadAsset("scenery-instancing.bundle", MaxBytes, out _);
+                if (bytes == null) return null;
+                instanceBundle = AssetBundle.LoadFromMemory(bytes);
+                if (instanceBundle == null) return null;
+                Shader shader = instanceBundle.LoadAsset<Shader>("Assets/Map/SceneryInstancing/MapSceneryInstanced.shader");
+                instanceShader = shader != null && shader.isSupported ? shader : null;
+                if (instanceShader != null)
+                {
+                    palmFoliage = instanceBundle.LoadAsset<Texture2D>("Assets/Map/SceneryInstancing/PalmFoliage.png");
+                    scrubFoliage = instanceBundle.LoadAsset<Texture2D>("Assets/Map/SceneryInstancing/ScrubFoliage.png");
+                }
+                return instanceShader;
+            }
+        }
+
+        internal static Texture2D FoliageTexture(string kind, Mesh mesh)
+        {
+            Texture2D atlas = kind == "palm" ? palmFoliage : kind == "acacia" ? scrubFoliage : null;
+            if (atlas == null || !mesh.isReadable) return null;
+            // Older loose kits have tiling UVs. Only the authored cutout meshes carry this wood-channel marker.
+            Vector2[] uv = mesh.uv;
+            return uv.Length > 0 && uv[0].x >= -3f && uv[0].x <= -2f && uv[0].y == 17f ? atlas : null;
+        }
 
         /// <summary>The kit's kinds; never null, empty when there is no kit.</summary>
         public static KitManifest Manifest
@@ -78,6 +113,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             var foundNormals = new Texture2D[4];
             foreach (Texture2D texture in Resources.FindObjectsOfTypeAll<Texture2D>())
             {
+                if (nativeTreeSurface == null && texture.name == "Tree_deciduous") nativeTreeSurface = texture;
                 int at = Array.IndexOf(wanted, texture.name);
                 if (at >= 0 && found[at] == null) found[at] = texture;
                 int nat = Array.IndexOf(wantedNormals, texture.name);
@@ -114,7 +150,12 @@ namespace BoscaliSummer.Modules.Maps.Runtime
         public static void Close()
         {
             if (bundle != null) bundle.Unload(false);
+            if (instanceBundle != null) instanceBundle.Unload(false);
             bundle = null;
+            instanceBundle = null;
+            instanceShader = null;
+            palmFoliage = scrubFoliage = nativeTreeSurface = null;
+            triedInstanceShader = false;
             root = null;
             manifest = null;
             names = new string[0];

@@ -204,6 +204,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             entry.Live = instance;
             MapSettingsManager manager = SceneSingleton<MapSettingsManager>.i;
             MapCatalog.CloseOthers(entry, manager); // the map this one replaced has left the scene by now
+            MapScenery.AttachInstances(entry, instance.transform);
             if (instance.GetComponentInChildren<TerrainHeightMap>(true) != null) return;
             MapManifest manifest = entry.Manifest;
             MapSettings donor = manager == null ? null : manager.Maps.Where(m => m != null && m.Prefab != null && !IsOurs(m.Prefab))

@@ -38,6 +38,7 @@ namespace BoscaliSummer.Modules.Maps
             MapClimate.Current = () => MapCatalog.Loaded()?.Manifest.climate;
             MapKit.Prototype = MapKitCatalog.Prototype;
             MapKit.Kinds = MapKitCatalog.Kinds;
+            MapScenery.Configure(context.Logger);
             context.OnTeardown(() =>
             {
                 BoscaliMission.ExtraGroups -= missions.Groups;
@@ -47,6 +48,7 @@ namespace BoscaliSummer.Modules.Maps
                 MapClimate.Current = () => null;
                 MapKit.Prototype = (kind, variant) => null;
                 MapKit.Kinds = () => new string[0];
+                MapScenery.Configure(null);
                 MapKitCatalog.Close();
             });
         }
