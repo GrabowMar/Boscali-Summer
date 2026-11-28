@@ -42,8 +42,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         void Sweep();
         /// <summary>Any real operator input (keeps the idle clock).</summary>
         void Touch();
-        /// <summary>Asks for one of our satellites (a BirdKind) to burn to a new parked point (map u,v in 0..1). The host validates fuel and range.</summary>
+        /// <summary>Asks a faction satellite to move its ground track through the chosen node.</summary>
         void RelocateBird(int birdKind, float u, float v);
+        bool Retime(int birdKind, bool advance) => false;
+        bool BookPass(int birdKind, Vector2 world) => false;
+        bool CancelPass(int birdKind) => false;
+        bool SendOrbitalTarget(int contactId) => false;
         /// <summary>The ORBIT room's requests: the satellite-feed action set (null without a feed). A bird picked on the SATELLITES tab or the map asks for its feed with <c>Orbit.SetSource(kind)</c>.</summary>
         ISpaceFeedActions Orbit { get; }
     }

@@ -276,6 +276,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public TaskedResult Send(ulong player, int requestId, int[] markIds) =>
             Is(player) ? manager.SendTasked(current, markIds, requestId) : new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
 
+        public TaskedResult OrbitalIntel(ulong player, int requestId, int contactId) =>
+            Is(player) ? manager.SendOrbitalIntel(current, requestId, contactId) : new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
+
         // No favourite flag: the host holds no knowledge of a pilot's CALLS favourites (they live in the client's own settings),
         // so a client can never assert priority. Arbitration is receipt order inside the 200 ms window.
         public TaskedResult Claim(ulong player, int requestId, int postId) =>

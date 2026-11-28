@@ -6,12 +6,28 @@
 
 - **OPS** bezel page ([CallsPanel](Presentation/CallsPanel.cs), MFD slot `MfdSlots.Ops`) with tabs FRONTS (three front cards + OPEN) and PERKS (call cards: press arms, second press / map right-click fires).
 - Three near-full-screen front windows ([OpsFrontWindow](Presentation/Fronts/OpsFrontWindow.cs)): **ORBIT** (SPACE: LAUNCH manifests and pads, OPERATE tracking and DOWNLINK), **NETWORK** (CYBER: data centers, EW trucks, node hop/hold/burn/drop), **SHADOW** (SOF: camps, teams, targets, lift).
-- Satellite manifests combine an optical, radar or kinetic payload with a Balanced, Agile or Wideband bus. The bus changes coverage radius and burn speed. Operators can pick the initial station on the map. ASAT queues bind to the selected track and open a launcher countdown. An evasive burn must cross the intercept zone before impact.
+- ORBIT schedules work around low-orbit overflights. LAUNCH pairs a payload and bus and plots its first ground track. OPERATE shows upcoming passes, permits an optical or radar collection to be booked on a ground objective, and spends maneuver reserve to change future passes. DOWNLINK carries the contacts into the usual MARK and MIS workflow.
 - Perks paid in vanilla `Player.Allocation`, gated by the pilot's skill grade (Progression) and, for bird perks, by a satellite footprint over the aim: RECON PASS, SAT CAMERA, OVERWATCH, ORBITAL ROD, STARFALL, PRSM, CRUISE SALVO (steerable legs), EMP SHOCK, DECOY BARRAGE, ELINT, RADAR BLIND, SAM NET DOWN, SIPHON, RECON TEAM, SABOTAGE STRIKE, DIRECT ACTION, JTAC MARK/UNLASE, ZONE FORTIFICATION.
 - Posted strike packages appear as MIS JOBS (Command reads `ISupportJobs`); OPS perks appear in the C-key menu (Autopilot reads `IOpsPerks`); the TAC BOARD STRIKE page and PERK/MARK gauges come from [StrikeScopeFeed](Runtime/StrikeScopeFeed.cs).
 - Cockpit line for armed/pending/refused calls, new TASKED posts and ENEMY INTENT ([SupportHudLine](Presentation/SupportHudLine.cs)); command-net chatter on replies.
-- World visuals: three persistent satellites in the sky, rod/EMP/flare/sabotage effects, OPS compound buildings ([Visuals/](Visuals)).
+- World visuals include passing satellites, rod/EMP/flare/sabotage effects, and OPS compound buildings ([Visuals/](Visuals)).
 - Host knobs on SET SERVER as **SUPPORT CALL-INS** ([SupportHostSettings](Configuration/SupportHostSettings.cs)).
+
+## Orbital warfare design
+
+The SPACE operator contributes by lining up short opportunities for the rest of the faction. LAUNCH runs a readiness check and plots the first crossing. OPERATE leads with the objective and time to acquire it. A booked pass calls out collection on the faction net, and the console offers a likely hostile fix for direct handoff to MIS.
+
+| Stage | Operator decision | Host ruling |
+| --- | --- | --- |
+| Launch | Pair an optical, radar, or kinetic payload with the Balanced, Agile, or Wideband bus. Pick a crossing on the theatre map. | The SPACE programme queue retains funding, pad health, and capacity checks. Each launch has its own satellite identity. |
+| Plan | Select a ground objective and compare acquisition and loss of signal. Book optical imagery or radar collection for a pass. | One collection per sensor. The host checks the satellite identity, actual coverage, uplink, and payload readiness when it runs. Existing weather and jamming rules apply. |
+| Exploit | Confirm the latest return or open full Downlink to inspect the pass. Send a target to the pilots. | OPERATE confirms one reported ground fix through the existing MARK authority and posts an ORBITAL INTEL location to MIS. Sensor-only fleets can send it. Static booked contacts keep a 45-second report window. Moving fixes expire sooner. |
+| Maneuver | Change a future track or retime the pass. Weigh better geometry against reserve for later work. | The host owns orbit parameters, transfer timing, and reserve. A queued collection is reforecast when its orbit changes. |
+| Contest | Commit against a reported hostile track. The threatened faction can spend reserve to shift the pass. | The contest binds to the current satellite instance. Attackers receive a coarse track and timing, and defenders receive their own precise warning. Resolution is a fictional game rule tied to the committed pass. |
+
+The model uses a theatre-local projection of a repeating low-orbit ground track. Inclination, altitude, period, sensor swath, and along-track phase give operators separate decisions. A 23.5× clock compresses a revolution into about four minutes. Transfers transition between reference tracks at a predicted time. This keeps planning, handoff, and defense inside a normal sortie. [NASA SWOT ground tracks and revisit](https://earthdata.nasa.gov/s3fs-public/2024-06/D-109532_SWOT_UserHandbook_20240502.pdf) · [NASA MODIS swaths](https://earthdata.nasa.gov/learn/find-data/near-real-time/modis)
+
+The first playtest follows a custom satellite from launch through a booked collection and Downlink, then tests a committed hostile pass with and without a defensive retime. Host, friendly client, and opposing client views should agree on the outcomes with the information each side is entitled to see.
 
 ## How it works
 
@@ -103,7 +119,7 @@
 _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archmap.py --write_
 
 - Module [SupportModule](SupportModule.cs), id `support`, "Support operations"; depends on `progression`; roster: Support.Enabled; mission profile: battlefield.
-- 230 .cs files, 48414 lines.
+- 234 .cs files, 49524 lines.
 
 ### Folders
 
@@ -111,12 +127,12 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 |---|---|---|
 | (root) | 1 | 89 |
 | Configuration/ | 2 | 261 |
-| Domain/ | 73 | 12936 |
-| Networking/ | 1 | 676 |
+| Domain/ | 75 | 13287 |
+| Networking/ | 1 | 678 |
 | Patches/ | 2 | 243 |
-| Presentation/ | 41 | 14610 |
-| Runtime/ | 90 | 14575 |
-| Visuals/ | 20 | 5024 |
+| Presentation/ | 42 | 15028 |
+| Runtime/ | 91 | 14907 |
+| Visuals/ | 20 | 5031 |
 
 ### Largest files
 
@@ -124,9 +140,9 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 |---|---|
 | [Runtime/SupportManager.cs](Runtime/SupportManager.cs) | 1206 |
 | [Presentation/Fronts/ShadowRoom.cs](Presentation/Fronts/ShadowRoom.cs) | 1128 |
-| [Presentation/Fronts/DownlinkPane.cs](Presentation/Fronts/DownlinkPane.cs) | 1116 |
+| [Presentation/Fronts/DownlinkPane.cs](Presentation/Fronts/DownlinkPane.cs) | 1120 |
+| [Presentation/SpaceFeedController.cs](Presentation/SpaceFeedController.cs) | 911 |
 | [Domain/Sof/SofDesk.cs](Domain/Sof/SofDesk.cs) | 901 |
-| [Presentation/Fronts/NetworkNodesPanel.cs](Presentation/Fronts/NetworkNodesPanel.cs) | 869 |
 
 ### Harmony patches (8)
 
@@ -153,7 +169,7 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 
 ### Network
 
-- Protocol constants: `SupportNet.ProtocolVersion` = 45
+- Protocol constants: `SupportNet.ProtocolVersion` = 48
 - Messages (11): `CruiseLegsMessage`, `CruiseWaypointMessage`, `CyberStateMessage`, `FrontStateMessage`, `OpsStateMessage`, `SofStateMessage`, `SpaceCommandMessage`, `SpaceReplyMessage`, `SpaceStateMessage`, `SupportRequestMessage`, `SupportResultMessage`
 
 ### Sim hooks (never rename)
@@ -162,6 +178,6 @@ _Generated by tools/arch/archmap.py — do not edit; run python tools/arch/archm
 
 ### Pinned by nomodkit
 
-79 files compiled by path, 23 types referenced by name: see [PINNED.md](../../docs/generated/PINNED.md).
+81 files compiled by path, 23 types referenced by name: see [PINNED.md](../../docs/generated/PINNED.md).
 
 <!-- archmap:end -->

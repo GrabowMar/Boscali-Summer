@@ -7,7 +7,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
-    /// Applies completed operations. ASAT puts a real launcher on the ground, then contests one tracked satellite's position at impact.
+    /// Applies completed operations. ASAT puts a real launcher on the ground, then contests one forecast pass of a tracked satellite.
     /// </summary>
     internal sealed partial class OpsService
     {
@@ -16,18 +16,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public int Id;
             public FactionOps Attacker;
             public AsatTarget Target;
-            public float X, Z, EndsAt, AimU, AimV;
+            public float X, Z, ConjunctionAt, PlumeEndsAt;
         }
 
         private readonly struct AsatTarget
         {
             public readonly FactionHQ Owner;
             public readonly BirdKind Kind;
-            public readonly int Instance;
+            public readonly int Instance, TrackId;
             public readonly SpaceState Origin;
 
-            public AsatTarget(FactionHQ owner, BirdKind kind, int instance, SpaceState origin)
-            { Owner = owner; Kind = kind; Instance = instance; Origin = origin; }
+            public AsatTarget(FactionHQ owner, BirdKind kind, int instance, int trackId, SpaceState origin)
+            { Owner = owner; Kind = kind; Instance = instance; TrackId = trackId; Origin = origin; }
         }
 
         private sealed partial class FactionOps
@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public Unit Launcher;
             public bool LauncherSpawned;
             public AsatTarget PendingTarget;
-            public float LaunchAt, NextReveal;
+            public float LaunchAt, ConjunctionAt, NextReveal;
             public readonly int[] TrackIds = new int[SpaceRules.BirdCount];
             public readonly int[] TrackInstances = new int[SpaceRules.BirdCount];
             public SpaceState TrackedState;
@@ -97,7 +97,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 case OpKind.ZeroDay: FireZeroDay(f, e.Target); break;
                 case OpKind.Asat:
-                    if (TryFindTrack(e.Target.Id, out AsatTarget target)) FireAsat(f, target, SupportManager.MissionNow());
+                    float now = SupportManager.MissionNow();
+                    if (TryFindTrack(e.Target.Id, out AsatTarget target) && AsatRules.TryForecast(target.Origin.Geo(target.Kind), now, out float conjunctionAt))
+                        FireAsat(f, target, now, conjunctionAt);
                     break;
                 case OpKind.Fob: FireFob(f, e.Target); break;
             }
@@ -159,6 +161,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 if (side.Owner == null || side.Owner == owner || !space.TryGetStateCoarse(side.Owner, out SpaceState state) || state.DownMask == 7) continue;
                 float rank = manager.ObjectiveShare(side.Owner);
+                if (!float.IsFinite(rank)) rank = 0f;
                 if (rank <= share) continue;
                 best = side;
                 enemyState = state;
@@ -213,7 +216,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     var kind = (BirdKind)i;
                     int instance = state.BirdInstance(kind);
                     if (side.TrackIds[i] != id || instance == 0 || instance != side.TrackInstances[i]) continue;
-                    target = new AsatTarget(side.Owner, kind, instance, state);
+                    target = new AsatTarget(side.Owner, kind, instance, id, state);
                     return true;
                 }
             }
@@ -224,7 +227,25 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             state = null;
             return target.Instance > 0 && space != null && space.TryGetStateCoarse(target.Owner, out state) &&
-                ReferenceEquals(state, target.Origin) && state.BirdInstance(target.Kind) == target.Instance;
+                AsatRules.SameSatellite(target.Origin, state, target.Kind, target.Instance);
+        }
+
+        internal FrontResult Rephase(FactionHQ owner, int[] ids, float now)
+        {
+            if (!Enabled || space == null) return new FrontResult(FrontOutcome.Unavailable);
+            if (ids == null || ids.Length != 2 || ids[0] < 0 || ids[0] >= SpaceRules.BirdCount || ids[1] < 0 || ids[1] > 1)
+                return new FrontResult(FrontOutcome.BadAmount);
+            if (!space.TryGetStateCoarse(owner, out SpaceState state)) return new FrontResult(FrontOutcome.BirdLost);
+            GeoBird before = state.Geo((BirdKind)ids[0]);
+            switch (space.TryRephase(owner, ids[0], AsatRules.RetimeShift(ids[1] == 1), now, out GeoBird after, holdStation: true))
+            {
+                case GeoSpace.Refusal.None:
+                    return new FrontResult(FrontOutcome.Rephased, Mathf.CeilToInt(after.Eta(now)), Mathf.RoundToInt(before.DeltaV - after.DeltaV));
+                case GeoSpace.Refusal.Moving: return new FrontResult(FrontOutcome.Burning);
+                case GeoSpace.Refusal.NoFuel: return new FrontResult(FrontOutcome.NoDeltaV);
+                case GeoSpace.Refusal.NoMove: return new FrontResult(FrontOutcome.NoMove);
+                default: return new FrontResult(FrontOutcome.BirdLost);
+            }
         }
 
         internal FrontOutcome RunAsatProgramme(FactionHQ owner, int trackId)
@@ -236,11 +257,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (reserved >= OpsWire.MaxFlights) return FrontOutcome.Unavailable;
             if (trackId == 0 && !TryResolveAsatQueueTrack(owner, 0, out trackId)) return FrontOutcome.NoEnemyTrack;
             if (!TryFindTrack(trackId, out AsatTarget target) || target.Owner == owner) return FrontOutcome.NoEnemyTrack;
+            float now = SupportManager.MissionNow();
+            float launchAt = now + OpsRules.CountdownSeconds;
+            if (!AsatRules.TryForecast(target.Origin.Geo(target.Kind), launchAt, out float conjunctionAt)) return FrontOutcome.NoPass;
             if (!SpawnLauncher(side)) return FrontOutcome.NoSite;
 
-            float now = SupportManager.MissionNow();
             side.PendingTarget = target;
-            side.LaunchAt = now + OpsRules.CountdownSeconds;
+            side.LaunchAt = launchAt;
+            side.ConjunctionAt = conjunctionAt;
             side.NextReveal = now;
             side.Desk.AddPing(OpKind.Asat, OpPingPhase.Execute, OpsRules.CountdownSeconds + 5f, 0, manager.FactionKeyOf(target.Owner));
             RodGuard.Tell(owner, "ASAT LAUNCHER STAGED — " + OpsWords.Bird((int)target.Kind) + " TRACK · T-" + (int)OpsRules.CountdownSeconds + " S");
@@ -255,7 +279,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 AsatTarget target = f.PendingTarget;
                 if (target.Instance == 0) continue;
                 bool launcherUp = LauncherUp(f);
-                if (!launcherUp || !TrackLive(target, out _))
+                if (!launcherUp || !TrackLive(target, out SpaceState state))
                 {
                     f.PendingTarget = default;
                     f.Desk.RemovePing(OpKind.Asat, OpPingPhase.Execute);
@@ -269,7 +293,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 {
                     f.PendingTarget = default;
                     f.Desk.RemovePing(OpKind.Asat, OpPingPhase.Execute);
-                    if (!FireAsat(f, target, now))
+                    if (now >= f.ConjunctionAt || !AsatRules.OpportunityRemains(state.Geo(target.Kind), f.ConjunctionAt))
+                    {
+                        RodGuard.Tell(f.Owner, "ASAT ABORTED — COMMITTED PASS NO LONGER LINES UP");
+                        RodGuard.Tell(target.Owner, "CONJUNCTION BROKEN — ENEMY LAUNCH ABORTED");
+                        DiscardLauncher(f);
+                    }
+                    else if (!FireAsat(f, target, now, f.ConjunctionAt))
                     {
                         RodGuard.Tell(f.Owner, "ASAT LAUNCH ABORTED");
                         DiscardLauncher(f);
@@ -283,18 +313,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
-        private bool FireAsat(FactionOps f, in AsatTarget target, float now)
+        private bool FireAsat(FactionOps f, in AsatTarget target, float now, float conjunctionAt)
         {
-            if (flights.Count >= OpsWire.MaxFlights || !LauncherUp(f) || !TrackLive(target, out SpaceState state)) return false;
+            if (flights.Count >= OpsWire.MaxFlights || !LauncherUp(f) || !TrackLive(target, out _)) return false;
             GlobalPosition at = f.Launcher.transform.position.ToGlobalPosition();
-            float end = now + OpsRules.AsatFlightSeconds;
-            GeoBird bird = state.Geo(target.Kind);
             flights.Add(new Flight { Id = ++flightSerial, Attacker = f, Target = target, X = (float)at.x, Z = (float)at.z,
-                EndsAt = end, AimU = bird.U(end), AimV = bird.V(end) });
-            RodGuard.Tell(f.Owner, "ASAT AWAY — " + (int)OpsRules.AsatFlightSeconds + " S TO INTERCEPT");
-            RodGuard.Tell(target.Owner, "ASAT LAUNCH DETECTED — IMPACT ON OUR " + OpsWords.Bird((int)target.Kind) + " BIRD IN " + (int)OpsRules.AsatFlightSeconds + " S · BURN CLEAR OF THE THREAT RING");
-            f.Desk.SetEffectEnd(OpDomain.Cyber, end);
-            f.Desk.AddPing(OpKind.Asat, OpPingPhase.Launch, OpsRules.AsatFlightSeconds + 5f, 0, manager.FactionKeyOf(target.Owner));
+                ConjunctionAt = conjunctionAt, PlumeEndsAt = now + AsatRules.PlumeSeconds });
+            RodGuard.Tell(f.Owner, "ASAT AWAY — CONJUNCTION FORECAST T-" + Mathf.CeilToInt(AsatRules.ForecastBand(conjunctionAt) - now) + " S");
+            RodGuard.Tell(target.Owner, "ASAT LAUNCH DETECTED — " + OpsWords.Bird((int)target.Kind) + " BIRD CONJUNCTION T-" + Mathf.CeilToInt(conjunctionAt - now) + " S · RETIME PASS");
+            f.Desk.SetEffectEnd(OpDomain.Cyber, conjunctionAt);
+            f.Desk.AddPing(OpKind.Asat, OpPingPhase.Launch, conjunctionAt - now + 5f, 0, manager.FactionKeyOf(target.Owner));
             return true;
         }
 
@@ -305,17 +333,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 Flight flight = flights[i];
                 AsatTarget target = flight.Target;
                 bool live = TrackLive(target, out SpaceState state);
-                if (now < flight.EndsAt)
+                if (now < flight.ConjunctionAt)
                 {
                     if (live && manager.Fronts != null && manager.Fronts.BiasFor(target.Owner, Front.Space).Directive == FrontDirective.Defend &&
-                        AsatRules.TryEvade(state.Geo(target.Kind), now, flight.EndsAt, flight.AimU, flight.AimV, out float u, out float v) &&
-                        space.TryRelocate(target.Owner, (int)target.Kind, u, v, now, out _, holdStation: true) == GeoSpace.Refusal.None)
-                        RodGuard.Tell(target.Owner, "OVERLORD — EVASIVE BURN IN PROGRESS");
+                        AsatRules.TryDefenseRetime(state.Geo(target.Kind), now, flight.ConjunctionAt, out bool advance) &&
+                        space.TryRephase(target.Owner, (int)target.Kind, AsatRules.RetimeShift(advance), now, out _, holdStation: true) == GeoSpace.Refusal.None)
+                        RodGuard.Tell(target.Owner, "OVERLORD — EVASIVE RETIMING UNDERWAY");
                     continue;
                 }
                 flights.RemoveAt(i);
                 flight.Attacker.Desk.RemovePing(OpKind.Asat, OpPingPhase.Launch);
-                bool dodged = live && AsatRules.Clears(state.Geo(target.Kind), flight.EndsAt, flight.AimU, flight.AimV);
+                bool dodged = live && !AsatRules.OpportunityRemains(state.Geo(target.Kind), flight.ConjunctionAt);
                 bool hit = live && !dodged && state.KillBird(target.Kind, now);
                 if (hit)
                 {
@@ -325,8 +353,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 }
                 else if (dodged)
                 {
-                    RodGuard.Tell(target.Owner, "ASAT EVADED — OUR " + OpsWords.Bird((int)target.Kind) + " BIRD CLEARED THE THREAT RING");
-                    RodGuard.Tell(flight.Attacker.Owner, "ASAT MISSED — TARGET MANEUVERED CLEAR");
+                    RodGuard.Tell(target.Owner, "ASAT EVADED — OUR " + OpsWords.Bird((int)target.Kind) + " BIRD MISSED THE CONJUNCTION");
+                    RodGuard.Tell(flight.Attacker.Owner, "ASAT MISSED — COMMITTED PASS RETIMED");
                 }
                 else RodGuard.Tell(flight.Attacker.Owner, "ASAT MISSED — TARGET TRACK LOST");
                 DiscardLauncher(flight.Attacker);
@@ -355,24 +383,40 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 }
             }
             foreach (FactionOps side in factions.Values)
-                if (side.PendingTarget.Owner == viewer && side.PendingTarget.Instance > 0 && now < side.LaunchAt &&
-                    (into.IncomingBird < 0 || side.LaunchAt < into.IncomingDeadline))
+            {
+                AsatTarget target = side.PendingTarget;
+                if (target.Instance == 0 || now >= side.LaunchAt) continue;
+                if (side.Owner == viewer)
                 {
-                    into.IncomingBird = (int)side.PendingTarget.Kind;
-                    into.IncomingDeadline = side.LaunchAt;
+                    into.OutgoingTrackId = target.TrackId;
+                    into.OutgoingDeadline = side.LaunchAt;
                 }
+                if (target.Owner == viewer && (into.IncomingBird < 0 || side.LaunchAt < into.IncomingDeadline) && TrackLive(target, out SpaceState pendingState))
+                {
+                    into.IncomingBird = (int)target.Kind;
+                    into.IncomingDeadline = side.LaunchAt;
+                    into.IncomingConjunctionAt = side.ConjunctionAt;
+                    into.IncomingClear = !AsatRules.OpportunityRemains(pendingState.Geo(target.Kind), side.ConjunctionAt);
+                }
+            }
             foreach (Flight flight in flights)
             {
-                if (now >= flight.EndsAt) continue;
+                if (now >= flight.ConjunctionAt) continue;
                 bool own = flight.Attacker.Owner == viewer;
-                into.Flights.Add(new OpsFlightRow { Id = flight.Id, X = own ? flight.X : Mathf.Round(flight.X / 5000f) * 5000f,
-                    Z = own ? flight.Z : Mathf.Round(flight.Z / 5000f) * 5000f, EndsAt = flight.EndsAt, Seconds = (byte)OpsRules.AsatFlightSeconds });
-                if (flight.Target.Owner != viewer || (into.IncomingLaunched && flight.EndsAt >= into.IncomingDeadline) || !TrackLive(flight.Target, out _)) continue;
+                if (own)
+                {
+                    into.OutgoingTrackId = flight.Target.TrackId;
+                    into.OutgoingDeadline = AsatRules.ForecastBand(flight.ConjunctionAt);
+                    into.OutgoingLaunched = true;
+                }
+                if (now < flight.PlumeEndsAt)
+                    into.Flights.Add(new OpsFlightRow { Id = flight.Id, X = own ? flight.X : Mathf.Round(flight.X / 5000f) * 5000f,
+                        Z = own ? flight.Z : Mathf.Round(flight.Z / 5000f) * 5000f, EndsAt = flight.PlumeEndsAt, Seconds = (byte)AsatRules.PlumeSeconds });
+                if (flight.Target.Owner != viewer || (into.IncomingLaunched && flight.ConjunctionAt >= into.IncomingDeadline) || !TrackLive(flight.Target, out SpaceState flightState)) continue;
                 into.IncomingBird = (int)flight.Target.Kind;
-                into.IncomingDeadline = flight.EndsAt;
+                into.IncomingDeadline = into.IncomingConjunctionAt = flight.ConjunctionAt;
                 into.IncomingLaunched = true;
-                into.IncomingAimU = flight.AimU;
-                into.IncomingAimV = flight.AimV;
+                into.IncomingClear = !AsatRules.OpportunityRemains(flightState.Geo(flight.Target.Kind), flight.ConjunctionAt);
             }
         }
 

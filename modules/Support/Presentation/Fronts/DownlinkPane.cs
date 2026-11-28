@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 {
     /// <summary>
     /// The ORBIT room's DOWNLINK tab (spec 5.3): a sensor station around the live feed. A row of birds on station and the chosen bird's modes (EO / IR /
-    /// LOW LIGHT, SAR, STRIKE); the picture with its burn-in (bird and mode, LIVE clock, frame and GSD, slant and elevation, look size and grid, sun and
+    /// LOW LIGHT, SAR, STRIKE); the picture with its burn-in (bird and mode, source, frame and GSD, slant and elevation, look size and grid, sun and
     /// shadow, cloud), a crosshair, a north arrow with the shadow's fall, the zoom scale, an inset of the look inside the footprint, the host-revealed boxes
     /// (the lock red with a short track tail) and the packet bar with the link meter; under it the lock card (target, the held airbase it threatens, the
     /// reveal's age), one SEND TO TASKED, MARK SPOT and RELEASE, and the link. Every bird switch, new lock or new pick plays the acquire sequence, client
@@ -650,7 +650,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     OpsKit.Enable(birds[k], up);
                     birds[k].Latched = up && k == (int)f.Source;
                     string name = FrontViews.BirdCallsign(k);
-                    Help(birds[k], up ? "Show " + name + "'s picture (" + C2Orbit.BirdName((BirdKind)k) + ")." : name + " is not on station: launch it on SATELLITES.");
+                    Help(birds[k], up ? "Show " + name + "'s picture during a usable pass." : name + " is unavailable. Queue an insertion in LAUNCH.");
                 }
                 noBird = firstUp < 0;
                 who =FrontViews.BirdCallsign((int)f.Source);
@@ -669,11 +669,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 }
 
                 if (f.ThreatActive) Box.SetMeta(C2Words.Fit(f.Threat, 58), FrontKit.Tone(AvState.Danger)); // a cockpit warning outranks the station line
-                else if (v.IncomingBird >= 0) Box.SetMeta(AsatCountdown(v), FrontKit.Tone(AvState.Danger));
+                else if (v.IncomingBird >= 0) Box.SetMeta(AsatCountdown(v), v.IncomingClear ? Mc.Go : Mc.NoGo);
                 else Box.SetMeta(f.Status, f.StatusTone == AvState.Danger || f.StatusTone == AvState.Caution ? FrontKit.Tone(f.StatusTone) : AvInk.Dim);
 
                 live = !noBird && HasPicture(f);
-                string why = noBird ? "NO BIRD ON STATION · LAUNCH ONE ON SATELLITES" : live ? "" : f.Refusal.Length > 0 ? f.Refusal : "NO PICTURE YET · STAND BY";
+                string why = noBird ? "NO PAYLOAD IN ORBIT · QUEUE AN INSERTION IN LAUNCH" : live ? "" : f.Refusal.Length > 0 ? f.Refusal : "NO PICTURE YET · STAND BY";
                 FrontKit.Set(refusal, why, noBird ? Mc.Steel : FrontKit.Tone(AvState.Caution));
                 DrawStandby(!live);
                 Crop(f);
@@ -787,12 +787,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Burn(tl, who + " / " + C2Orbit.BirdName(f.Source) + " / " + mode, ink, 8f, 6f, 10.5f, false);
                 string t1 = f.Telemetry[1], t2 = f.Telemetry[2];
                 Burn(tl2, !live ? "NO FRAME · STANDBY" : t1.Length > 0 && t2.Length > 0 ? t1 + " · " + t2 : t1 + t2, dim, 8f, 25f, 10f, false);
+                bool collected = live && f.LookNote == "BOOKED COLLECTION";
                 string stamp = "T+" + Met(v.Now);
-                float lx = Burn(tr, live ? "LIVE " + stamp : "STBY " + stamp, live ? Mc.Go : RoomInk.Telemetry, pw - 8f, 6f, 10.5f, true);
-                if (live) hud.Disc(new Vector2(lx - 8f, 14.5f), 4f, Mc.Go, 14);
+                string source = collected ? "COLLECTED" : (live ? "LIVE " : "STBY ") + stamp;
+                float lx = Burn(tr, source, live && !collected ? Mc.Go : RoomInk.Telemetry, pw - 8f, 6f, 10.5f, true);
+                if (live && !collected) hud.Disc(new Vector2(lx - 8f, 14.5f), 4f, Mc.Go, 14);
                 else hud.Ring(new Vector2(lx - 8f, 14.5f), 3.6f, 1.4f, RoomInk.Telemetry, 14);
                 int frame = Mathf.FloorToInt(Mathf.Max(0f, v.Now) * 8f) % 1000000;
-                Burn(tr2, live ? "FRM " + frame.ToString("000000", CultureInfo.InvariantCulture) + (f.Telemetry[0].Length > 0 ? " · " + f.Telemetry[0] : "") : "", dim, pw - 8f, 25f, 10f, true);
+                string imageInfo = collected ? f.Telemetry[0] : live ? "FRM " + frame.ToString("000000", CultureInfo.InvariantCulture)
+                    + (f.Telemetry[0].Length > 0 ? " · " + f.Telemetry[0] : "") : "";
+                Burn(tr2, imageInfo, dim, pw - 8f, 25f, 10f, true);
                 if (!live) { Burn(bl, "", ink, 0f, 0f, 10f, false); Burn(bl2, "", ink, 0f, 0f, 10f, false); Burn(br, "", ink, 0f, 0f, 10f, false); Burn(br2, "", ink, 0f, 0f, 10f, false); return; }
                 if (Mathf.Abs(f.LookU - gridU) > 1e-4f || Mathf.Abs(f.LookV - gridV) > 1e-4f)
                 {

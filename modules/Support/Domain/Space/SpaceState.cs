@@ -100,34 +100,47 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             get { byte m = 0; for (int i = 0; i < launched.Length; i++) if (launched[i]) m |= (byte)(1 << i); return m; }
         }
 
-        /// <summary>A satellite is put on its selected station, or home when none was selected, with a full tank.</summary>
-        public bool Launch(BirdKind bird, SatelliteBus bus = SatelliteBus.Balanced, bool hasStation = false, float u = 0f, float v = 0f)
+        /// <summary>Commission a satellite into a passing orbit over the selected or default ground-track node.</summary>
+        public bool Launch(BirdKind bird, SatelliteBus bus = SatelliteBus.Balanced, bool hasStation = false, float u = 0f, float v = 0f, float now = 0f)
         {
             if ((byte)bird >= SpaceRules.BirdCount || !dead[(byte)bird] || bus > SatelliteBus.Wideband || nextInstance == int.MaxValue ||
-                (hasStation && (!float.IsFinite(u) || !float.IsFinite(v)))) return false;
+                !SpaceRules.MissionTime(now) || (hasStation && (!float.IsFinite(u) || !float.IsFinite(v)))) return false;
             int i = (byte)bird;
             dead[i] = false; launched[i] = true; birds[i] = default;
             instances[i] = ++nextInstance;
-            geo[i] = hasStation ? new GeoBird(GeoBird.ClampStation(u), GeoBird.ClampStation(v), 100f, bus) : new GeoBird(homeU[i], homeV[i], 100f, bus);
+            geo[i] = GeoOrbit.Launch(bird, bus, hasStation ? GeoBird.ClampStation(u) : homeU[i], hasStation ? GeoBird.ClampStation(v) : homeV[i], now);
             return true;
         }
 
-        /// <summary>The bird's geostationary state (position, burn under way, fuel).</summary>
+        /// <summary>The bird's current and planned orbit and its remaining reserve.</summary>
         public GeoBird Geo(BirdKind bird) => geo[(byte)bird < SpaceRules.BirdCount ? (byte)bird : 0];
 
-        /// <summary>The default parked points (over the faction's side of the front): every bird is placed there with a full tank. A relaunched bird returns to its own point.</summary>
+        /// <summary>Default ground-track nodes for later launches.</summary>
         public void SetHomes(float[] u, float[] v)
         {
-            for (int i = 0; i < SpaceRules.BirdCount && i < u.Length && i < v.Length; i++) { homeU[i] = u[i]; homeV[i] = v[i]; geo[i] = new GeoBird(u[i], v[i], 100f); }
+            for (int i = 0; i < SpaceRules.BirdCount && i < u.Length && i < v.Length; i++)
+            {
+                homeU[i] = u[i]; homeV[i] = v[i];
+                if (!launched[i]) geo[i] = new GeoBird(u[i], v[i], 100f);
+            }
         }
 
         /// <summary>Starts a burn of one bird to map point (u,v). Fuel is spent up front; nothing changes when it is refused.</summary>
         public GeoSpace.Refusal Relocate(BirdKind bird, float now, float u, float v)
         {
-            if ((byte)bird >= SpaceRules.BirdCount || !SpaceRules.MissionTime(now) || !float.IsFinite(u) || !float.IsFinite(v)) return GeoSpace.Refusal.Dead;
+            if (!HasBird(bird)) return GeoSpace.Refusal.Dead;
             int i = (int)bird;
-            GeoSpace.Refusal why = GeoSpace.Check(geo[i], !dead[i], now, u, v);
-            if (why == GeoSpace.Refusal.None) geo[i] = geo[i].Relocate(now, u, v);
+            GeoSpace.Refusal why = GeoSpace.PlanBurn(geo[i], now, u, v, out GeoBird after);
+            if (why == GeoSpace.Refusal.None) geo[i] = after;
+            return why;
+        }
+
+        public GeoSpace.Refusal Rephase(BirdKind bird, float now, float shiftSeconds)
+        {
+            if (!HasBird(bird)) return GeoSpace.Refusal.Dead;
+            int i = (int)bird;
+            GeoSpace.Refusal why = GeoSpace.PlanRephase(geo[i], now, shiftSeconds, out GeoBird after);
+            if (why == GeoSpace.Refusal.None) geo[i] = after;
             return why;
         }
 

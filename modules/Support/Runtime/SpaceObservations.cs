@@ -53,15 +53,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>The cheap front half of <see cref="Open"/> (window, caps, tick); null where Open returns -1. The unit walk is <see cref="OpenWalk.Step"/>.</summary>
-        public OpenWalk BeginOpen(GlobalPosition center, float radius, BirdKind source, float minimumSpeed, float maximumSpeed)
+        public OpenWalk BeginOpen(GlobalPosition center, float radius, BirdKind source, float minimumSpeed, float maximumSpeed, Func<bool> authorize = null, bool booked = false)
         {
             float now = SupportManager.MissionNow();
             if (disposed || owner == null || !GameAccess.IsServer() ||
                 !SpaceRevealWindow.TryCreate(source, center.x, center.z, radius, now, SpaceRevealWindow.ObservationSeconds,
-                    minimumSpeed, maximumSpeed, out SpaceRevealWindow window)) return null;
+                    minimumSpeed, maximumSpeed, out SpaceRevealWindow window, booked)) return null;
             var units = UnitRegistry.allUnits;
             if (units == null) return null;
             if (units.Count > MaximumNativeUnits) { NoteCap(units.Count); return null; }
+            if (authorize != null && !authorize()) return null;
             // The RADAR bird stays busy for BirdBusySeconds (SupportCatalog), so one window per bird never
             // overwrites a live scan/MTI footprint.
             windows[(int)source] = window;
@@ -85,28 +86,36 @@ namespace BoscaliSummer.Modules.Support.Runtime
             /// <summary>Walks units in list order until the budget (ms) is spent; true while more remain.</summary>
             public bool Step(double budgetMs)
             {
+                if (window.Booked && !window.Active(SupportManager.MissionNow())) return false;
                 long end = double.IsPositiveInfinity(budgetMs) ? long.MaxValue
                     : System.Diagnostics.Stopwatch.GetTimestamp() + (long)(budgetMs * System.Diagnostics.Stopwatch.Frequency / 1000.0);
-                while (i < units.Count && o.Contacts.Count < SpaceContacts.MaxReveals && !o.disposed)
+                while (i < units.Count && HasRoom && !o.disposed)
                 {
                     Visit(units[i++]);
                     if (System.Diagnostics.Stopwatch.GetTimestamp() >= end) break;
                 }
-                return i < units.Count && o.Contacts.Count < SpaceContacts.MaxReveals && !o.disposed;
+                return i < units.Count && HasRoom && !o.disposed;
             }
+
+            private bool HasRoom => window.Booked || o.Contacts.Count < SpaceContacts.MaxReveals;
 
             private void Visit(Unit unit)
             {
                 if (!Ground(unit)) return;
+                float observedAt = window.Booked ? SupportManager.MissionNow() : now;
+                if (o.Contacts.Count >= SpaceContacts.MaxReveals &&
+                    (!o.indexed.TryGetValue(unit.persistentID, out Entry entry) || !o.Contacts.TryReveal(entry.Id, observedAt, out _))) return;
                 GlobalPosition point = unit.transform.position.ToGlobalPosition();
-                if (!window.Contains(point.x, point.z, unit.speed, now) || !VisibleSurface(unit)) return;
+                if (!window.Contains(point.x, point.z, unit.speed, observedAt) || !VisibleSurface(unit)) return;
                 // This accepted task is an actual new sensor observation, including indexed native scenery.
                 if (unit.NetworkHQ != null && unit.NetworkHQ != o.owner)
                 {
                     try { o.owner.RpcUpdateTrackingInfo(unit.persistentID); }
                     catch (Exception e) { Plugin.Logger?.LogWarning("[Support.Space] Sensor observation refused: " + e.Message); return; }
                 }
-                if (o.Observe(unit, point, now, window.Source)) Admitted++;
+                // A synchronous native spotting event might already have admitted this unit. Count a booked refresh as a result too.
+                if (window.Booked) observedAt = SupportManager.MissionNow();
+                if (o.Observe(unit, point, observedAt, window.Source, window.Booked)) Admitted++;
             }
         }
 
@@ -199,9 +208,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 Entry entry = pair.Value;
                 if (Contacts.TryReveal(entry.Id, now, out SpaceContact contact))
                 {
-                    SpaceRevealWindow window = windows[(int)contact.Source];
-                    if (!Ground(entry.Unit) || (!window.Contains(contact.X, contact.Z,
-                        contact.Moving ? Math.Max(4f, window.MinimumSpeed) : 0f, now) && !Followed(entry.Unit))) Contacts.Forget(entry.Id);
+                    if (!Ground(entry.Unit) || (!Retained(contact, now) && !InSensorWindow(contact, now) && !Followed(entry.Unit))) Contacts.Forget(entry.Id);
                     else if (entry.Unit.NetworkHQ == owner && contact.Classification != ContactClass.Friendly)
                         Contacts.Reveal(entry.Id, ContactClass.Friendly, contact.TypeId, contact.X, contact.Z,
                             contact.Moving, contact.ObservedAt, contact.Source);
@@ -225,6 +232,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
+        private static bool Retained(in SpaceContact contact, float now) => !contact.Moving && contact.IsBooked(now);
+
+        private bool InSensorWindow(in SpaceContact contact, float now)
+        {
+            SpaceRevealWindow window = windows[(int)contact.Source];
+            float speed = contact.Moving ? Math.Max(MovingSpeed, window.MinimumSpeed) : 0f;
+            return window.Contains(contact.X, contact.Z, speed, now);
+        }
+
         public MarkVerdict Mark(ulong player, int id, bool recentInput)
         {
             if (disposed || !GameAccess.IsServer()) return MarkVerdict.NoContact;
@@ -234,14 +250,22 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>The native ground PersistentID.Id (uint) behind an admitted contact id; 0 when it has none. Never an aircraft.</summary>
-        public uint UnitIdOf(int id) =>
-            ids.TryGetValue(id, out Entry entry) && entry.Unit != null && Ground(entry.Unit) ? entry.Unit.persistentID.Id : 0u;
+        public uint UnitIdOf(in SpaceContact contact, float now) =>
+            TryLiveTrack(contact, now, out Entry entry) ? entry.Unit.persistentID.Id : 0u;
+
+        private bool TryLiveTrack(in SpaceContact contact, float now, out Entry entry)
+        {
+            entry = null;
+            return (!Retained(contact, now) || InSensorWindow(contact, now)) &&
+                ids.TryGetValue(contact.Id, out entry) && Ground(entry.Unit);
+        }
 
         /// <summary>Only currently admitted units may contribute pixels. A surviving MARK is a ground point.</summary>
         public bool TryApprovedUnit(int id, float now, out Unit unit)
         {
             unit = null;
-            if (disposed || !Contacts.TryReveal(id, now, out _) || !ids.TryGetValue(id, out Entry entry) || !Ground(entry.Unit)) return false;
+            if (disposed || !Contacts.TryReveal(id, now, out SpaceContact contact) ||
+                !TryLiveTrack(contact, now, out Entry entry)) return false;
             unit = entry.Unit;
             return true;
         }
@@ -277,14 +301,21 @@ namespace BoscaliSummer.Modules.Support.Runtime
             try
             {
                 if (!indexed.TryGetValue(id, out Entry entry)) return;
-                Contacts.Forget(entry.Id); Detach(entry);
+                float now = SupportManager.MissionNow();
+                if (!Ground(entry.Unit) || !Contacts.TryReveal(entry.Id, now, out SpaceContact contact) || !Retained(contact, now))
+                    Contacts.Forget(entry.Id);
+                Detach(entry);
             }
             catch (Exception e) { Warn("Forget", e); }
         }
 
         private void RemoveOwn(Unit unit)
         {
-            try { if (unit != null) Forget(unit.persistentID); }
+            try
+            {
+                if (unit == null || !indexed.TryGetValue(unit.persistentID, out Entry entry)) return;
+                Contacts.Forget(entry.Id); Detach(entry);
+            }
             catch (Exception e) { Warn("Remove", e); }
         }
 
@@ -322,13 +353,19 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 !SpaceRevealWindow.NativeFresh(Time.timeSinceLevelLoad, track.lastSpottedTime)) return;
             float now = SupportManager.MissionNow();
             GlobalPosition point = track.lastKnownPosition; // Never replace an aged sighting with hidden live coordinates.
+            SpaceRevealWindow selected = default;
             for (int i = 0; i < windows.Length; i++)
-                if (windows[i].Contains(point.x, point.z, unit.speed, now))
-                { Observe(unit, point, now, windows[i].Source); return; }
+            {
+                SpaceRevealWindow window = windows[i];
+                if (!window.Contains(point.x, point.z, unit.speed, now)) continue;
+                if (window.Booked) { selected = window; break; }
+                if (selected.Radius <= 0f) selected = window;
+            }
+            if (selected.Radius > 0f) Observe(unit, point, now, selected.Source, selected.Booked);
         }
 
-        /// <summary>True only when this call newly admitted a contact (a refreshed live reveal is not new).</summary>
-        private bool Observe(Unit unit, GlobalPosition point, float now, BirdKind source)
+        /// <summary>True when a normal sighting admits a contact, or when a booked pass admits or refreshes one.</summary>
+        private bool Observe(Unit unit, GlobalPosition point, float now, BirdKind source, bool booked = false)
         {
             if (!Ground(unit) || unit.persistentID.Id == 0) return false;
             UnitDefinition definition = unit.definition;
@@ -347,10 +384,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ContactClass classification = unit.NetworkHQ == owner ? ContactClass.Friendly :
                 unit.NetworkHQ == null ? ContactClass.Neutral : ContactClass.EnemyGround;
             bool fresh = newEntry || !Contacts.TryReveal(entry.Id, now, out _);
-            if (!Contacts.Reveal(entry.Id, classification, type, point.x, point.z, Math.Abs(unit.speed) >= 4f, now, source)) return false;
+            if (!Contacts.Reveal(entry.Id, classification, type, point.x, point.z, Math.Abs(unit.speed) >= 4f, now, source, booked)) return false;
             if (newEntry) { indexed.Add(unit.persistentID, entry); ids.Add(entry.Id, entry); }
             if (owner.trackingDatabase != null && owner.trackingDatabase.TryGetValue(unit.persistentID, out TrackingInfo track)) Attach(entry, track);
-            return fresh;
+            return fresh || booked;
         }
 
         private void Attach(Entry entry, TrackingInfo track)

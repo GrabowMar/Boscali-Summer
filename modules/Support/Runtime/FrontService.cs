@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// CYBER on SPACE cooldowns, SOF on CYBER trace). The same service answers the faction's commands, builds its mirror and gates perks (<see cref="IFrontPower"/>): the host reads the
     /// books, a client reads the mirror.
     /// </summary>
-    internal sealed class FrontService : MonoBehaviour, ISceneService, IFrontPower
+    internal sealed partial class FrontService : MonoBehaviour, ISceneService, IFrontPower
     {
         private const int MaximumFactions = 8;
         private const float WorldSeconds = 5f, SnapshotSeconds = 1f;
@@ -45,6 +45,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public readonly bool[] CounterOn = new bool[FrontRules.FrontCount];
             public CounterPressure Pressure = CounterPressure.None;
             public FrontStateData Cache;
+            public readonly CollectionOrder[] Collections = new CollectionOrder[OrbitCollection.SensorCount];
             public float CacheAt = float.NegativeInfinity;
             /// <summary>An AI faction queues its next ASAT no sooner than this (one every <see cref="AiAsatSpacingSeconds"/>).</summary>
             public float NextAiAsat;
@@ -93,6 +94,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             order.Clear();
             Running = false;
             nextShare = -1f;
+            runningCollection = null;
+            nextCollectionTick = 0f;
             worldGate.Reset();
         }
 
@@ -183,10 +186,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) { Running = false; return; }
             float now = SupportManager.MissionNow();
-            if (pending.Count > 0) { ApplyPending(now); return; }
-            if (!SpaceRules.MissionTime(now) || !worldGate.Due(now, WorldSeconds, 0.1875f, 1f)) return;   // every 5 s, at .1875 of the second (the first within a second): clear of the 1 Hz slots (table in HighCommandManager)
+            if (!SpaceRules.MissionTime(now)) return;
             try
             {
+                TickCollections(now);
+                if (pending.Count > 0) { ApplyPending(now); return; }
+                if (!worldGate.Due(now, WorldSeconds, 0.1875f, 1f)) return;
                 Tick(now);
                 Running = true;
             }
@@ -539,6 +544,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SpaceCommandKind.FrontQueue: result = Queue(f, c.Ids, true, now); break;
                 case SpaceCommandKind.FrontDonate: result = Donate(f, player, c.Ids); break;
                 case SpaceCommandKind.RelocateBird: result = Relocate(f, c.Ids, now); break;
+                case SpaceCommandKind.RephaseBird: result = ops != null ? ops.Rephase(f.Owner, c.Ids, now) : new FrontResult(FrontOutcome.Unavailable); break;
+                case SpaceCommandKind.BookPass: result = BookCollection(f, c.Ids, now); break;
+                case SpaceCommandKind.CancelPass: result = CancelCollection(f, c.Target); break;
                 case SpaceCommandKind.TruckMove: result = MoveTruck(f, c.Ids); break;
                 default: result = new FrontResult(FrontOutcome.Unavailable); break;
             }
@@ -575,7 +583,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return new FrontResult(FrontOutcome.FocusSet);
         }
 
-        /// <summary>RELOCATE: a faction member burns one of its birds to a map point. The host judges the bird, the burn state and the fuel.</summary>
+        /// <summary>Changes the ground-track plane of one faction satellite. The host checks the reserve and active transfer.</summary>
         private FrontResult Relocate(FactionFront f, int[] ids, float now)
         {
             if (ids == null || ids.Length != 2 || ids[0] < 0 || ids[0] >= SpaceRules.BirdCount || !GeoSpace.TryUnpack(ids[1], out float u, out float v)) return new FrontResult(FrontOutcome.BadAmount);
@@ -586,7 +594,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case GeoSpace.Refusal.None: return new FrontResult(FrontOutcome.Relocated, Mathf.CeilToInt(after.Duration), Mathf.RoundToInt(before.Fuel - after.Fuel));
                 case GeoSpace.Refusal.Moving: return new FrontResult(FrontOutcome.Burning);
                 case GeoSpace.Refusal.NoMove: return new FrontResult(FrontOutcome.NoMove);
-                case GeoSpace.Refusal.NoFuel: return new FrontResult(FrontOutcome.NoFuel, Mathf.CeilToInt(GeoBird.Cost(GeoBird.Distance(before.U(now), before.V(now), GeoBird.ClampStation(u), GeoBird.ClampStation(v)))));
+                case GeoSpace.Refusal.NoFuel: return new FrontResult(FrontOutcome.NoFuel, Mathf.CeilToInt(GeoSpace.BurnFuelCost(before, u, v)));
                 default: return new FrontResult(FrontOutcome.BirdLost);
             }
         }
